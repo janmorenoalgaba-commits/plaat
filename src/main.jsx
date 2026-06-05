@@ -6,9 +6,7 @@ import App from './App.jsx'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-// La app usa window.storage (que solo existe dentro de Claude).
-// Fuera de Claude lo redirigimos a Supabase con la MISMA interfaz,
-// así no hay que tocar nada de App.jsx.
+// ── Almacenamiento (la app usa window.storage; lo redirigimos a Supabase) ──
 window.storage = {
   async get(key) {
     const { data, error } = await supabase
@@ -25,6 +23,25 @@ window.storage = {
       .upsert({ key, value })
     if (error) throw error
     return { value }
+  },
+}
+
+// ── Autenticación (login con correo y contraseña) ──
+window.auth = {
+  async signIn(email, password) {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    return data
+  },
+  async signOut() {
+    await supabase.auth.signOut()
+  },
+  async getUser() {
+    const { data } = await supabase.auth.getUser()
+    return data?.user || null
+  },
+  onChange(cb) {
+    supabase.auth.onAuthStateChange((_event, session) => cb(session?.user || null))
   },
 }
 
