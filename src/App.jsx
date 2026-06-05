@@ -1,0 +1,2388 @@
+import { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const SK = 'plaat_deo_v1';
+
+const RESPONSABLES = [
+  'Sergi Castellar','Alex Pla','Ferran Sancho','Adriana de la Barrera',
+  'Alex Pallares','Nuria Armengol','Paula Loaiza','Tatiana Acaro',
+  'Angela Martin','Agnes Ademà','Roberto Fernandez',
+];
+
+const ESTADOS_OBRA = {
+  en_curso:   { label: 'En curso',   bg: '#FEF3DB', color: '#7C4A00' },
+  pendiente:  { label: 'Pendiente',  bg: '#EEEDE7', color: '#52524E' },
+  acabada:    { label: 'Acabada',    bg: '#E8F5E0', color: '#2D5E10' },
+  paralizada: { label: 'Paralizada', bg: '#FDECEC', color: '#8A1F1F' },
+};
+
+const ESTADOS_INSP = {
+  pendiente:    { label: 'Pendiente',    bg: '#EEEDE7', color: '#52524E' },
+  inspeccionado:{ label: 'Inspeccionado',bg: '#E8F5E0', color: '#2D5E10' },
+  incidencia:   { label: 'Con incidencia',bg:'#FDECEC', color: '#8A1F1F' },
+};
+
+const PRIORIDADES = {
+  alta:  { label: 'Alta',  bg: '#FDECEC', color: '#8A1F1F' },
+  media: { label: 'Media', bg: '#FEF3DB', color: '#7C4A00' },
+  baja:  { label: 'Baja',  bg: '#E8F5E0', color: '#2D5E10' },
+};
+
+const uid      = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const today    = () => new Date().toISOString().slice(0, 10);
+const fmtDate  = iso => iso ? new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const fmtShort = iso => iso ? new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : '—';
+const now      = () => new Date().toISOString();
+
+// ─── CSS ──────────────────────────────────────────────────────────────────────
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', -apple-system, sans-serif; background: #F2F1ED; color: #141412; font-size: 14px; }
+button, input, select, textarea { font-family: inherit; }
+input, select, textarea {
+  display: block; width: 100%; padding: 8px 11px;
+  border: 1px solid #E0DFD9; border-radius: 8px;
+  font-size: 13px; color: #141412; background: #fff;
+  outline: none; transition: border-color .15s, box-shadow .15s;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #141412; box-shadow: 0 0 0 3px rgba(20,20,18,.07);
+}
+textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D0CFC9; border-radius: 2px; }
+.fade { animation: fi .2s ease; }
+@keyframes fi { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.obra-card { transition: box-shadow .2s, transform .15s; cursor: pointer; }
+.obra-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important; transform: translateY(-1px); }
+.hov-nav:hover { background: #ECEAE4 !important; }
+.hov-row:hover   { background: #F9F8F5 !important; }
+.hov-chip:hover  { background: #ECEAE4 !important; }
+`;
+
+// ─── Átomos ───────────────────────────────────────────────────────────────────
+
+function Pill({ label, bg, color }) {
+  return <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 20, fontWeight: 500, background: bg, color, whiteSpace: 'nowrap' }}>{label}</span>;
+}
+
+function Btn({ children, onClick, primary, sm, danger, ghost, disabled, full }) {
+  const base = {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+    padding: sm ? '5px 11px' : '7px 14px', borderRadius: 8, border: '1.5px solid',
+    cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500,
+    transition: 'opacity .15s', opacity: disabled ? 0.45 : 1, width: full ? '100%' : 'auto',
+  };
+  const style = primary ? { ...base, background: '#18180F', color: '#fff', borderColor: '#18180F' }
+    : danger  ? { ...base, background: '#FDECEC', color: '#8A1F1F', borderColor: '#F9CACA' }
+    : ghost   ? { ...base, background: 'transparent', color: '#6B6B66', borderColor: 'transparent' }
+    : { ...base, background: 'transparent', color: '#18180F', borderColor: '#E0DFD9' };
+  return <button style={style} onClick={disabled ? undefined : onClick}>{children}</button>;
+}
+
+function Field({ label, children, hint }) {
+  return (
+    <div style={{ marginBottom: 13 }}>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#52524E', marginBottom: 5 }}>{label}</label>
+      {children}
+      {hint && <p style={{ fontSize: 11, color: '#A5A5A0', marginTop: 4 }}>{hint}</p>}
+    </div>
+  );
+}
+
+function DashedBtn({ children, onClick }) {
+  return (
+    <button onClick={onClick} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#6B6B66', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 8, transition: 'border-color .15s' }}>
+      {children}
+    </button>
+  );
+}
+
+// ─── Modal base ───────────────────────────────────────────────────────────────
+
+function Modal({ title, onClose, children, footer, wide }) {
+  const [confirmando, setConfirmando] = useState(false);
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }}
+      onClick={e => { if (e.target === e.currentTarget) setConfirmando(true); }}
+    >
+      <div className="fade" style={{ background: '#fff', borderRadius: 14, width: wide ? 540 : 460, maxWidth: '95vw', maxHeight: '90vh', border: '1px solid #E0DFD9', boxShadow: '0 24px 64px rgba(0,0,0,.14)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '15px 18px', borderBottom: '1px solid #ECEAE4', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, flex: 1 }}>{title}</div>
+          <button onClick={() => setConfirmando(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#A5A5A0', lineHeight: 1, padding: '0 4px' }}>×</button>
+        </div>
+        <div style={{ padding: '16px 18px', overflowY: 'auto', flex: 1 }}>{children}</div>
+        {footer && (
+          <div style={{ padding: '12px 18px', borderTop: '1px solid #ECEAE4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+            {footer}
+          </div>
+        )}
+      </div>
+      {confirmando && (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+          <div className="fade" style={{ background: '#fff', borderRadius: 12, width: 340, padding: '20px 22px', border: '1px solid #E0DFD9', boxShadow: '0 12px 40px rgba(0,0,0,.16)' }}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>¿Cerrar el formulario?</div>
+            <p style={{ fontSize: 13, color: '#6B6B66', lineHeight: 1.5, marginBottom: 18 }}>Perderás los datos introducidos. Esta acción no se puede deshacer.</p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <Btn onClick={() => setConfirmando(false)}>Continuar editando</Btn>
+              <Btn danger onClick={onClose}>Sí, cerrar</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+
+function Sidebar({ nav, setNav, stats }) {
+  const navItems = [
+    { id: 'hoy',        label: 'Hoy',        badge: stats.hoy,   alert: stats.hoy > 0 },
+    { id: 'tablero',    label: 'Tablero',     badge: stats.total, alert: false },
+  ];
+  return (
+    <div style={{ width: 210, background: '#1C1C1A', display: 'flex', flexDirection: 'column', flexShrink: 0, height: '100%' }}>
+
+      {/* Logo */}
+      <div style={{ padding: '22px 20px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '0.1em', color: '#F2F1ED' }}>PLAAT</div>
+        <div style={{ marginTop: 6, display: 'inline-block', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', background: '#1A6B3A', color: '#A8EDBC', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>DEO</div>
+      </div>
+
+      {/* Nav */}
+      <nav style={{ padding: '12px 10px', flex: 1 }}>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '4px 10px 8px' }}>Vistas</div>
+        {navItems.map(item => (
+          <div key={item.id} onClick={() => setNav(item.id)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, marginBottom: 2, cursor: 'pointer', background: nav === item.id ? 'rgba(255,255,255,0.1)' : 'transparent', fontSize: 13, color: nav === item.id ? '#F2F1ED' : 'rgba(255,255,255,0.45)', fontWeight: nav === item.id ? 500 : 400, transition: 'all .15s' }}>
+            {item.label}
+            {item.badge > 0 && (
+              <span style={{ marginLeft: 'auto', fontSize: 11, padding: '1px 7px', borderRadius: 20, background: item.alert ? 'rgba(228,75,74,0.25)' : 'rgba(255,255,255,0.1)', color: item.alert ? '#FF9090' : 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
+                {item.badge}
+              </span>
+            )}
+          </div>
+        ))}
+      </nav>
+
+      {/* Usuario */}
+      <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#1A6B3A', color: '#A8EDBC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>SC</div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 500, color: '#F2F1ED' }}>Sergi Castellar</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>DEO · PLAAT</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Obra Card ────────────────────────────────────────────────────────────────
+
+const STATUS_ACCENT = {
+  en_curso:   '#D48A0C',
+  pendiente:  '#9B9B97',
+  acabada:    '#52A124',
+  paralizada: '#E24B4A',
+};
+
+function ObraCard({ obra, onClick }) {
+  const accentColor = STATUS_ACCENT[obra.estado] || STATUS_ACCENT.en_curso;
+  const e           = ESTADOS_OBRA[obra.estado]  || ESTADOS_OBRA.en_curso;
+  const incPend     = obra.incidencias.filter(i => i.estado !== 'resuelta').length;
+  const tareasPend  = (obra.apuntes || []).filter(a => a.tipo === 'tarea' && !a.hecha).length;
+  const totalPuntos = obra.disciplinas.reduce((s, d) => s + d.puntos.length, 0);
+  const inspDone    = obra.disciplinas.reduce((s, d) => s + d.puntos.filter(p => p.estado === 'inspeccionado').length, 0);
+  const tareasVenc  = (obra.apuntes || []).some(a => a.tipo === 'tarea' && !a.hecha && a.fechaLimite && new Date(a.fechaLimite) < new Date(today()));
+
+  return (
+    <div className="obra-card fade" onClick={onClick}
+      style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.04)', overflow: 'hidden', borderLeft: `3px solid ${accentColor}` }}>
+      <div style={{ padding: '15px 16px 12px' }}>
+
+        {/* Nombre + estado */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 3 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#141412', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{obra.nombre}</div>
+          <span style={{ fontSize: 11, color: accentColor, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: '0.04em', flexShrink: 0, paddingTop: 1 }}>{e.label.toUpperCase()}</span>
+        </div>
+
+        {/* Cliente */}
+        <div style={{ fontSize: 12, color: '#9B9B97', marginBottom: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obra.cliente}</div>
+
+        {/* Stats row */}
+        <div style={{ display: 'flex', gap: 0, borderTop: '1px solid #F2F1ED', paddingTop: 11 }}>
+          {[
+            ['Insp.', totalPuntos > 0 ? `${inspDone}/${totalPuntos}` : '—', false],
+            ['Incidencias', incPend > 0 ? `${incPend} pend.` : 'Sin abrir', incPend > 0],
+            ['Tareas', tareasPend > 0 ? `${tareasPend} pend.` : '—', tareasVenc],
+          ].map(([label, value, alert], i) => (
+            <div key={label} style={{ flex: 1, paddingRight: i < 2 ? 12 : 0, borderRight: i < 2 ? '1px solid #F2F1ED' : 'none', marginRight: i < 2 ? 12 : 0 }}>
+              <div style={{ fontSize: 10, color: '#B5B4AE', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>{label}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: alert ? '#C47610' : '#141412' }}>{value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Selector días de visita ──────────────────────────────────────────────────
+
+const DIAS = [
+  { num: 1, corto: 'L', largo: 'Lunes' },
+  { num: 2, corto: 'M', largo: 'Martes' },
+  { num: 3, corto: 'X', largo: 'Miércoles' },
+  { num: 4, corto: 'J', largo: 'Jueves' },
+  { num: 5, corto: 'V', largo: 'Viernes' },
+  { num: 6, corto: 'S', largo: 'Sábado' },
+];
+
+function DiasPicker({ value, onChange }) {
+  function toggle(num) {
+    onChange(value.includes(num) ? value.filter(d => d !== num) : [...value, num].sort());
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {DIAS.map(d => {
+          const on = value.includes(d.num);
+          return (
+            <button key={d.num} onClick={() => toggle(d.num)} title={d.largo}
+              style={{ width: 36, height: 36, borderRadius: 8, border: `1.5px solid ${on ? '#18180F' : '#E0DFD9'}`, background: on ? '#18180F' : 'transparent', color: on ? '#fff' : '#6B6B66', fontSize: 13, fontWeight: on ? 600 : 400, cursor: 'pointer', transition: 'all .15s', flexShrink: 0 }}>
+              {d.corto}
+            </button>
+          );
+        })}
+      </div>
+      {value.length > 0 && (
+        <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 6 }}>
+          Visitas: {value.map(n => DIAS.find(d => d.num === n)?.largo).join(', ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Modal Nueva Obra ─────────────────────────────────────────────────────────
+
+function ModalNuevaObra({ onClose, onCreate }) {
+  const [form, setForm] = useState({ nombre: '', cliente: '', direccion: '', responsable: RESPONSABLES[0], diasVisita: [] });
+  const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const footer = (
+    <>
+      <Btn onClick={onClose}>Cancelar</Btn>
+      <Btn primary disabled={!form.nombre.trim() || !form.cliente.trim()} onClick={() => onCreate(form)}>Crear obra</Btn>
+    </>
+  );
+  return (
+    <Modal title="Nueva obra" onClose={onClose} footer={footer}>
+      <Field label="Nombre de la obra *"><input autoFocus placeholder="Rehabilitación fachada C/ Urgell 88" value={form.nombre} onChange={e => upd('nombre', e.target.value)} /></Field>
+      <Field label="Cliente / Promotora *"><input placeholder="Nombre del cliente" value={form.cliente} onChange={e => upd('cliente', e.target.value)} /></Field>
+      <Field label="Dirección"><input placeholder="C/ Ejemplo 10, Barcelona" value={form.direccion} onChange={e => upd('direccion', e.target.value)} /></Field>
+      <Field label="Responsable DEO">
+        <select value={form.responsable} onChange={e => upd('responsable', e.target.value)}>
+          {RESPONSABLES.map(r => <option key={r}>{r}</option>)}
+        </select>
+      </Field>
+      <Field label="Días de visita a obra" hint="Selecciona los días que sueles ir a esta obra">
+        <DiasPicker value={form.diasVisita} onChange={v => upd('diasVisita', v)} />
+      </Field>
+    </Modal>
+  );
+}
+
+// ─── MÓDULO: Inspecciones ─────────────────────────────────────────────────────
+
+function ModuloInspecciones({ obra, onSave }) {
+  const [disciplinaActiva, setDisciplinaActiva] = useState(null);
+  const [showNuevaDisciplina, setShowNuevaDisciplina] = useState(false);
+  const [showNuevoPunto, setShowNuevoPunto] = useState(false);
+  const [nombreDisciplina, setNombreDisciplina] = useState('');
+  const [nombrePunto, setNombrePunto] = useState('');
+
+  const disciplina = obra.disciplinas.find(d => d.id === disciplinaActiva);
+
+  function addDisciplina() {
+    if (!nombreDisciplina.trim()) return;
+    const nueva = { id: uid(), nombre: nombreDisciplina.trim(), puntos: [] };
+    onSave({ ...obra, disciplinas: [...obra.disciplinas, nueva] });
+    setNombreDisciplina('');
+    setShowNuevaDisciplina(false);
+    setDisciplinaActiva(nueva.id);
+  }
+
+  function deleteDisciplina(id) {
+    onSave({ ...obra, disciplinas: obra.disciplinas.filter(d => d.id !== id) });
+    if (disciplinaActiva === id) setDisciplinaActiva(null);
+  }
+
+  function addPunto() {
+    if (!nombrePunto.trim() || !disciplinaActiva) return;
+    const punto = { id: uid(), nombre: nombrePunto.trim(), estado: 'pendiente', notas: '', fecha: '' };
+    const disciplinas = obra.disciplinas.map(d => d.id === disciplinaActiva ? { ...d, puntos: [...d.puntos, punto] } : d);
+    onSave({ ...obra, disciplinas });
+    setNombrePunto('');
+    setShowNuevoPunto(false);
+  }
+
+  function updatePuntoEstado(puntoId, estado) {
+    const disciplinas = obra.disciplinas.map(d => d.id === disciplinaActiva
+      ? { ...d, puntos: d.puntos.map(p => p.id === puntoId ? { ...p, estado, fecha: estado !== 'pendiente' ? today() : '' } : p) }
+      : d
+    );
+    onSave({ ...obra, disciplinas });
+  }
+
+  function deletePunto(puntoId) {
+    const disciplinas = obra.disciplinas.map(d => d.id === disciplinaActiva
+      ? { ...d, puntos: d.puntos.filter(p => p.id !== puntoId) }
+      : d
+    );
+    onSave({ ...obra, disciplinas });
+  }
+
+  const totalPuntos     = obra.disciplinas.reduce((s, d) => s + d.puntos.length, 0);
+  const inspeccionados  = obra.disciplinas.reduce((s, d) => s + d.puntos.filter(p => p.estado === 'inspeccionado').length, 0);
+  const conIncidencia   = obra.disciplinas.reduce((s, d) => s + d.puntos.filter(p => p.estado === 'incidencia').length, 0);
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 12, height: '100%' }}>
+      {/* Panel izquierdo: disciplinas */}
+      <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 500, padding: '2px 6px 8px' }}>
+          Disciplinas
+        </div>
+
+        {obra.disciplinas.length === 0 && (
+          <div style={{ fontSize: 12, color: '#A5A5A0', padding: '8px 6px' }}>Sin disciplinas todavía</div>
+        )}
+
+        {obra.disciplinas.map(d => {
+          const pts   = d.puntos.length;
+          const insp  = d.puntos.filter(p => p.estado === 'inspeccionado').length;
+          const inc   = d.puntos.filter(p => p.estado === 'incidencia').length;
+          const activa = disciplinaActiva === d.id;
+          return (
+            <div key={d.id} onClick={() => setDisciplinaActiva(d.id)} style={{ padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: activa ? '#F0EFEA' : 'transparent', border: `1px solid ${activa ? '#C5C4BE' : 'transparent'}` }} className={activa ? '' : 'hov-row'}>
+              <div style={{ fontSize: 13, fontWeight: activa ? 500 : 400, color: '#18180F', marginBottom: 3 }}>{d.nombre}</div>
+              <div style={{ display: 'flex', gap: 6, fontSize: 11, color: '#A5A5A0' }}>
+                <span>{insp}/{pts} insp.</span>
+                {inc > 0 && <span style={{ color: '#8A1F1F' }}>⚠ {inc}</span>}
+              </div>
+            </div>
+          );
+        })}
+
+        {showNuevaDisciplina ? (
+          <div style={{ padding: '6px 4px', display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+            <input autoFocus placeholder="Nombre disciplina" value={nombreDisciplina} onChange={e => setNombreDisciplina(e.target.value)} onKeyDown={e => e.key === 'Enter' && addDisciplina()} style={{ fontSize: 12 }} />
+            <div style={{ display: 'flex', gap: 5 }}>
+              <Btn sm full primary disabled={!nombreDisciplina.trim()} onClick={addDisciplina}>Añadir</Btn>
+              <Btn sm onClick={() => { setShowNuevaDisciplina(false); setNombreDisciplina(''); }}>✕</Btn>
+            </div>
+          </div>
+        ) : (
+          <DashedBtn onClick={() => setShowNuevaDisciplina(true)}>+ Disciplina</DashedBtn>
+        )}
+
+        {/* Resumen global */}
+        {totalPuntos > 0 && (
+          <div style={{ marginTop: 'auto', padding: '10px 8px 0', borderTop: '1px solid #E8E7E1' }}>
+            <div style={{ fontSize: 11, color: '#A5A5A0', marginBottom: 6 }}>Global</div>
+            <div style={{ height: 4, background: '#ECEAE4', borderRadius: 2, marginBottom: 5 }}>
+              <div style={{ width: (inspeccionados / totalPuntos * 100) + '%', height: 4, borderRadius: 2, background: '#52A124', transition: 'width .3s' }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+              <span style={{ color: '#6B6B66' }}>{inspeccionados}/{totalPuntos}</span>
+              {conIncidencia > 0 && <span style={{ color: '#8A1F1F' }}>⚠ {conIncidencia}</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Panel derecho: puntos de inspección */}
+      <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '14px 16px', overflow: 'auto' }}>
+        {!disciplina ? (
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#A5A5A0' }}>
+            <div style={{ fontSize: 32 }}>📋</div>
+            <div style={{ fontSize: 13 }}>Selecciona una disciplina para ver sus puntos de control</div>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{disciplina.nombre}</div>
+                <div style={{ fontSize: 12, color: '#A5A5A0', marginTop: 1 }}>{disciplina.puntos.length} puntos de control</div>
+              </div>
+              <Btn sm danger onClick={() => deleteDisciplina(disciplina.id)}>Eliminar disciplina</Btn>
+            </div>
+
+            {disciplina.puntos.length === 0 && (
+              <div style={{ fontSize: 13, color: '#A5A5A0', padding: '12px 0' }}>Sin puntos de control. Añade el primero.</div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+              {disciplina.puntos.map(p => {
+                const est = ESTADOS_INSP[p.estado] || ESTADOS_INSP.pendiente;
+                return (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #E8E7E1', borderRadius: 9 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 400, color: '#18180F' }}>{p.nombre}</div>
+                      {p.fecha && <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 2 }}>{fmtDate(p.fecha)}</div>}
+                    </div>
+                    <select
+                      value={p.estado}
+                      onChange={e => updatePuntoEstado(p.id, e.target.value)}
+                      style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 20, border: `1px solid ${est.color}20`, background: est.bg, color: est.color, fontWeight: 500, cursor: 'pointer' }}
+                    >
+                      {Object.entries(ESTADOS_INSP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                    <button onClick={() => deletePunto(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {showNuevoPunto ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input autoFocus placeholder="Nombre del punto de control" value={nombrePunto} onChange={e => setNombrePunto(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPunto()} style={{ flex: 1 }} />
+                <Btn sm primary disabled={!nombrePunto.trim()} onClick={addPunto}>Añadir</Btn>
+                <Btn sm onClick={() => { setShowNuevoPunto(false); setNombrePunto(''); }}>✕</Btn>
+              </div>
+            ) : (
+              <DashedBtn onClick={() => setShowNuevoPunto(true)}>+ Añadir punto de control</DashedBtn>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── MÓDULO: Incidencias ──────────────────────────────────────────────────────
+
+const ESTADOS_INC = {
+  detectada: { label: 'Detectada',        bg: '#EEEDE7', color: '#52524E' },
+  pendiente: { label: 'Pte. resolución',  bg: '#FEF3DB', color: '#7C4A00' },
+  resuelta:  { label: 'Resuelta',         bg: '#E8F5E0', color: '#2D5E10' },
+};
+
+const DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const DIAS_DEFAULT = [1, 3]; // Lunes y Miércoles
+
+function esHoyVisita(obra) {
+  const dias = obra.diasVisita || [];
+  if (dias.length === 0) return false;
+  return dias.includes(new Date().getDay());
+}
+function revisadaHoy(inc) {
+  return (inc.revisiones || []).some(r => r.fecha === today());
+}
+function diasDesde(iso) {
+  if (!iso) return 0;
+  return Math.floor((Date.now() - new Date(iso)) / 86400000);
+}
+function pickFiles(accept, cb) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.multiple = true; inp.accept = accept;
+  inp.style.position = 'fixed'; inp.style.left = '-9999px';
+  document.body.appendChild(inp);
+  inp.onchange = e => {
+    Array.from(e.target.files).forEach(f => {
+      if (f.size > 15 * 1024 * 1024) { alert(`"${f.name}" supera 15 MB`); return; }
+      const r = new FileReader();
+      r.onload = ev => {
+        if (f.type.startsWith('image/')) {
+          const img = new Image();
+          img.onload = () => {
+            const maxW = 1000, ratio = Math.min(1, maxW / img.width);
+            const c = document.createElement('canvas');
+            c.width = Math.round(img.width * ratio);
+            c.height = Math.round(img.height * ratio);
+            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+            cb({ id: uid(), nombre: f.name, tipo: 'imagen', data: c.toDataURL('image/jpeg', 0.72) });
+          };
+          img.onerror = () => alert('No se pudo procesar la imagen: ' + f.name);
+          img.src = ev.target.result;
+        } else {
+          cb({ id: uid(), nombre: f.name, tipo: 'documento', data: ev.target.result });
+        }
+      };
+      r.onerror = () => alert('No se pudo leer el archivo: ' + f.name);
+      r.readAsDataURL(f);
+    });
+    setTimeout(() => { if (inp.parentNode) document.body.removeChild(inp); }, 100);
+  };
+  inp.click();
+}
+
+// ── Card de incidencia ────────────────────────────────────────────────────────
+function IncCard({ inc, esVisitaHoy, onClick, onRevisar }) {
+  const est      = ESTADOS_INC[inc.estado] || ESTADOS_INC.detectada;
+  const foto     = (inc.historial || []).flatMap(h => h.adjuntos || []).find(a => a.tipo === 'imagen');
+  const revisada = revisadaHoy(inc);
+  const dias     = diasDesde(inc.ultimaActualizacion || inc.fechaCreacion);
+
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${esVisitaHoy && !revisada && inc.estado !== 'resuelta' ? '#F5D98B' : '#E8E7E1'}`, borderRadius: 10, display: 'flex', alignItems: 'stretch', overflow: 'hidden', transition: 'border-color .15s' }}>
+      {/* Foto */}
+      <div onClick={onClick} style={{ width: 72, flexShrink: 0, background: foto ? 'transparent' : '#F5F4F0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        {foto
+          ? <img src={foto.data} alt="" style={{ width: 72, height: '100%', minHeight: 72, objectFit: 'cover', display: 'block' }} />
+          : <span style={{ fontSize: 22 }}>📋</span>}
+      </div>
+
+      {/* Info */}
+      <div onClick={onClick} style={{ flex: 1, padding: '10px 12px', cursor: 'pointer' }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: '#18180F', marginBottom: 5, lineHeight: 1.3 }}>{inc.titulo}</div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Pill label={est.label} bg={est.bg} color={est.color} />
+          <span style={{ fontSize: 11, color: '#A5A5A0' }}>
+            {dias === 0 ? 'Hoy' : `Hace ${dias}d`}
+          </span>
+        </div>
+      </div>
+
+      {/* Botón revisar (solo en días de visita y si no está resuelta) */}
+      {esVisitaHoy && inc.estado !== 'resuelta' && (
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', borderLeft: '1px solid #E8E7E1', flexShrink: 0 }}>
+          {revisada ? (
+            <span style={{ fontSize: 12, color: '#2D5E10', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>✓ Revisada</span>
+          ) : (
+            <button
+              onClick={e => { e.stopPropagation(); onRevisar(); }}
+              style={{ padding: '6px 11px', borderRadius: 8, border: '1px solid #D4820A', background: '#FEF3DB', color: '#7C4A00', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >Revisar</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Formulario nueva incidencia ───────────────────────────────────────────────
+function FormNuevaIncidencia({ onClose, onCrear }) {
+  const [fotos,  setFotos]  = useState([]);
+  const [titulo, setTitulo] = useState('');
+  const [nota,   setNota]   = useState('');
+  const [estado, setEstado] = useState('detectada');
+
+  function crear() {
+    if (!titulo.trim()) return;
+    const ahora = now();
+    const inc = {
+      id: uid(), titulo: titulo.trim(), estado,
+      revisiones: [],
+      historial: [{ id: uid(), tipo: 'creacion', estado, nota: nota.trim(), adjuntos: fotos, fecha: ahora }],
+      fechaCreacion: ahora, ultimaActualizacion: ahora,
+    };
+    onCrear(inc);
+  }
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '16px' }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Nueva incidencia</div>
+
+      {/* Fotos */}
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 6 }}>Fotos</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {fotos.map(f => (
+            <div key={f.id} style={{ position: 'relative', flexShrink: 0 }}>
+              <img src={f.data} alt="" style={{ width: 70, height: 56, objectFit: 'cover', borderRadius: 7, border: '1px solid #E0DFD9', display: 'block' }} />
+              <button onClick={() => setFotos(p => p.filter(x => x.id !== f.id))} style={{ position: 'absolute', top: -5, right: -5, width: 16, height: 16, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+            </div>
+          ))}
+          <button onClick={() => pickFiles('image/*', f => setFotos(p => [...p, f]))} style={{ width: 70, height: 56, borderRadius: 7, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 20, color: '#A5A5A0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📷</button>
+        </div>
+      </div>
+
+      {/* Título */}
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 4 }}>Descripción breve *</label>
+        <input autoFocus placeholder="¿Qué se ha detectado?" value={titulo} onChange={e => setTitulo(e.target.value)} />
+      </div>
+
+      {/* Nota */}
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 4 }}>Nota adicional</label>
+        <textarea placeholder="Ubicación, contexto, a quién se notificará..." value={nota} onChange={e => setNota(e.target.value)} style={{ minHeight: 56 }} />
+      </div>
+
+      {/* Estado */}
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 6 }}>Estado inicial</label>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {Object.entries(ESTADOS_INC).filter(([k]) => k !== 'resuelta').map(([k, v]) => (
+            <button key={k} onClick={() => setEstado(k)} style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${estado === k ? v.color : '#E0DFD9'}`, background: estado === k ? v.bg : 'transparent', color: estado === k ? v.color : '#6B6B66', fontSize: 12, cursor: 'pointer', fontWeight: estado === k ? 600 : 400, transition: 'all .15s' }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn onClick={onClose} full>Cancelar</Btn>
+        <Btn primary onClick={crear} disabled={!titulo.trim()} full>Registrar</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ── Detalle de incidencia ─────────────────────────────────────────────────────
+function DetalleIncidencia({ inc, onClose, onActualizar }) {
+  const [nota,     setNota]     = useState('');
+  const [adjuntos, setAdjuntos] = useState([]);
+  const [estado,   setEstado]   = useState(inc.estado);
+  const [preview,  setPreview]  = useState(null); // imagen ampliada
+
+  function guardar() {
+    if (!nota.trim() && adjuntos.length === 0 && estado === inc.estado) return;
+    const estadoCambio = estado !== inc.estado;
+    const entrada = {
+      id: uid(),
+      tipo: estadoCambio ? 'cambio_estado' : 'nota',
+      estado,
+      nota: nota.trim(),
+      adjuntos,
+      fecha: now(),
+    };
+    onActualizar({ ...inc, estado, historial: [...(inc.historial || []), entrada], ultimaActualizacion: now() });
+    setNota(''); setAdjuntos([]);
+  }
+
+  const est = ESTADOS_INC[inc.estado] || ESTADOS_INC.detectada;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #E8E7E1', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#6B6B66', display: 'flex', alignItems: 'center', gap: 4 }}>← Volver</button>
+        <span style={{ color: '#D4D3CE' }}>/</span>
+        <span style={{ fontSize: 13, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.titulo}</span>
+        <Pill label={est.label} bg={est.bg} color={est.color} />
+      </div>
+
+      <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
+
+        {/* Cambio de estado */}
+        <div style={{ background: '#F9F8F5', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: '#A5A5A0', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Estado</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {Object.entries(ESTADOS_INC).map(([k, v]) => (
+              <button key={k} onClick={() => setEstado(k)} style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${estado === k ? v.color : '#E0DFD9'}`, background: estado === k ? v.bg : 'transparent', color: estado === k ? v.color : '#6B6B66', fontSize: 12, cursor: 'pointer', fontWeight: estado === k ? 600 : 400, transition: 'all .15s' }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Historial */}
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 500, marginBottom: 10 }}>
+          Historial
+        </div>
+
+            {(inc.historial || []).slice().reverse().map(h => (
+              <div key={h.id} style={{
+                padding: h.tipo === 'revision' ? '7px 12px' : '10px 12px',
+                background: h.tipo === 'revision' ? 'transparent' : '#fff',
+                border: `1px solid ${h.tipo === 'revision' ? '#EEECEA' : '#E8E7E1'}`,
+                borderRadius: 9, marginBottom: 6,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: (h.nota || h.adjuntos?.length) ? 6 : 0 }}>
+                  <span style={{ fontSize: 11, color: '#A5A5A0' }}>{fmtDate(h.fecha)}</span>
+                  {h.tipo === 'creacion' && (
+                    <span style={{ fontSize: 11, color: '#6B6B66', background: '#F0EFEA', padding: '1px 7px', borderRadius: 20 }}>Registrada</span>
+                  )}
+                  {h.tipo === 'cambio_estado' && (
+                    <Pill label={ESTADOS_INC[h.estado]?.label || h.estado} bg={ESTADOS_INC[h.estado]?.bg || '#eee'} color={ESTADOS_INC[h.estado]?.color || '#333'} />
+                  )}
+                  {h.tipo === 'nota' && (
+                    <span style={{ fontSize: 11, color: '#A5A5A0', fontStyle: 'italic' }}>Actualización</span>
+                  )}
+                  {h.tipo === 'revision' && (
+                    <span style={{ fontSize: 11, color: '#A5A5A0' }}>✓ Revisada en visita · Sin cambios</span>
+                  )}
+                </div>
+                {h.nota && <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: h.adjuntos?.length ? 8 : 0 }}>{h.nota}</div>}
+                {h.adjuntos?.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {h.adjuntos.map(a => a.tipo === 'imagen'
+                      ? <img key={a.id} src={a.data} alt={a.nombre} title="Clic para ampliar" onClick={() => setPreview(a)} style={{ width: 140, height: 110, objectFit: 'cover', borderRadius: 8, border: '1px solid #E0DFD9', display: 'block', cursor: 'zoom-in' }} />
+                      : <a key={a.id} href={a.data} download={a.nombre} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, padding: '4px 9px', borderRadius: 7, background: '#F5F4F0', border: '1px solid #E0DFD9', color: '#18180F', textDecoration: 'none' }}>📄 {a.nombre}</a>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+
+        {/* Añadir actualización */}
+        <div style={{ background: '#F9F8F5', borderRadius: 10, padding: '12px 14px', marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: '#A5A5A0', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Añadir actualización</div>
+          <textarea placeholder="Nota de seguimiento, notificación enviada, acta adjunta..." value={nota} onChange={e => setNota(e.target.value)} style={{ marginBottom: 8, minHeight: 64 }} />
+
+          {adjuntos.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+              {adjuntos.map(a => (
+                <div key={a.id} style={{ position: 'relative' }}>
+                  {a.tipo === 'imagen'
+                    ? <img src={a.data} alt="" style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9' }} />
+                    : <div style={{ fontSize: 11, padding: '4px 8px', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 6 }}>📄 {a.nombre}</div>
+                  }
+                  <button onClick={() => setAdjuntos(p => p.filter(x => x.id !== a.id))} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]))} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
+            <Btn primary full onClick={guardar} disabled={!nota.trim() && adjuntos.length === 0 && estado === inc.estado}>Guardar</Btn>
+          </div>
+        </div>
+      </div>
+
+      {/* Lightbox de imagen */}
+      {preview && (
+        <div onClick={() => setPreview(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 30, cursor: 'zoom-out' }}>
+          <img src={preview.data} alt={preview.nombre} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6 }} />
+          <button onClick={() => setPreview(null)} style={{ position: 'absolute', top: 20, right: 24, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 24, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', lineHeight: 1 }}>×</button>
+          <a href={preview.data} download={preview.nombre} onClick={e => e.stopPropagation()} style={{ position: 'absolute', bottom: 24, background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 13, padding: '8px 16px', borderRadius: 8, textDecoration: 'none' }}>↓ Descargar {preview.nombre}</a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Modal de revisión en visita ───────────────────────────────────────────────
+function ModalRevision({ inc, onSinCambios, onConCambios, onClose }) {
+  const [fase,     setFase]     = useState('pregunta'); // pregunta | cambios
+  const [estado,   setEstado]   = useState(inc.estado);
+  const [comentario, setComentario] = useState('');
+  const [adjuntos, setAdjuntos] = useState([]);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="fade" style={{ background: '#fff', borderRadius: 14, width: 440, maxWidth: '95vw', border: '1px solid #E0DFD9', boxShadow: '0 24px 64px rgba(0,0,0,.14)' }}>
+
+        {/* Header */}
+        <div style={{ padding: '15px 18px', borderBottom: '1px solid #ECEAE4' }}>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>Revisar en visita</div>
+          <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 2 }}>{inc.titulo}</div>
+        </div>
+
+        <div style={{ padding: '18px' }}>
+          {fase === 'pregunta' ? (
+            <>
+              <p style={{ fontSize: 14, color: '#52524E', marginBottom: 18, textAlign: 'center' }}>
+                ¿Hay cambios desde la última visita?
+              </p>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => onSinCambios(inc.id)} style={{ flex: 1, padding: '14px', borderRadius: 10, border: '1.5px solid #E0DFD9', background: '#fff', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, transition: 'all .15s' }}>
+                  <span style={{ fontSize: 22 }}>✓</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: '#52524E' }}>Sin cambios</span>
+                  <span style={{ fontSize: 11, color: '#A5A5A0' }}>Sigue igual</span>
+                </button>
+                <button onClick={() => setFase('cambios')} style={{ flex: 1, padding: '14px', borderRadius: 10, border: '1.5px solid #D48A0C', background: '#FEF3DB', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, transition: 'all .15s' }}>
+                  <span style={{ fontSize: 22 }}>✎</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: '#7C4A00' }}>Hay cambios</span>
+                  <span style={{ fontSize: 11, color: '#A5780A' }}>Actualizar</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Estado */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 6 }}>Estado</label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {Object.entries(ESTADOS_INC).map(([k, v]) => (
+                    <button key={k} onClick={() => setEstado(k)} style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${estado === k ? v.color : '#E0DFD9'}`, background: estado === k ? v.bg : 'transparent', color: estado === k ? v.color : '#6B6B66', fontSize: 12, cursor: 'pointer', fontWeight: estado === k ? 600 : 400, transition: 'all .15s' }}>
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+                {estado === inc.estado && <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 5 }}>Mismo estado · solo se añadirá el comentario</div>}
+              </div>
+
+              {/* Comentario */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 5 }}>Comentario</label>
+                <textarea autoFocus placeholder="Qué ha cambiado, qué se ha hecho..." value={comentario} onChange={e => setComentario(e.target.value)} style={{ minHeight: 70 }} />
+              </div>
+
+              {/* Adjuntos */}
+              {adjuntos.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {adjuntos.map(a => (
+                    <div key={a.id} style={{ position: 'relative' }}>
+                      {a.tipo === 'imagen'
+                        ? <img src={a.data} alt="" style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9' }} />
+                        : <div style={{ fontSize: 11, padding: '4px 8px', background: '#F5F4F0', border: '1px solid #E0DFD9', borderRadius: 6 }}>📄 {a.nombre}</div>}
+                      <button onClick={() => setAdjuntos(p => p.filter(x => x.id !== a.id))} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 9 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]))} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#6B6B66', marginBottom: 14 }}>📎 Adjuntar foto o documento</button>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Btn onClick={() => setFase('pregunta')} full>← Atrás</Btn>
+                <Btn primary full onClick={() => onConCambios(inc.id, estado, comentario, adjuntos)} disabled={estado === inc.estado && !comentario.trim()}>
+                  Guardar
+                </Btn>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Módulo principal ──────────────────────────────────────────────────────────
+function ModuloIncidencias({ obra, onSave }) {
+  const [vista,     setVista]     = useState('pendientes');
+  const [incActiva, setIncActiva] = useState(null);
+  const [showNueva, setShowNueva] = useState(false);
+  const [revisando, setRevisando] = useState(null); // incidencia que se está revisando
+
+  const esVisita    = esHoyVisita(obra);
+  const pendientes  = obra.incidencias.filter(i => i.estado !== 'resuelta');
+  const resueltas   = obra.incidencias.filter(i => i.estado === 'resuelta');
+  const mostradas   = vista === 'pendientes' ? pendientes : vista === 'resueltas' ? resueltas : obra.incidencias;
+  const sinRevisar  = pendientes.filter(i => !revisadaHoy(i));
+  const incDetalle  = obra.incidencias.find(i => i.id === incActiva);
+
+  function crearInc(inc) {
+    onSave({ ...obra, incidencias: [inc, ...obra.incidencias] });
+    setShowNueva(false);
+    setIncActiva(inc.id);
+  }
+
+  function actualizarInc(updated) {
+    onSave({ ...obra, incidencias: obra.incidencias.map(i => i.id === updated.id ? updated : i) });
+  }
+
+  // Revisión sin cambios — solo deja constancia
+  function revisarSinCambios(incId) {
+    const entrada = { id: uid(), tipo: 'revision', estado: obra.incidencias.find(i => i.id === incId)?.estado, nota: '', adjuntos: [], fecha: now() };
+    onSave({
+      ...obra,
+      incidencias: obra.incidencias.map(i =>
+        i.id === incId
+          ? { ...i, revisiones: [...(i.revisiones || []), { fecha: today() }], historial: [...(i.historial || []), entrada], ultimaActualizacion: now() }
+          : i
+      ),
+    });
+    setRevisando(null);
+  }
+
+  // Revisión con cambios — cambia estado y/o añade comentario
+  function revisarConCambios(incId, nuevoEstado, comentario, adjuntos) {
+    const inc = obra.incidencias.find(i => i.id === incId);
+    const estadoCambio = nuevoEstado !== inc.estado;
+    const entrada = {
+      id: uid(),
+      tipo: estadoCambio ? 'cambio_estado' : 'nota',
+      estado: nuevoEstado,
+      nota: comentario.trim(),
+      adjuntos: adjuntos || [],
+      fecha: now(),
+    };
+    onSave({
+      ...obra,
+      incidencias: obra.incidencias.map(i =>
+        i.id === incId
+          ? { ...i, estado: nuevoEstado, revisiones: [...(i.revisiones || []), { fecha: today() }], historial: [...(i.historial || []), entrada], ultimaActualizacion: now() }
+          : i
+      ),
+    });
+    setRevisando(null);
+  }
+
+  // Vista detalle
+  if (incDetalle) {
+    return (
+      <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <DetalleIncidencia
+          inc={incDetalle}
+          onClose={() => setIncActiva(null)}
+          onActualizar={updated => { actualizarInc(updated); }}
+        />
+      </div>
+    );
+  }
+
+  const proximaDiaVisita = () => {
+    const diasVisita = obra.diasVisita || DIAS_DEFAULT;
+    const hoy = new Date().getDay();
+    let dias = 1;
+    while (dias <= 7) {
+      if (diasVisita.includes((hoy + dias) % 7)) return DIAS_SEMANA[(hoy + dias) % 7];
+      dias++;
+    }
+    return '';
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+      {/* Banner visita */}
+      {esVisita && pendientes.length > 0 && (
+        <div style={{ background: sinRevisar.length === 0 ? '#E8F5E0' : '#FEF3DB', border: `1px solid ${sinRevisar.length === 0 ? '#B8DFA8' : '#F5D98B'}`, borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>{sinRevisar.length === 0 ? '✅' : '📋'}</span>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: '#18180F' }}>
+              {sinRevisar.length === 0
+                ? 'Todas las incidencias revisadas en la visita de hoy'
+                : `${sinRevisar.length} incidencia${sinRevisar.length > 1 ? 's' : ''} pendiente${sinRevisar.length > 1 ? 's' : ''} de revisar hoy`
+              }
+            </div>
+            {sinRevisar.length > 0 && <div style={{ fontSize: 11, color: '#7C4A00', marginTop: 2 }}>Pulsa "Revisar" en cada una para marcarlas como vistas esta visita</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Sin visita hoy: próxima visita */}
+      {!esVisita && pendientes.length > 0 && (
+        <div style={{ background: '#F9F8F5', border: '1px solid #E8E7E1', borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13 }}>📅</span>
+          <span style={{ fontSize: 12, color: '#6B6B66' }}>Próxima visita: <strong>{proximaDiaVisita()}</strong> · {pendientes.length} incidencia{pendientes.length > 1 ? 's' : ''} pendiente{pendientes.length > 1 ? 's' : ''}</span>
+        </div>
+      )}
+
+      {/* Config días de visita */}
+      <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ fontSize: 12, color: '#6B6B66', whiteSpace: 'nowrap', flexShrink: 0 }}>Días de visita:</div>
+        <DiasPicker
+          value={obra.diasVisita || []}
+          onChange={dias => onSave({ ...obra, diasVisita: dias })}
+        />
+        {(!obra.diasVisita || obra.diasVisita.length === 0) && (
+          <span style={{ fontSize: 11, color: '#A5A5A0' }}>Sin días configurados — selecciona los días que vas a esta obra</span>
+        )}
+      </div>
+
+      {/* Filtros + botón nueva */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 4, flex: 1, flexWrap: 'wrap' }}>
+          {[
+            ['pendientes', 'Pendientes', pendientes.length],
+            ['todas',      'Todas',      obra.incidencias.length],
+            ['resueltas',  'Resueltas',  resueltas.length],
+          ].map(([id, label, count]) => (
+            <button key={id} onClick={() => setVista(id)} style={{ padding: '5px 12px', borderRadius: 20, border: `1px solid ${vista === id ? '#18180F' : '#E0DFD9'}`, background: vista === id ? '#18180F' : 'transparent', color: vista === id ? '#fff' : '#6B6B66', fontSize: 12, cursor: 'pointer', fontWeight: vista === id ? 500 : 400, transition: 'all .15s' }}>
+              {label}{count > 0 ? ` (${count})` : ''}
+            </button>
+          ))}
+        </div>
+        <Btn primary onClick={() => setShowNueva(v => !v)}>
+          {showNueva ? '✕ Cancelar' : '+ Nueva incidencia'}
+        </Btn>
+      </div>
+
+      {/* Form nueva */}
+      {showNueva && <FormNuevaIncidencia onClose={() => setShowNueva(false)} onCrear={crearInc} />}
+
+      {/* Lista */}
+      {mostradas.length === 0 ? (
+        <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '40px 20px', textAlign: 'center', color: '#A5A5A0' }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>{vista === 'resueltas' ? '✅' : '✓'}</div>
+          <div style={{ fontSize: 13 }}>
+            {vista === 'pendientes' ? 'Sin incidencias pendientes' : vista === 'resueltas' ? 'Aún no hay incidencias resueltas' : 'Sin incidencias registradas'}
+          </div>
+          {vista === 'pendientes' && !showNueva && <div style={{ marginTop: 12 }}><Btn onClick={() => setShowNueva(true)}>+ Nueva incidencia</Btn></div>}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {mostradas.map(i => (
+            <IncCard
+              key={i.id}
+              inc={i}
+              esVisitaHoy={esVisita}
+              onClick={() => setIncActiva(i.id)}
+              onRevisar={() => setRevisando(i)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Modal de revisión */}
+      {revisando && (
+        <ModalRevision
+          inc={revisando}
+          onSinCambios={revisarSinCambios}
+          onConCambios={revisarConCambios}
+          onClose={() => setRevisando(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── MÓDULO: Notas y tareas ───────────────────────────────────────────────────
+
+const CATEGORIAS_APT = ['Estructuras','Instalaciones','Obra civil','Acabados','Costes','Documentación','Otros'];
+
+function ModuloApuntes({ obra, onSave }) {
+  const apuntes = obra.apuntes || [];
+  const [filtro,   setFiltro]   = useState('todo');
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ tipo: 'tarea', texto: '', categoria: 'Otros', fechaLimite: '' });
+  const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  function guardar() {
+    if (!form.texto.trim()) return;
+    const item = {
+      id: uid(), tipo: form.tipo,
+      texto: form.texto.trim(),
+      categoria: form.categoria,
+      fechaLimite: form.tipo === 'tarea' ? form.fechaLimite : '',
+      hecha: false,
+      creadaEn: now(),
+    };
+    onSave({ ...obra, apuntes: [item, ...apuntes] });
+    setForm({ tipo: 'tarea', texto: '', categoria: 'Otros', fechaLimite: '' });
+    setShowForm(false);
+  }
+
+  function toggleHecha(id) {
+    onSave({ ...obra, apuntes: apuntes.map(a => a.id === id ? { ...a, hecha: !a.hecha } : a) });
+  }
+
+  function eliminar(id) {
+    onSave({ ...obra, apuntes: apuntes.filter(a => a.id !== id) });
+  }
+
+  const tareasPend  = apuntes.filter(a => a.tipo === 'tarea' && !a.hecha);
+  const tareasHecha = apuntes.filter(a => a.tipo === 'tarea' && a.hecha);
+  const notas       = apuntes.filter(a => a.tipo === 'nota');
+
+  const mostrados = filtro === 'todo'    ? apuntes
+    : filtro === 'pendientes'            ? tareasPend
+    : filtro === 'hechas'                ? tareasHecha
+    : notas;
+
+  function isVencida(item) {
+    if (!item.fechaLimite || item.hecha) return false;
+    return new Date(item.fechaLimite) < new Date(today());
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+      {/* Stats rápidas */}
+      {tareasPend.length > 0 && (
+        <div style={{ background: apuntes.some(isVencida) ? '#FFF0F0' : '#FEF3DB', border: `1px solid ${apuntes.some(isVencida) ? '#FDCECE' : '#F5D98B'}`, borderRadius: 10, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 16 }}>{apuntes.some(isVencida) ? '⚠️' : '📋'}</span>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>
+            {tareasPend.length} tarea{tareasPend.length > 1 ? 's' : ''} pendiente{tareasPend.length > 1 ? 's' : ''}
+            {apuntes.some(isVencida) && <span style={{ color: '#8A1F1F' }}> · {apuntes.filter(isVencida).length} vencida{apuntes.filter(isVencida).length > 1 ? 's' : ''}</span>}
+          </span>
+        </div>
+      )}
+
+      {/* Filtros + botón nuevo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 4, flex: 1, flexWrap: 'wrap' }}>
+          {[
+            ['todo',       'Todo',              apuntes.length],
+            ['pendientes', 'Tareas pendientes', tareasPend.length],
+            ['hechas',     'Tareas hechas',     tareasHecha.length],
+            ['notas',      'Notas',             notas.length],
+          ].map(([id, label, count]) => (
+            <button key={id} onClick={() => setFiltro(id)} style={{ padding: '5px 12px', borderRadius: 20, border: `1px solid ${filtro === id ? '#18180F' : '#E0DFD9'}`, background: filtro === id ? '#18180F' : 'transparent', color: filtro === id ? '#fff' : '#6B6B66', fontSize: 12, cursor: 'pointer', fontWeight: filtro === id ? 500 : 400, transition: 'all .15s' }}>
+              {label}{count > 0 ? ` (${count})` : ''}
+            </button>
+          ))}
+        </div>
+        <Btn primary onClick={() => setShowForm(v => !v)}>
+          {showForm ? '✕ Cancelar' : '+ Nuevo apunte'}
+        </Btn>
+      </div>
+
+      {/* Formulario nuevo apunte */}
+      {showForm && (
+        <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '14px 16px' }}>
+          {/* Tipo toggle */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+            {[['tarea','☑ Tarea'],['nota','📝 Nota']].map(([t, l]) => (
+              <button key={t} onClick={() => upd('tipo', t)} style={{ padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${form.tipo === t ? '#18180F' : '#E0DFD9'}`, background: form.tipo === t ? '#18180F' : 'transparent', color: form.tipo === t ? '#fff' : '#6B6B66', fontSize: 12, cursor: 'pointer', fontWeight: form.tipo === t ? 600 : 400, transition: 'all .15s' }}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            <textarea autoFocus placeholder={form.tipo === 'tarea' ? 'Descripción de la tarea...' : 'Escribe tu nota...'} value={form.texto} onChange={e => upd('texto', e.target.value)} style={{ minHeight: 70 }} />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: form.tipo === 'tarea' ? '1fr 1fr' : '1fr', gap: 10, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 4 }}>Categoría</label>
+              <select value={form.categoria} onChange={e => upd('categoria', e.target.value)}>
+                {CATEGORIAS_APT.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            {form.tipo === 'tarea' && (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 4 }}>Fecha límite</label>
+                <input type="date" value={form.fechaLimite} onChange={e => upd('fechaLimite', e.target.value)} />
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn onClick={() => setShowForm(false)} full>Cancelar</Btn>
+            <Btn primary onClick={guardar} disabled={!form.texto.trim()} full>
+              {form.tipo === 'tarea' ? 'Añadir tarea' : 'Añadir nota'}
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* Lista */}
+      {mostrados.length === 0 ? (
+        <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '40px 20px', textAlign: 'center', color: '#A5A5A0' }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>
+            {filtro === 'hechas' ? '✅' : filtro === 'notas' ? '📝' : '📋'}
+          </div>
+          <div style={{ fontSize: 13 }}>
+            {filtro === 'todo' ? 'Sin apuntes todavía' : filtro === 'pendientes' ? 'Sin tareas pendientes' : filtro === 'hechas' ? 'Sin tareas completadas' : 'Sin notas'}
+          </div>
+          {filtro === 'todo' && !showForm && <div style={{ marginTop: 12 }}><Btn onClick={() => setShowForm(true)}>+ Nuevo apunte</Btn></div>}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {mostrados.map(item => {
+            const vencida = isVencida(item);
+            return (
+              <div key={item.id} style={{ background: '#fff', border: `1px solid ${vencida ? '#F4ABAB' : '#E8E7E1'}`, borderLeft: vencida ? '3px solid #E24B4A' : '1px solid #E8E7E1', borderRadius: 10, padding: '10px 13px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+
+                {/* Checkbox (solo tareas) */}
+                {item.tipo === 'tarea' && (
+                  <button onClick={() => toggleHecha(item.id)} style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${item.hecha ? '#52A124' : '#D4D3CE'}`, background: item.hecha ? '#52A124' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, fontSize: 11, color: '#fff', transition: 'all .15s' }}>
+                    {item.hecha ? '✓' : ''}
+                  </button>
+                )}
+
+                {/* Icono nota */}
+                {item.tipo === 'nota' && (
+                  <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>📝</span>
+                )}
+
+                {/* Contenido */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: item.hecha ? '#A5A5A0' : '#18180F', textDecoration: item.hecha ? 'line-through' : 'none', lineHeight: 1.4, marginBottom: 5 }}>
+                    {item.texto}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 20, background: '#F0EFEA', color: '#6B6B66' }}>{item.categoria}</span>
+                    {item.tipo === 'tarea' && item.fechaLimite && (
+                      <span style={{ fontSize: 11, color: vencida ? '#8A1F1F' : '#A5A5A0', fontWeight: vencida ? 500 : 400 }}>
+                        {vencida ? '⚠ Vencida · ' : '📅 '}{fmtDate(item.fechaLimite)}
+                      </span>
+                    )}
+                    {item.tipo === 'nota' && (
+                      <span style={{ fontSize: 11, color: '#A5A5A0' }}>{fmtShort(item.creadaEn)}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Eliminar */}
+                <button onClick={() => eliminar(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MÓDULO: Ensayos (importación desde Presto) ───────────────────────────────
+
+// Lee el Excel de Presto y agrupa partidas por capítulo, extrayendo líneas de medición
+function parseExcelEnsayos(uint8) {
+  const wb = XLSX.read(uint8, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+  const capitulos = [];
+  let capActual = null;
+  let ensActual = null;
+
+  for (const row of rows) {
+    const cod     = row[0];   // A · Código
+    const nat     = row[1];   // B · Naturaleza
+    const ud      = row[2];   // C · Unidad
+    const resumen = row[3];   // D · Resumen
+    const coment  = row[4];   // E · Comentario (línea de medición)
+    const cantLin = row[9];   // J · Cantidad de la línea
+    const canPres = row[10];  // K · CanPres (total partida)
+
+    if (nat === 'Capítulo') {
+      ensActual = null;
+      if (resumen && String(resumen).trim().toUpperCase() !== 'NOTA') {
+        capActual = { codigo: String(cod || ''), nombre: String(resumen).trim(), ensayos: [] };
+        capitulos.push(capActual);
+      } else capActual = null;
+    } else if (nat === 'Partida' && capActual) {
+      if (resumen && String(resumen).trim().toUpperCase() !== 'NOTA') {
+        ensActual = {
+          id: uid(),
+          codigo: String(cod || ''),
+          nombre: String(resumen).trim(),
+          unidad: ud ? String(ud).trim() : '',
+          cantidad: Number(canPres) || 0,
+          _lineas: [],
+        };
+        capActual.ensayos.push(ensActual);
+      } else ensActual = null;
+    } else if (ensActual) {
+      const esTotal = (resumen && String(resumen).startsWith('Total')) || (row[9] && String(row[9]).startsWith('Total'));
+      if (coment && String(coment).trim() && !esTotal) {
+        ensActual._lineas.push({ nombre: String(coment).trim(), cantidad: Number(cantLin) || 0 });
+      }
+    }
+  }
+
+  // Post-proceso: decidir unidades con nombre vs criterio único
+  for (const cap of capitulos) {
+    for (const ens of cap.ensayos) {
+      const lineas = ens._lineas || [];
+      const conCantidad = lineas.filter(l => l.cantidad >= 1);
+      const notas       = lineas.filter(l => l.cantidad < 1);
+
+      if (conCantidad.length >= 2) {
+        // Unidades con nombre: se desglosa cada línea según su cantidad
+        ens.unidades = [];
+        conCantidad.forEach(l => {
+          const n = Math.max(1, Math.round(l.cantidad));
+          if (n === 1) {
+            ens.unidades.push({ id: uid(), nombre: l.nombre, marca: null });
+          } else {
+            for (let i = 1; i <= n; i++) {
+              ens.unidades.push({ id: uid(), nombre: `${l.nombre} (${i}/${n})`, marca: null });
+            }
+          }
+        });
+        ens.criterio = notas.map(n => n.nombre).join(' · ');
+        ens.registros = [];
+      } else {
+        // Criterio único: contador de ejecutadas + actas adjuntas
+        ens.unidades = [];
+        ens.criterio = lineas.map(l => l.nombre).join(' · ');
+        ens.ejecutadas = 0;
+        ens.registros = [];
+      }
+      delete ens._lineas;
+    }
+  }
+  return capitulos.filter(c => c.ensayos.length > 0);
+}
+
+// Progreso de un ensayo según su modo
+function ensayoProgreso(ens) {
+  if (ens.unidades && ens.unidades.length > 0) {
+    return { modo: 'named', hechas: ens.unidades.filter(u => u.marca).length, total: ens.unidades.length };
+  }
+  return { modo: 'criterio', hechas: ens.ejecutadas || 0, total: ens.cantidad };
+}
+
+// Abre selector y lee el Excel como arrayBuffer
+function importarExcel(cb) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.xlsx,.xls';
+  inp.style.position = 'fixed'; inp.style.left = '-9999px';
+  document.body.appendChild(inp);
+  inp.onchange = e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const data = new Uint8Array(ev.target.result);
+        const caps = parseExcelEnsayos(data);
+        if (caps.length === 0) { alert('No se encontraron ensayos en el Excel. ¿Es un export de presupuesto de Presto?'); }
+        else cb(caps, f.name);
+      } catch (err) {
+        alert('No se pudo leer el Excel: ' + err.message);
+      }
+      setTimeout(() => { if (inp.parentNode) document.body.removeChild(inp); }, 100);
+    };
+    r.readAsArrayBuffer(f);
+  };
+  inp.click();
+}
+
+const RESULTADOS = {
+  apto:    { label: 'Apto',     bg: '#E8F5E0', color: '#2D5E10' },
+  no_apto: { label: 'No apto',  bg: '#FDECEC', color: '#8A1F1F' },
+  info:    { label: 'Sin valoración', bg: '#EEEDE7', color: '#52524E' },
+};
+
+function ModuloEnsayos({ obra, onSave }) {
+  const datos = obra.ensayos || null;
+  const [expandido, setExpandido] = useState(null);   // capítulo abierto
+  const [ensayoActivo, setEnsayoActivo] = useState(null); // ensayo abierto para registros
+  const [preview, setPreview] = useState(null);
+  const [pendiente, setPendiente] = useState(null);   // import a confirmar { capitulos, nombre }
+
+  function onImportar(capitulos, nombre) {
+    if (datos) {
+      // Ya hay datos: pedir confirmación con modal propio (window.confirm no funciona en iframe)
+      setPendiente({ capitulos, nombre });
+    } else {
+      guardarImport(capitulos, nombre);
+    }
+  }
+
+  function guardarImport(capitulos, nombre) {
+    onSave({ ...obra, ensayos: { archivoNombre: nombre, importadoEn: now(), capitulos } });
+    setExpandido(null); setEnsayoActivo(null); setPendiente(null);
+  }
+
+  function actualizarEnsayo(capIdx, ensId, mut) {
+    const capitulos = datos.capitulos.map((c, i) => {
+      if (i !== capIdx) return c;
+      return { ...c, ensayos: c.ensayos.map(e => e.id === ensId ? mut(e) : e) };
+    });
+    onSave({ ...obra, ensayos: { ...datos, capitulos } });
+  }
+
+  // Estado vacío — importar
+  if (!datos) {
+    return (
+      <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: '#1C1C1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>🧪</div>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Importar ensayos desde Presto</div>
+          <div style={{ fontSize: 13, color: '#9B9B97', maxWidth: 420, lineHeight: 1.5 }}>
+            Carga el Excel exportado del presupuesto de Presto. La app reconocerá los capítulos y creará la lista de ensayos automáticamente.
+          </div>
+        </div>
+        <Btn primary onClick={() => importarExcel(onImportar)}>📂 Cargar Excel de Presto</Btn>
+      </div>
+    );
+  }
+
+  const totalEnsayos = datos.capitulos.reduce((s, c) => s + c.ensayos.length, 0);
+  const totalEjecutados = datos.capitulos.reduce((s, c) => s + c.ensayos.filter(e => ensayoProgreso(e).hechas > 0).length, 0);
+  const ensayoAbierto = (() => {
+    for (let ci = 0; ci < datos.capitulos.length; ci++) {
+      const e = datos.capitulos[ci].ensayos.find(x => x.id === ensayoActivo);
+      if (e) return { capIdx: ci, ensayo: e };
+    }
+    return null;
+  })();
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* Cabecera */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 13, fontWeight: 500 }}>{totalEjecutados}/{totalEnsayos} ensayos iniciados</div>
+          <div style={{ fontSize: 11, color: '#9B9B97', marginTop: 1 }}>📄 {datos.archivoNombre} · importado {fmtShort(datos.importadoEn)}</div>
+        </div>
+        <button onClick={() => importarExcel(onImportar)} style={{ fontSize: 12, color: '#6B6B66', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 8, padding: '6px 11px', cursor: 'pointer' }}>Reimportar</button>
+      </div>
+
+      {/* Detalle de ensayo abierto */}
+      {ensayoAbierto ? (
+        <DetalleEnsayo
+          ensayo={ensayoAbierto.ensayo}
+          onClose={() => setEnsayoActivo(null)}
+          onPreview={setPreview}
+          onUpdate={(mut) => actualizarEnsayo(ensayoAbierto.capIdx, ensayoAbierto.ensayo.id, mut)}
+        />
+      ) : (
+        /* Lista de capítulos */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {datos.capitulos.map((cap, capIdx) => {
+            const ejec = cap.ensayos.filter(e => ensayoProgreso(e).hechas > 0).length;
+            const abierto = expandido === cap.codigo;
+            return (
+              <div key={cap.codigo} style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 11, overflow: 'hidden' }}>
+                {/* Cabecera capítulo */}
+                <div onClick={() => setExpandido(abierto ? null : cap.codigo)} style={{ padding: '12px 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#A5A5A0', minWidth: 24 }}>{cap.codigo}</span>
+                  <div style={{ flex: 1, fontSize: 14, fontWeight: 600, color: '#141412' }}>{cap.nombre}</div>
+                  <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 20, background: ejec === cap.ensayos.length ? '#E8F5E0' : '#F0EFEA', color: ejec === cap.ensayos.length ? '#2D5E10' : '#6B6B66', fontWeight: 500 }}>
+                    {ejec}/{cap.ensayos.length}
+                  </span>
+                  <span style={{ fontSize: 11, color: '#A5A5A0' }}>{abierto ? '▲' : '▼'}</span>
+                </div>
+
+                {/* Ensayos del capítulo */}
+                {abierto && (
+                  <div style={{ borderTop: '1px solid #F2F1ED' }}>
+                    {cap.ensayos.map(ens => {
+                      const p = ensayoProgreso(ens);
+                      const completo = p.total > 0 && p.hechas >= p.total;
+                      const etiqueta = p.modo === 'named'
+                        ? (p.hechas > 0 ? `${p.hechas}/${p.total} ud.` : `${p.total} ud. · Pendiente`)
+                        : (p.hechas > 0 ? `${p.hechas}/${p.total}` : 'Pendiente');
+                      return (
+                        <div key={ens.id} onClick={() => setEnsayoActivo(ens.id)} className="hov-row" style={{ padding: '10px 15px', borderTop: '1px solid #F7F6F2', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, color: '#141412', lineHeight: 1.35 }}>{ens.nombre}</div>
+                            <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 2 }}>{ens.codigo} · {ens.cantidad} {ens.unidad}{p.modo === 'named' ? ' · por unidades' : ''}</div>
+                          </div>
+                          <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 20, whiteSpace: 'nowrap', background: completo ? '#E8F5E0' : p.hechas > 0 ? '#FEF3DB' : '#F0EFEA', color: completo ? '#2D5E10' : p.hechas > 0 ? '#7C4A00' : '#9B9B97', fontWeight: 500 }}>
+                            {etiqueta}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {preview && (
+        <div onClick={() => setPreview(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 30, cursor: 'zoom-out' }}>
+          <img src={preview.data} alt={preview.nombre} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6 }} />
+          <button onClick={() => setPreview(null)} style={{ position: 'absolute', top: 20, right: 24, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 24, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+      )}
+
+      {/* Confirmación de reimportación */}
+      {pendiente && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }} onClick={e => { if (e.target === e.currentTarget) setPendiente(null); }}>
+          <div className="fade" style={{ background: '#fff', borderRadius: 14, width: 420, maxWidth: '95vw', border: '1px solid #E0DFD9', boxShadow: '0 24px 64px rgba(0,0,0,.14)', padding: '20px' }}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Reemplazar ensayos</div>
+            <div style={{ fontSize: 13, color: '#52524E', lineHeight: 1.5, marginBottom: 18 }}>
+              Ya hay ensayos importados. Al cargar <strong>{pendiente.nombre}</strong> se reemplazará la lista actual y se perderán los registros y unidades marcadas. ¿Continuar?
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn onClick={() => setPendiente(null)} full>Cancelar</Btn>
+              <Btn danger full onClick={() => guardarImport(pendiente.capitulos, pendiente.nombre)}>Reemplazar</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function DetalleEnsayo({ ensayo, onClose, onUpdate, onPreview }) {
+  const esNamed = (ensayo.unidades || []).length > 0;
+  const p = ensayoProgreso(ensayo);
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ padding: '13px 16px', borderBottom: '1px solid #ECEAE4', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#6B6B66', padding: 0, whiteSpace: 'nowrap' }}>← Volver</button>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{ensayo.nombre}</div>
+          <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 2 }}>
+            {ensayo.codigo} · {ensayo.cantidad} {ensayo.unidad}
+            {esNamed ? ` · ${p.hechas}/${p.total} unidades ejecutadas` : ` · ${p.hechas}/${p.total} ejecutadas`}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: '14px 16px' }}>
+        {/* Criterio de medición */}
+        {ensayo.criterio && (
+          <div style={{ background: '#F0F4FA', border: '1px solid #D3E2F5', borderRadius: 9, padding: '9px 12px', marginBottom: 14, display: 'flex', gap: 8 }}>
+            <span style={{ fontSize: 13 }}>📐</span>
+            <div>
+              <div style={{ fontSize: 10, color: '#0C447C', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 2 }}>Criterio de medición</div>
+              <div style={{ fontSize: 12, color: '#1A3A5C', lineHeight: 1.45 }}>{ensayo.criterio}</div>
+            </div>
+          </div>
+        )}
+
+        {esNamed
+          ? <UnidadesNombradas ensayo={ensayo} onUpdate={onUpdate} onPreview={onPreview} />
+          : <RegistrosLibres ensayo={ensayo} onUpdate={onUpdate} onPreview={onPreview} />
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Modo A: unidades con nombre (marcar cada una) ─────────────────────────────
+function UnidadesNombradas({ ensayo, onUpdate, onPreview }) {
+  const [editId,     setEditId]     = useState(null);
+  const [resultado,  setResultado]  = useState('apto');
+  const [comentario, setComentario] = useState('');
+  const [adjuntos,   setAdjuntos]   = useState([]);
+
+  function abrir(u) {
+    setEditId(u.id);
+    setResultado(u.marca?.resultado || 'apto');
+    setComentario(u.marca?.comentario || '');
+    setAdjuntos(u.marca?.adjuntos || []);
+  }
+  function guardar() {
+    const marca = { resultado, comentario: comentario.trim(), adjuntos, fecha: now() };
+    onUpdate(e => ({ ...e, unidades: e.unidades.map(u => u.id === editId ? { ...u, marca } : u) }));
+    setEditId(null);
+  }
+  function quitar(id) {
+    onUpdate(e => ({ ...e, unidades: e.unidades.map(u => u.id === id ? { ...u, marca: null } : u) }));
+    setEditId(null);
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+      {ensayo.unidades.map(u => {
+        const res = u.marca ? (RESULTADOS[u.marca.resultado] || RESULTADOS.info) : null;
+        const editando = editId === u.id;
+        return (
+          <div key={u.id} style={{ border: `1px solid ${editando ? '#C5C4BE' : '#E8E7E1'}`, borderRadius: 9, overflow: 'hidden' }}>
+            {/* Fila unidad */}
+            <div onClick={() => editando ? setEditId(null) : abrir(u)} style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, background: u.marca ? '#FAFCF9' : '#fff' }}>
+              <div style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, background: u.marca ? (u.marca.resultado === 'no_apto' ? '#FDECEC' : u.marca.resultado === 'apto' ? '#E8F5E0' : '#EEEDE7') : '#F0EFEA', color: u.marca ? (u.marca.resultado === 'no_apto' ? '#8A1F1F' : u.marca.resultado === 'apto' ? '#2D5E10' : '#52524E') : '#C5C4BE' }}>
+                {u.marca ? (u.marca.resultado === 'no_apto' ? '✕' : '✓') : '○'}
+              </div>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#141412' }}>{u.nombre}</span>
+              {u.marca && <Pill label={res.label} bg={res.bg} color={res.color} />}
+              {u.marca?.adjuntos?.length > 0 && <span style={{ fontSize: 11, color: '#A5A5A0' }}>📎 {u.marca.adjuntos.length}</span>}
+            </div>
+
+            {/* Editor inline */}
+            {editando && (
+              <div className="fade" style={{ padding: '12px', borderTop: '1px solid #ECEAE4', background: '#F9F8F5' }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  {Object.entries(RESULTADOS).map(([k, v]) => (
+                    <button key={k} onClick={() => setResultado(k)} style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${resultado === k ? v.color : '#E0DFD9'}`, background: resultado === k ? v.bg : 'transparent', color: resultado === k ? v.color : '#6B6B66', fontSize: 12, cursor: 'pointer', fontWeight: resultado === k ? 600 : 400 }}>{v.label}</button>
+                  ))}
+                </div>
+                <textarea placeholder="Comentario, nº de acta, observaciones..." value={comentario} onChange={e => setComentario(e.target.value)} style={{ marginBottom: 8, minHeight: 48 }} />
+                {adjuntos.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                    {adjuntos.map(a => (
+                      <div key={a.id} style={{ position: 'relative' }}>
+                        {a.tipo === 'imagen'
+                          ? <img src={a.data} alt="" onClick={() => onPreview(a)} style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9', cursor: 'zoom-in' }} />
+                          : <div style={{ fontSize: 11, padding: '4px 8px', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 6 }}>📄 {a.nombre}</div>}
+                        <button onClick={() => setAdjuntos(p => p.filter(x => x.id !== a.id))} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 9 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]))} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
+                  {u.marca && <Btn danger onClick={() => quitar(u.id)}>Desmarcar</Btn>}
+                  <div style={{ flex: 1 }} />
+                  <Btn onClick={() => setEditId(null)}>Cancelar</Btn>
+                  <Btn primary onClick={guardar}>Guardar</Btn>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Modo B: criterio único (contador + actas, p.ej. probetas) ─────────────────
+function RegistrosLibres({ ensayo, onUpdate, onPreview }) {
+  const [show, setShow]           = useState(false);
+  const [resultado, setResultado] = useState('apto');
+  const [comentario, setComentario] = useState('');
+  const [adjuntos, setAdjuntos]   = useState([]);
+  const registros = ensayo.registros || [];
+  const ejecutadas = ensayo.ejecutadas || 0;
+  const cantidad = ensayo.cantidad || 0;
+
+  function setEjec(v) {
+    const n = Math.max(0, Math.min(cantidad || 99999, v));
+    onUpdate(e => ({ ...e, ejecutadas: n }));
+  }
+
+  function guardar() {
+    const reg = { id: uid(), fecha: now(), resultado, comentario: comentario.trim(), adjuntos };
+    onUpdate(e => ({ ...e, registros: [...(e.registros || []), reg] }));
+    setResultado('apto'); setComentario(''); setAdjuntos([]); setShow(false);
+  }
+  function borrar(rid) {
+    onUpdate(e => ({ ...e, registros: (e.registros || []).filter(r => r.id !== rid) }));
+  }
+
+  const pct = cantidad > 0 ? Math.round(ejecutadas / cantidad * 100) : 0;
+
+  return (
+    <div>
+      {/* Contador de ejecutadas */}
+      <div style={{ background: '#F9F8F5', borderRadius: 10, padding: '14px', marginBottom: 14 }}>
+        <div style={{ fontSize: 11, color: '#A5A5A0', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Ensayos ejecutados</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => setEjec(ejecutadas - 1)} style={{ width: 36, height: 36, borderRadius: 9, border: '1.5px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 18, color: '#52524E', flexShrink: 0 }}>−</button>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+            <input type="number" value={ejecutadas} onChange={e => setEjec(parseInt(e.target.value) || 0)} style={{ width: 70, textAlign: 'center', fontSize: 22, fontWeight: 700, padding: '4px', border: '1px solid #E0DFD9' }} />
+            <span style={{ fontSize: 15, color: '#9B9B97' }}>/ {cantidad}</span>
+          </div>
+          <button onClick={() => setEjec(ejecutadas + 1)} style={{ width: 36, height: 36, borderRadius: 9, border: '1.5px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 18, color: '#52524E', flexShrink: 0 }}>+</button>
+          <div style={{ flex: 1, marginLeft: 6 }}>
+            <div style={{ height: 6, background: '#ECEAE4', borderRadius: 3 }}>
+              <div style={{ width: pct + '%', height: 6, borderRadius: 3, background: pct >= 100 ? '#52A124' : '#D48A0C', transition: 'width .3s' }} />
+            </div>
+            <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 4, textAlign: 'right' }}>{pct}%</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Actas adjuntas */}
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#A5A5A0', marginBottom: 10 }}>
+        Actas y registros {registros.length > 0 && `(${registros.length})`}
+      </div>
+
+      {registros.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          {registros.slice().reverse().map(r => {
+            const res = RESULTADOS[r.resultado] || RESULTADOS.info;
+            return (
+              <div key={r.id} style={{ background: '#FAFAF8', border: '1px solid #E8E7E1', borderRadius: 9, padding: '10px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: r.comentario || r.adjuntos?.length ? 7 : 0 }}>
+                  <span style={{ fontSize: 11, color: '#A5A5A0' }}>{fmtDate(r.fecha)}</span>
+                  <Pill label={res.label} bg={res.bg} color={res.color} />
+                  <button onClick={() => borrar(r.id)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
+                </div>
+                {r.comentario && <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: r.adjuntos?.length ? 8 : 0 }}>{r.comentario}</div>}
+                {r.adjuntos?.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {r.adjuntos.map(a => a.tipo === 'imagen'
+                      ? <img key={a.id} src={a.data} alt={a.nombre} onClick={() => onPreview(a)} style={{ width: 120, height: 92, objectFit: 'cover', borderRadius: 8, border: '1px solid #E0DFD9', cursor: 'zoom-in' }} />
+                      : <a key={a.id} href={a.data} download={a.nombre} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, padding: '4px 9px', borderRadius: 7, background: '#F5F4F0', border: '1px solid #E0DFD9', color: '#18180F', textDecoration: 'none' }}>📄 {a.nombre}</a>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {show ? (
+        <div style={{ background: '#F9F8F5', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ fontSize: 11, color: '#A5A5A0', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Nueva acta / registro</div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            {Object.entries(RESULTADOS).map(([k, v]) => (
+              <button key={k} onClick={() => setResultado(k)} style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${resultado === k ? v.color : '#E0DFD9'}`, background: resultado === k ? v.bg : 'transparent', color: resultado === k ? v.color : '#6B6B66', fontSize: 12, cursor: 'pointer', fontWeight: resultado === k ? 600 : 400 }}>{v.label}</button>
+            ))}
+          </div>
+          <textarea placeholder="Nº de acta, laboratorio, observaciones..." value={comentario} onChange={e => setComentario(e.target.value)} style={{ marginBottom: 8, minHeight: 56 }} />
+          {adjuntos.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+              {adjuntos.map(a => (
+                <div key={a.id} style={{ position: 'relative' }}>
+                  {a.tipo === 'imagen'
+                    ? <img src={a.data} alt="" onClick={() => onPreview(a)} style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9', cursor: 'zoom-in' }} />
+                    : <div style={{ fontSize: 11, padding: '4px 8px', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 6 }}>📄 {a.nombre}</div>}
+                  <button onClick={() => setAdjuntos(p => p.filter(x => x.id !== a.id))} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 9 }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]))} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar acta</button>
+            <Btn onClick={() => setShow(false)} full>Cancelar</Btn>
+            <Btn primary full onClick={guardar}>Guardar</Btn>
+          </div>
+        </div>
+      ) : (
+        <Btn onClick={() => setShow(true)} full>+ Adjuntar acta / registro</Btn>
+      )}
+    </div>
+  );
+}
+
+// ─── MÓDULO: Control de calidad ───────────────────────────────────────────────// ─── MÓDULO: Control de calidad ───────────────────────────────────────────────// ─── MÓDULO: Control de calidad ───────────────────────────────────────────────
+
+// Tabla de lotificación — Código Estructural (oct 2025), control estadístico Modalidad 1
+const TIPOS_ELEMENTO = {
+  cim_grande: {
+    label: 'Cimentaciones > 200 m³',
+    desc: 'Volumen vertido de forma continua',
+    volumen: null, superficie: null, tiempo: 1, formulaN: true,
+  },
+  cim_superficial: {
+    label: 'Cimentaciones superficiales < 200 m³',
+    desc: 'Zapatas, losas de cimentación',
+    volumen: 100, superficie: null, tiempo: 1, formulaN: false,
+  },
+  flexion: {
+    label: 'Vigas, forjados, soleras (flexión)',
+    desc: 'Elementos trabajando a flexión',
+    volumen: 100, superficie: 1000, tiempo: 2, formulaN: false,
+  },
+  pilares: {
+    label: 'Pilares y muros portantes',
+    desc: 'Elementos comprimidos de edificación',
+    volumen: 100, superficie: 500, tiempo: 2, formulaN: false,
+  },
+};
+
+// Calcula la lotificación completa de un elemento según el CE
+function calcularLotificacion(tipo, volumen, superficie, conDOR) {
+  const t = TIPOS_ELEMENTO[tipo];
+  const V = parseFloat(volumen) || 0;
+  const S = parseFloat(superficie) || 0;
+
+  // Cimentaciones grandes: 1 lote, N por fórmula sobre volumen
+  if (t.formulaN) {
+    const N = conDOR ? Math.max(Math.ceil(V / 105), 1) : Math.max(Math.ceil(V / 35), 3);
+    return {
+      numLotes: 1,
+      seriesPorLote: N,
+      totalSeries: N,
+      motivo: `Volumen continuo · N ${conDOR ? '≥ V/105' : '≥ V/35'}`,
+    };
+  }
+
+  // Resto: nº de lotes = límite más restrictivo entre volumen y superficie
+  const lotesVol = t.volumen ? Math.ceil(V / t.volumen) : 1;
+  const lotesSup = t.superficie ? Math.ceil(S / t.superficie) : 1;
+  const numLotes = Math.max(lotesVol, lotesSup, 1);
+  const N = conDOR ? 1 : 3;
+
+  let motivo;
+  if (t.superficie && lotesSup >= lotesVol) motivo = `Manda superficie (${lotesSup} lote${lotesSup > 1 ? 's' : ''} por ${t.superficie} m²)`;
+  else motivo = `Manda volumen (${lotesVol} lote${lotesVol > 1 ? 's' : ''} por ${t.volumen} m³)`;
+
+  return { numLotes, seriesPorLote: N, totalSeries: numLotes * N, motivo };
+}
+
+function ModuloCalidad({ obra, onSave }) {
+  const [sub, setSub] = useState('hormigon'); // hormigon | pcq | ensayos
+
+  const subTabs = [
+    { id: 'hormigon', label: 'Control de hormigón' },
+    { id: 'pcq',      label: 'PCQ' },
+    { id: 'ensayos',  label: 'Ensayos' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Sub-navegación de calidad */}
+      <div style={{ display: 'flex', gap: 4, background: '#fff', border: '1px solid #E8E7E1', borderRadius: 10, padding: 4, width: 'fit-content' }}>
+        {subTabs.map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)} style={{ padding: '6px 14px', borderRadius: 7, border: 'none', background: sub === t.id ? '#1C1C1A' : 'transparent', color: sub === t.id ? '#F2F1ED' : '#6B6B66', fontSize: 13, cursor: 'pointer', fontWeight: sub === t.id ? 500 : 400, transition: 'all .15s' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {sub === 'hormigon' && <ControlHormigon obra={obra} onSave={onSave} />}
+      {sub === 'pcq'      && <ModuloProximamente icono="📋" titulo="Plan de Control de Calidad" descripcion="Generación automática del PCQ a partir de los procesos constructivos de la obra. Se integrará al desplegar la app con la biblioteca de documentos oficiales." />}
+      {sub === 'ensayos'  && <ModuloEnsayos obra={obra} onSave={onSave} />}
+    </div>
+  );
+}
+
+// ── Control estadístico de hormigón ───────────────────────────────────────────
+function ControlHormigon({ obra, onSave }) {
+  const elementosRaw = obra.lotes || [];
+  // Filtra elementos con la estructura nueva (tienen nombre y lotes con series)
+  const elementos = elementosRaw.filter(e => e && e.nombre && Array.isArray(e.lotes));
+  const hayAntiguos = elementosRaw.length > elementos.length;
+  const [showNuevo, setShowNuevo] = useState(false);
+  const [expandido, setExpandido] = useState(null);
+  const [form, setForm] = useState({ nombre: '', tipo: 'flexion', volumen: '', superficie: '', conDOR: false });
+  const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const tipoForm = TIPOS_ELEMENTO[form.tipo];
+  const preview  = calcularLotificacion(form.tipo, form.volumen, form.superficie, form.conDOR);
+
+  function crearElemento() {
+    if (!form.nombre.trim() || !form.volumen) return;
+    const calc = calcularLotificacion(form.tipo, form.volumen, form.superficie, form.conDOR);
+    const lotes = Array.from({ length: calc.numLotes }, (_, i) => ({
+      id: uid(),
+      num: i + 1,
+      series: Array.from({ length: calc.seriesPorLote }, (_, j) => ({ id: uid(), num: j + 1, acta: null })),
+    }));
+    const elemento = {
+      id: uid(),
+      nombre: form.nombre.trim(),
+      tipo: form.tipo,
+      volumen: form.volumen,
+      superficie: form.superficie,
+      conDOR: form.conDOR,
+      numLotes: calc.numLotes,
+      seriesPorLote: calc.seriesPorLote,
+      lotes,
+      creadoEn: now(),
+    };
+    onSave({ ...obra, lotes: [elemento, ...elementos] });
+    setForm({ nombre: '', tipo: 'flexion', volumen: '', superficie: '', conDOR: false });
+    setShowNuevo(false);
+    setExpandido(elemento.id);
+  }
+
+  function eliminar(id) {
+    onSave({ ...obra, lotes: elementos.filter(e => e.id !== id) });
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* Aviso de datos antiguos */}
+      {hayAntiguos && (
+        <div style={{ background: '#FEF3DB', border: '1px solid #F5D98B', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 15 }}>⚠️</span>
+          <span style={{ fontSize: 12, color: '#7C4A00', flex: 1 }}>Hay lotes creados con una versión anterior que no son compatibles.</span>
+          <button onClick={() => onSave({ ...obra, lotes: elementos })} style={{ fontSize: 12, padding: '5px 11px', borderRadius: 8, border: '1px solid #D48A0C', background: '#fff', color: '#7C4A00', cursor: 'pointer', fontWeight: 500, whiteSpace: 'nowrap' }}>
+            Limpiar antiguos
+          </button>
+        </div>
+      )}
+
+      {/* Cabecera */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1, fontSize: 13, color: '#6B6B66' }}>
+          {elementos.length} elemento{elementos.length !== 1 ? 's' : ''} · Control estadístico Modalidad 1 (CE)
+        </div>
+        <Btn primary onClick={() => setShowNuevo(v => !v)}>{showNuevo ? '✕ Cancelar' : '+ Nuevo elemento'}</Btn>
+      </div>
+
+      {/* Formulario nuevo elemento */}
+      {showNuevo && (
+        <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '16px' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Nuevo elemento</div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 5 }}>Nombre del elemento *</label>
+            <input autoFocus placeholder="p.ej. Forjados torre A" value={form.nombre} onChange={e => upd('nombre', e.target.value)} />
+          </div>
+
+          {/* Tipo */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 6 }}>Tipo de elemento</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {Object.entries(TIPOS_ELEMENTO).map(([k, v]) => (
+                <div key={k} onClick={() => upd('tipo', k)} style={{ padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${form.tipo === k ? '#18180F' : '#E0DFD9'}`, background: form.tipo === k ? '#F5F4F0' : '#fff', cursor: 'pointer', transition: 'all .15s' }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{v.label}</div>
+                  <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 2 }}>{v.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* m³ y m² */}
+          <div style={{ display: 'grid', gridTemplateColumns: tipoForm.superficie ? '1fr 1fr' : '1fr', gap: 10, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 5 }}>Volumen total (m³) *</label>
+              <input type="number" placeholder="m³" value={form.volumen} onChange={e => upd('volumen', e.target.value)} />
+            </div>
+            {tipoForm.superficie && (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 5 }}>Superficie total (m²)</label>
+                <input type="number" placeholder="m²" value={form.superficie} onChange={e => upd('superficie', e.target.value)} />
+              </div>
+            )}
+          </div>
+
+          {/* DOR */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 6 }}>¿Hormigón con DOR?</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[[false, 'Sin DOR'], [true, 'Con DOR']].map(([val, label]) => (
+                <button key={String(val)} onClick={() => upd('conDOR', val)} style={{ padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${form.conDOR === val ? '#18180F' : '#E0DFD9'}`, background: form.conDOR === val ? '#18180F' : 'transparent', color: form.conDOR === val ? '#fff' : '#6B6B66', fontSize: 12, cursor: 'pointer', fontWeight: form.conDOR === val ? 600 : 400 }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Preview del cálculo */}
+          {form.volumen && (
+            <div style={{ background: '#F0F6F1', border: '1px solid #C5E3CE', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: '#1A6B3A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontWeight: 600 }}>Lotificación resultante</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: 26, fontWeight: 700, color: '#1A6B3A' }}>{preview.numLotes}</span>
+                <span style={{ fontSize: 13, color: '#52524E' }}>lote{preview.numLotes > 1 ? 's' : ''}</span>
+                <span style={{ fontSize: 14, color: '#A5A5A0', margin: '0 4px' }}>×</span>
+                <span style={{ fontSize: 26, fontWeight: 700, color: '#1A6B3A' }}>{preview.seriesPorLote}</span>
+                <span style={{ fontSize: 13, color: '#52524E' }}>series/lote</span>
+                <span style={{ fontSize: 14, color: '#A5A5A0', margin: '0 4px' }}>=</span>
+                <span style={{ fontSize: 26, fontWeight: 700, color: '#1A6B3A' }}>{preview.totalSeries}</span>
+                <span style={{ fontSize: 13, color: '#52524E' }}>series totales</span>
+              </div>
+              <div style={{ fontSize: 12, color: '#6B6B66' }}>{preview.motivo}</div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn onClick={() => setShowNuevo(false)} full>Cancelar</Btn>
+            <Btn primary onClick={crearElemento} disabled={!form.nombre.trim() || !form.volumen} full>Crear lotificación</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de elementos */}
+      {elementos.length === 0 && !showNuevo ? (
+        <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '40px 20px', textAlign: 'center', color: '#A5A5A0' }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>🧱</div>
+          <div style={{ fontSize: 13, marginBottom: 14 }}>Sin elementos de hormigón todavía</div>
+          <Btn onClick={() => setShowNuevo(true)}>+ Crear primera lotificación</Btn>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {elementos.map(el => {
+            const t = TIPOS_ELEMENTO[el.tipo] || TIPOS_ELEMENTO.flexion;
+            const lotesEl = el.lotes || [];
+            const numLotes = el.numLotes || lotesEl.length;
+            const totalSeries = (numLotes || 0) * (el.seriesPorLote || 0);
+            const seriesRellenas = lotesEl.reduce((s, l) => s + (l.series || []).filter(se => se.acta).length, 0);
+            const abierto = expandido === el.id;
+            return (
+              <div key={el.id} style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 11, overflow: 'hidden' }}>
+                {/* Cabecera elemento */}
+                <div onClick={() => setExpandido(abierto ? null : el.id)} style={{ padding: '13px 15px', cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#141412' }}>{el.nombre}</div>
+                      <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 2 }}>
+                        {t.label} · {el.volumen} m³{el.superficie ? ` · ${el.superficie} m²` : ''} · {el.conDOR ? 'Con DOR' : 'Sin DOR'}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#F0F6F1', color: '#1A6B3A', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {numLotes} lote{numLotes > 1 ? 's' : ''} · {totalSeries} series
+                    </span>
+                    <button onClick={e => { e.stopPropagation(); eliminar(el.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                    <div style={{ flex: 1, height: 4, background: '#ECEAE4', borderRadius: 2 }}>
+                      <div style={{ width: (totalSeries ? seriesRellenas / totalSeries * 100 : 0) + '%', height: 4, borderRadius: 2, background: '#52A124' }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: '#A5A5A0' }}>{seriesRellenas}/{totalSeries} series con acta</span>
+                    <span style={{ fontSize: 11, color: '#A5A5A0' }}>{abierto ? '▲' : '▼'}</span>
+                  </div>
+                </div>
+
+                {/* Detalle lotes y series */}
+                {abierto && (
+                  <div style={{ borderTop: '1px solid #F2F1ED', padding: '12px 15px', background: '#FAFAF8', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {lotesEl.map(lote => (
+                      <div key={lote.id} style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 9, padding: '10px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>Lote {lote.num}</span>
+                          <span style={{ fontSize: 11, color: '#A5A5A0' }}>{(lote.series || []).length} series</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {(lote.series || []).map(serie => (
+                            <div key={serie.id} title={serie.acta ? 'Con acta' : 'Pendiente de acta'}
+                              style={{ width: 34, height: 34, borderRadius: 8, border: `1.5px solid ${serie.acta ? '#52A124' : '#E0DFD9'}`, background: serie.acta ? '#E8F5E0' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 500, color: serie.acta ? '#2D5E10' : '#A5A5A0' }}>
+                              {serie.acta ? '✓' : serie.num}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{ padding: '8px 11px', background: '#F0EFEA', borderRadius: 8, fontSize: 12, color: '#9B9B97', textAlign: 'center' }}>
+                      El volcado automático de actas de probeta sobre las series se añade en la siguiente fase
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LimiteItem({ label, valor, destacado, mini }) {
+  return (
+    <div style={{ flex: mini ? 1 : 'none' }}>
+      <div style={{ fontSize: 10, color: '#B5B4AE', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: mini ? 13 : 14, fontWeight: destacado ? 700 : 500, color: destacado ? '#1A6B3A' : '#141412' }}>{valor}</div>
+    </div>
+  );
+}
+
+function Sep() {
+  return <div style={{ width: 1, background: '#F2F1ED', margin: '0 12px' }} />;
+}
+
+// ─── MÓDULO: Placeholder ──────────────────────────────────────────────────────
+
+function ModuloProximamente({ icono, titulo, descripcion }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '48px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+      <div style={{ fontSize: 40 }}>{icono}</div>
+      <div style={{ fontSize: 16, fontWeight: 600 }}>{titulo}</div>
+      <div style={{ fontSize: 13, color: '#6B6B66', maxWidth: 380, lineHeight: 1.6 }}>{descripcion}</div>
+      <div style={{ marginTop: 4, fontSize: 12, color: '#A5A5A0', background: '#F5F4F0', padding: '4px 12px', borderRadius: 20 }}>Próximamente</div>
+    </div>
+  );
+}
+
+// ─── Vista: Hoy ───────────────────────────────────────────────────────────────
+
+function VistaHoy({ obras, onIrObra }) {
+  const hoyDia     = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // Obras con visita hoy + sus incidencias pendientes de revisar
+  const visitasHoy = obras
+    .filter(o => esHoyVisita(o))
+    .map(o => ({
+      obra: o,
+      sinRevisar: o.incidencias.filter(i => i.estado !== 'resuelta' && !revisadaHoy(i)),
+    }));
+
+  // Tareas vencidas en todas las obras
+  const tareasVencidas = obras.flatMap(o =>
+    (o.apuntes || [])
+      .filter(a => a.tipo === 'tarea' && !a.hecha && a.fechaLimite && new Date(a.fechaLimite) < new Date(today()))
+      .map(a => ({ obra: o, tarea: a, dias: diasDesde(a.fechaLimite) }))
+  ).sort((a, b) => b.dias - a.dias);
+
+  // Incidencias sin revisar hace +14 días
+  const incViejas = obras.flatMap(o =>
+    o.incidencias
+      .filter(i => i.estado !== 'resuelta' && diasDesde(i.ultimaActualizacion || i.fechaCreacion) >= 14)
+      .map(i => ({ obra: o, inc: i, dias: diasDesde(i.ultimaActualizacion || i.fechaCreacion) }))
+  ).sort((a, b) => b.dias - a.dias);
+
+  const hayAlgo = visitasHoy.length > 0 || tareasVencidas.length > 0 || incViejas.length > 0;
+
+  const SeccionHeader = ({ icono, titulo, count, color }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+      <span style={{ fontSize: 16 }}>{icono}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: '#141412' }}>{titulo}</span>
+      <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 20, background: color + '20', color, fontWeight: 500 }}>{count}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Topbar */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #ECEAE4', padding: '13px 22px', flexShrink: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Hoy</div>
+        <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 1, textTransform: 'capitalize' }}>{hoyDia}</div>
+      </div>
+
+      <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {!hayAlgo && (
+          <div style={{ textAlign: 'center', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 16, background: '#1C1C1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>✓</div>
+            <div style={{ fontSize: 16, fontWeight: 600 }}>Todo al día</div>
+            <div style={{ fontSize: 13, color: '#9B9B97' }}>Sin visitas programadas hoy ni tareas pendientes</div>
+          </div>
+        )}
+
+        {/* Visitas de hoy */}
+        {visitasHoy.length > 0 && (
+          <div>
+            <SeccionHeader icono="🏗️" titulo="Visitas de hoy" count={visitasHoy.length} color="#1A6B3A" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {visitasHoy.map(({ obra, sinRevisar }) => (
+                <div key={obra.id} onClick={() => onIrObra(obra)}
+                  style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '12px 16px', cursor: 'pointer', borderLeft: `3px solid ${STATUS_ACCENT[obra.estado] || '#D48A0C'}`, transition: 'box-shadow .15s' }}
+                  className="obra-card">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#141412' }}>{obra.nombre}</div>
+                      <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 2 }}>{obra.cliente}</div>
+                    </div>
+                    {sinRevisar.length > 0
+                      ? <span style={{ fontSize: 12, background: '#FEF3DB', color: '#7C4A00', padding: '3px 10px', borderRadius: 20, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                          {sinRevisar.length} inc. por revisar
+                        </span>
+                      : <span style={{ fontSize: 12, background: '#E8F5E0', color: '#2D5E10', padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>
+                          ✓ Al día
+                        </span>
+                    }
+                  </div>
+                  {sinRevisar.length > 0 && (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {sinRevisar.slice(0, 3).map(i => (
+                        <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#6B6B66' }}>
+                          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#D48A0C', flexShrink: 0 }} />
+                          {i.titulo}
+                        </div>
+                      ))}
+                      {sinRevisar.length > 3 && <div style={{ fontSize: 11, color: '#9B9B97', paddingLeft: 13 }}>+{sinRevisar.length - 3} más</div>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tareas vencidas */}
+        {tareasVencidas.length > 0 && (
+          <div>
+            <SeccionHeader icono="⏰" titulo="Tareas vencidas" count={tareasVencidas.length} color="#8A1F1F" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {tareasVencidas.map(({ obra, tarea, dias }) => (
+                <div key={tarea.id} onClick={() => onIrObra(obra)}
+                  style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, borderLeft: '3px solid #E24B4A' }}
+                  className="obra-card">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: '#141412', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tarea.texto}</div>
+                    <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 2 }}>{obra.nombre}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: '#8A1F1F', fontWeight: 500, whiteSpace: 'nowrap', background: '#FDECEC', padding: '2px 8px', borderRadius: 20 }}>
+                    Hace {dias}d
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Incidencias sin tocar */}
+        {incViejas.length > 0 && (
+          <div>
+            <SeccionHeader icono="👁️" titulo="Incidencias sin revisar +14 días" count={incViejas.length} color="#7C4A00" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {incViejas.map(({ obra, inc, dias }) => (
+                <div key={inc.id} onClick={() => onIrObra(obra)}
+                  style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}
+                  className="obra-card">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: '#141412', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.titulo}</div>
+                    <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 2 }}>{obra.nombre}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: '#7C4A00', fontWeight: 500, whiteSpace: 'nowrap', background: '#FEF3DB', padding: '2px 8px', borderRadius: 20 }}>
+                    {dias} días
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Detalle de Obra ──────────────────────────────────────────────────────────
+
+function DetalleObra({ obra, onBack, onSave }) {
+  const [tab, setTab]               = useState('inspecciones');
+  const [editEstado, setEditEstado] = useState(false);
+
+  const tabs = [
+    { id: 'inspecciones', label: 'Inspecciones' },
+    { id: 'incidencias',  label: 'Incidencias'  },
+    { id: 'calidad',      label: 'Calidad'       },
+    { id: 'anotaciones',  label: 'Notas y tareas' },
+  ];
+
+  const accentColor = STATUS_ACCENT[obra.estado] || STATUS_ACCENT.en_curso;
+  const e           = ESTADOS_OBRA[obra.estado]  || ESTADOS_OBRA.en_curso;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+
+      {/* Header oscuro — mismo estilo que el sidebar */}
+      <div style={{ background: '#1C1C1A', flexShrink: 0 }}>
+
+        {/* Breadcrumb + nombre + estado */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 22px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+          <button onClick={onBack} style={{ fontSize: 12, color: 'rgba(255,255,255,0.38)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            ← Mis obras
+          </button>
+          <span style={{ color: 'rgba(255,255,255,0.15)' }}>/</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: '#F2F1ED', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obra.nombre}</span>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>{obra.cliente}</span>
+
+          {/* Estado editable */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button onClick={() => setEditEstado(v => !v)} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: 'transparent', border: `1px solid ${accentColor}`, color: accentColor, cursor: 'pointer', fontWeight: 600, letterSpacing: '0.05em' }}>
+              {e.label.toUpperCase()}
+            </button>
+            {editEstado && (
+              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#2A2A28', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, boxShadow: '0 12px 32px rgba(0,0,0,.4)', padding: 6, zIndex: 10, minWidth: 160 }}>
+                {Object.entries(ESTADOS_OBRA).map(([k, v]) => (
+                  <div key={k} onClick={() => { onSave({ ...obra, estado: k }); setEditEstado(false); }}
+                    style={{ padding: '7px 12px', borderRadius: 7, cursor: 'pointer', fontSize: 13, fontWeight: obra.estado === k ? 500 : 400, background: obra.estado === k ? 'rgba(255,255,255,0.08)' : 'transparent', color: STATUS_ACCENT[k] || '#F2F1ED' }}>
+                    {v.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', padding: '0 22px' }}>
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              padding: '11px 16px', background: 'none', border: 'none',
+              borderBottom: `2px solid ${tab === t.id ? accentColor : 'transparent'}`,
+              cursor: 'pointer', fontSize: 13,
+              fontWeight: tab === t.id ? 500 : 400,
+              color: tab === t.id ? '#F2F1ED' : 'rgba(255,255,255,0.32)',
+              transition: 'all .15s',
+            }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Contenido */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px', background: '#F2F1ED' }}>
+        {tab === 'inspecciones' && <ModuloInspecciones obra={obra} onSave={onSave} />}
+        {tab === 'incidencias'  && <ModuloIncidencias  obra={obra} onSave={onSave} />}
+        {tab === 'calidad'      && <ModuloCalidad obra={obra} onSave={onSave} />}
+        {tab === 'anotaciones'  && <ModuloApuntes obra={obra} onSave={onSave} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── App principal ────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [obras,      setObras]      = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [nav,        setNav]        = useState('hoy');
+  const [obraActiva, setObraActiva] = useState(null);
+  const [showNueva,  setShowNueva]  = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.storage.get(SK, true);
+        if (r?.value) setObras(JSON.parse(r.value));
+      } catch (e) {}
+      setLoading(false);
+    })();
+  }, []);
+
+  async function saveObras(list) {
+    setObras(list);
+    try {
+      await window.storage.set(SK, JSON.stringify(list), true);
+    } catch (e) {
+      console.error('Error guardando:', e);
+      alert('No se pudieron guardar los cambios. Es posible que se haya superado el límite de almacenamiento (las fotos ocupan espacio). Avísame para revisarlo.');
+    }
+  }
+
+  async function crearObra(data) {
+    const obra = {
+      id:           uid(),
+      nombre:       data.nombre,
+      cliente:      data.cliente,
+      direccion:    data.direccion,
+      responsable:  data.responsable,
+      diasVisita:   data.diasVisita || [],
+      estado:       'en_curso',
+      disciplinas:  [],
+      lotes:        [],
+      incidencias:  [],
+      apuntes:      [],
+      creadaEn:     now(),
+    };
+    await saveObras([obra, ...obras]);
+    setShowNueva(false);
+    setObraActiva(obra);
+  }
+
+  async function actualizarObra(updated) {
+    const list = obras.map(o => o.id === updated.id ? updated : o);
+    await saveObras(list);
+    setObraActiva(updated);
+  }
+
+  // Calcular el contador del badge "Hoy"
+  const hoyCount = (() => {
+    const visitasPend = obras.filter(o => esHoyVisita(o))
+      .reduce((s, o) => s + o.incidencias.filter(i => i.estado !== 'resuelta' && !revisadaHoy(i)).length, 0);
+    const tareasVenc  = obras.reduce((s, o) => s + (o.apuntes || []).filter(a => a.tipo === 'tarea' && !a.hecha && a.fechaLimite && new Date(a.fechaLimite) < new Date(today())).length, 0);
+    const incViejas   = obras.reduce((s, o) => s + o.incidencias.filter(i => i.estado !== 'resuelta' && diasDesde(i.ultimaActualizacion || i.fechaCreacion) >= 14).length, 0);
+    return visitasPend + tareasVenc + incViejas;
+  })();
+
+  const stats = {
+    total: obras.length,
+    hoy:   hoyCount,
+    incidencias: obras.reduce((s, o) => s + o.incidencias.filter(i => i.estado !== 'resuelta').length, 0),
+  };
+
+  // Vista detalle de obra
+  if (obraActiva) {
+    const fresh = obras.find(o => o.id === obraActiva.id) || obraActiva;
+    return (
+      <>
+        <style>{CSS}</style>
+        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+          <Sidebar nav={nav} setNav={setNav} stats={stats} />
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <DetalleObra obra={fresh} onBack={() => setObraActiva(null)} onSave={actualizarObra} />
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <style>{CSS}</style>
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+        <Sidebar nav={nav} setNav={setNav} stats={stats} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {nav === 'hoy'       && <VistaHoy obras={obras} onIrObra={o => setObraActiva(o)} />}
+          {nav === 'tablero'   && (
+            <>
+              {/* Topbar */}
+              <div style={{ background: '#fff', borderBottom: '1px solid #ECEAE4', padding: '13px 22px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Mis obras</div>
+                  {obras.length > 0 && <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 1 }}>{obras.filter(o => o.estado === 'en_curso').length} en curso · {obras.length} en total</div>}
+                </div>
+                <Btn primary onClick={() => setShowNueva(true)}>+ Nueva obra</Btn>
+              </div>
+
+              <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
+                {loading ? (
+                  <div style={{ textAlign: 'center', padding: '48px', fontSize: 13, color: '#A5A5A0' }}>Cargando obras…</div>
+                ) : obras.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                    <div style={{ width: 56, height: 56, borderRadius: 16, background: '#1C1C1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🏗️</div>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Sin obras todavía</div>
+                      <div style={{ fontSize: 13, color: '#9B9B97', marginBottom: 18 }}>Crea tu primera obra para empezar el seguimiento</div>
+                      <Btn primary onClick={() => setShowNueva(true)}>+ Crear primera obra</Btn>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {obras.map(o => <ObraCard key={o.id} obra={o} onClick={() => setObraActiva(o)} />)}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+        </div>
+      </div>
+
+      {showNueva && <ModalNuevaObra onClose={() => setShowNueva(false)} onCreate={crearObra} />}
+    </>
+  );
+}
