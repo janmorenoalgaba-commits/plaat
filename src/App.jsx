@@ -142,11 +142,18 @@ function Modal({ title, onClose, children, footer, wide }) {
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function Sidebar({ nav, setNav, stats }) {
+function Sidebar({ nav, setNav, stats, user }) {
   const navItems = [
     { id: 'hoy',        label: 'Hoy',        badge: stats.hoy,   alert: stats.hoy > 0 },
     { id: 'tablero',    label: 'Tablero',     badge: stats.total, alert: false },
   ];
+  const email = user?.email || '';
+  const iniciales = email ? email.slice(0, 2).toUpperCase() : 'PL';
+
+  function salir() {
+    if (window.auth) window.auth.signOut();
+  }
+
   return (
     <div style={{ width: 210, background: '#1C1C1A', display: 'flex', flexDirection: 'column', flexShrink: 0, height: '100%' }}>
 
@@ -173,12 +180,19 @@ function Sidebar({ nav, setNav, stats }) {
       </nav>
 
       {/* Usuario */}
-      <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#1A6B3A', color: '#A8EDBC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>SC</div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 500, color: '#F2F1ED' }}>Sergi Castellar</div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>DEO · PLAAT</div>
+      <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: email ? 8 : 0 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#1A6B3A', color: '#A8EDBC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{iniciales}</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#F2F1ED', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email || 'PLAAT'}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>DEO · PLAAT</div>
+          </div>
         </div>
+        {email && (
+          <button onClick={salir} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer' }}>
+            Cerrar sesión
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2253,24 +2267,86 @@ function DetalleObra({ obra, onBack, onSave }) {
   );
 }
 
+// ─── Pantalla de login ────────────────────────────────────────────────────────
+
+function LoginScreen() {
+  const [email, setEmail]     = useState('');
+  const [pass,  setPass]      = useState('');
+  const [error, setError]     = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function entrar() {
+    if (!email.trim() || !pass) return;
+    setLoading(true); setError('');
+    try {
+      await window.auth.signIn(email.trim(), pass);
+      // el cambio de sesión actualiza el estado en App automáticamente
+    } catch (e) {
+      setError('Correo o contraseña incorrectos.');
+      setLoading(false);
+    }
+  }
+
+  const onKey = e => { if (e.key === 'Enter') entrar(); };
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1C1C1A', padding: 20 }}>
+      <div className="fade" style={{ background: '#fff', borderRadius: 16, padding: '34px 30px', width: 370, maxWidth: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }}>
+        <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '0.1em', color: '#141412' }}>PLAAT</div>
+        <div style={{ display: 'inline-block', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', background: '#E4F5EA', color: '#1A6B3A', padding: '2px 8px', borderRadius: 4, fontWeight: 600, marginTop: 7, marginBottom: 26 }}>DEO</div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 5 }}>Correo</label>
+          <input type="email" autoFocus value={email} onChange={e => setEmail(e.target.value)} onKeyDown={onKey} placeholder="tu@correo.com" />
+        </div>
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 5 }}>Contraseña</label>
+          <input type="password" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={onKey} placeholder="••••••••" />
+        </div>
+
+        {error && <div style={{ fontSize: 12, color: '#8A1F1F', background: '#FDECEC', borderRadius: 8, padding: '8px 11px', marginBottom: 14 }}>{error}</div>}
+
+        <Btn primary full onClick={entrar} disabled={loading || !email.trim() || !pass}>
+          {loading ? 'Entrando…' : 'Entrar'}
+        </Btn>
+
+        <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 16, textAlign: 'center', lineHeight: 1.5 }}>
+          Acceso restringido al equipo de PLAAT.<br />Si no tienes cuenta, pídela al administrador.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── App principal ────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [user,       setUser]       = useState(undefined); // undefined=cargando, null=sin login, obj=dentro
   const [obras,      setObras]      = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [nav,        setNav]        = useState('hoy');
   const [obraActiva, setObraActiva] = useState(null);
   const [showNueva,  setShowNueva]  = useState(false);
 
+  // Sesión: si no hay sistema de auth (p.ej. dentro de Claude), entra directo
   useEffect(() => {
+    if (!window.auth) { setUser({ local: true }); return; }
+    window.auth.getUser().then(u => setUser(u || null));
+    window.auth.onChange(u => setUser(u || null));
+  }, []);
+
+  // Cargar obras solo cuando hay usuario
+  useEffect(() => {
+    if (!user) return;
     (async () => {
+      setLoading(true);
       try {
         const r = await window.storage.get(SK, true);
         if (r?.value) setObras(JSON.parse(r.value));
       } catch (e) {}
       setLoading(false);
     })();
-  }, []);
+  }, [user]);
 
   async function saveObras(list) {
     setObras(list);
@@ -2323,6 +2399,24 @@ export default function App() {
     incidencias: obras.reduce((s, o) => s + o.incidencias.filter(i => i.estado !== 'resuelta').length, 0),
   };
 
+  // ── Portón de acceso ──
+  if (user === undefined) {
+    return (
+      <>
+        <style>{CSS}</style>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1C1C1A', color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>Cargando…</div>
+      </>
+    );
+  }
+  if (user === null) {
+    return (
+      <>
+        <style>{CSS}</style>
+        <LoginScreen />
+      </>
+    );
+  }
+
   // Vista detalle de obra
   if (obraActiva) {
     const fresh = obras.find(o => o.id === obraActiva.id) || obraActiva;
@@ -2330,7 +2424,7 @@ export default function App() {
       <>
         <style>{CSS}</style>
         <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-          <Sidebar nav={nav} setNav={setNav} stats={stats} />
+          <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} />
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <DetalleObra obra={fresh} onBack={() => setObraActiva(null)} onSave={actualizarObra} />
           </div>
@@ -2343,7 +2437,7 @@ export default function App() {
     <>
       <style>{CSS}</style>
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        <Sidebar nav={nav} setNav={setNav} stats={stats} />
+        <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {nav === 'hoy'       && <VistaHoy obras={obras} onIrObra={o => setObraActiva(o)} />}
