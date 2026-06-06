@@ -207,7 +207,8 @@ const STATUS_ACCENT = {
   paralizada: '#E24B4A',
 };
 
-function ObraCard({ obra, onClick }) {
+function ObraCard({ obra, onClick, onEditar, onEliminar }) {
+  const [menu, setMenu] = useState(false);
   const accentColor = STATUS_ACCENT[obra.estado] || STATUS_ACCENT.en_curso;
   const e           = ESTADOS_OBRA[obra.estado]  || ESTADOS_OBRA.en_curso;
   const incPend     = obra.incidencias.filter(i => i.estado !== 'resuelta').length;
@@ -218,13 +219,27 @@ function ObraCard({ obra, onClick }) {
 
   return (
     <div className="obra-card fade" onClick={onClick}
-      style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.04)', overflow: 'hidden', borderLeft: `3px solid ${accentColor}` }}>
+      style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.04)', overflow: 'hidden', borderLeft: `3px solid ${accentColor}`, position: 'relative' }}>
       <div style={{ padding: '15px 16px 12px' }}>
 
-        {/* Nombre + estado */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 3 }}>
+        {/* Nombre + estado + menú */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#141412', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{obra.nombre}</div>
           <span style={{ fontSize: 11, color: accentColor, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: '0.04em', flexShrink: 0, paddingTop: 1 }}>{e.label.toUpperCase()}</span>
+          {/* Botón tres puntos */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button onClick={ev => { ev.stopPropagation(); setMenu(m => !m); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 18, lineHeight: 1, padding: '0 2px', marginTop: -2 }}>⋮</button>
+            {menu && (
+              <>
+                <div onClick={ev => { ev.stopPropagation(); setMenu(false); }} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
+                <div style={{ position: 'absolute', right: 0, top: '100%', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 9, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 5, zIndex: 21, minWidth: 130 }}>
+                  <div onClick={ev => { ev.stopPropagation(); setMenu(false); onEditar(obra); }} style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#141412' }} className="hov-row">Editar</div>
+                  <div onClick={ev => { ev.stopPropagation(); setMenu(false); onEliminar(obra); }} style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#8A1F1F' }} className="hov-row">Eliminar</div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Cliente */}
@@ -287,17 +302,20 @@ function DiasPicker({ value, onChange }) {
 
 // ─── Modal Nueva Obra ─────────────────────────────────────────────────────────
 
-function ModalNuevaObra({ onClose, onCreate }) {
-  const [form, setForm] = useState({ nombre: '', cliente: '', direccion: '', responsable: RESPONSABLES[0], diasVisita: [] });
+function ModalNuevaObra({ onClose, onCreate, obra }) {
+  const editando = !!obra;
+  const [form, setForm] = useState(obra
+    ? { nombre: obra.nombre || '', cliente: obra.cliente || '', direccion: obra.direccion || '', responsable: obra.responsable || RESPONSABLES[0], diasVisita: obra.diasVisita || [] }
+    : { nombre: '', cliente: '', direccion: '', responsable: RESPONSABLES[0], diasVisita: [] });
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const footer = (
     <>
       <Btn onClick={onClose}>Cancelar</Btn>
-      <Btn primary disabled={!form.nombre.trim() || !form.cliente.trim()} onClick={() => onCreate(form)}>Crear obra</Btn>
+      <Btn primary disabled={!form.nombre.trim() || !form.cliente.trim()} onClick={() => onCreate(form)}>{editando ? 'Guardar cambios' : 'Crear obra'}</Btn>
     </>
   );
   return (
-    <Modal title="Nueva obra" onClose={onClose} footer={footer}>
+    <Modal title={editando ? 'Editar obra' : 'Nueva obra'} onClose={onClose} footer={footer}>
       <Field label="Nombre de la obra *"><input autoFocus placeholder="Rehabilitación fachada C/ Urgell 88" value={form.nombre} onChange={e => upd('nombre', e.target.value)} /></Field>
       <Field label="Cliente / Promotora *"><input placeholder="Nombre del cliente" value={form.cliente} onChange={e => upd('cliente', e.target.value)} /></Field>
       <Field label="Dirección"><input placeholder="C/ Ejemplo 10, Barcelona" value={form.direccion} onChange={e => upd('direccion', e.target.value)} /></Field>
@@ -2327,6 +2345,8 @@ export default function App() {
   const [nav,        setNav]        = useState('hoy');
   const [obraActiva, setObraActiva] = useState(null);
   const [showNueva,  setShowNueva]  = useState(false);
+  const [obraEditar,   setObraEditar]   = useState(null);
+  const [obraEliminar, setObraEliminar] = useState(null);
 
   // Sesión: si no hay sistema de auth (p.ej. dentro de Claude), entra directo
   useEffect(() => {
@@ -2382,6 +2402,19 @@ export default function App() {
     const list = obras.map(o => o.id === updated.id ? updated : o);
     await saveObras(list);
     setObraActiva(updated);
+  }
+
+  // Editar datos básicos de una obra (conserva el resto)
+  async function guardarEdicion(datos) {
+    const updated = { ...obraEditar, ...datos };
+    await saveObras(obras.map(o => o.id === obraEditar.id ? updated : o));
+    setObraEditar(null);
+  }
+
+  // Eliminar obra
+  async function eliminarObra() {
+    await saveObras(obras.filter(o => o.id !== obraEliminar.id));
+    setObraEliminar(null);
   }
 
   // Calcular el contador del badge "Hoy"
@@ -2466,7 +2499,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {obras.map(o => <ObraCard key={o.id} obra={o} onClick={() => setObraActiva(o)} />)}
+                    {obras.map(o => <ObraCard key={o.id} obra={o} onClick={() => setObraActiva(o)} onEditar={setObraEditar} onEliminar={setObraEliminar} />)}
                   </div>
                 )}
               </div>
@@ -2477,6 +2510,24 @@ export default function App() {
       </div>
 
       {showNueva && <ModalNuevaObra onClose={() => setShowNueva(false)} onCreate={crearObra} />}
+      {obraEditar && <ModalNuevaObra obra={obraEditar} onClose={() => setObraEditar(null)} onCreate={guardarEdicion} />}
+
+      {/* Confirmar eliminación */}
+      {obraEliminar && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }} onClick={e => { if (e.target === e.currentTarget) setObraEliminar(null); }}>
+          <div className="fade" style={{ background: '#fff', borderRadius: 14, width: 400, maxWidth: '95vw', border: '1px solid #E0DFD9', boxShadow: '0 24px 64px rgba(0,0,0,.14)', padding: '20px' }}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Eliminar obra</div>
+            <div style={{ fontSize: 13, color: '#52524E', lineHeight: 1.5, marginBottom: 18 }}>
+              Vas a eliminar <strong>{obraEliminar.nombre}</strong> y todo su contenido (incidencias, ensayos, notas...). Esta acción no se puede deshacer.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn onClick={() => setObraEliminar(null)} full>Cancelar</Btn>
+              <Btn danger full onClick={eliminarObra}>Eliminar</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
     </>
   );
 }
