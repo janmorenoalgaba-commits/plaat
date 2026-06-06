@@ -24,12 +24,6 @@ const ESTADOS_INSP = {
   incidencia:   { label: 'Con incidencia',bg:'#FDECEC', color: '#8A1F1F' },
 };
 
-const PRIORIDADES = {
-  alta:  { label: 'Alta',  bg: '#FDECEC', color: '#8A1F1F' },
-  media: { label: 'Media', bg: '#FEF3DB', color: '#7C4A00' },
-  baja:  { label: 'Baja',  bg: '#E8F5E0', color: '#2D5E10' },
-};
-
 const uid      = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const today    = () => new Date().toISOString().slice(0, 10);
 const fmtDate  = iso => iso ? new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
@@ -63,7 +57,20 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
 .hov-nav:hover { background: #ECEAE4 !important; }
 .hov-row:hover   { background: #F9F8F5 !important; }
 .hov-chip:hover  { background: #ECEAE4 !important; }
+.no-scrollbar::-webkit-scrollbar { display: none; height: 0; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 `;
+
+// Detecta pantalla estrecha (móvil) y se actualiza al rotar/redimensionar
+function useIsMobile() {
+  const [m, setM] = useState(typeof window !== 'undefined' ? window.innerWidth < 760 : false);
+  useEffect(() => {
+    const onR = () => setM(window.innerWidth < 760);
+    window.addEventListener('resize', onR);
+    return () => window.removeEventListener('resize', onR);
+  }, []);
+  return m;
+}
 
 // ─── Átomos ───────────────────────────────────────────────────────────────────
 
@@ -107,19 +114,23 @@ function DashedBtn({ children, onClick }) {
 
 function Modal({ title, onClose, children, footer, wide }) {
   const [confirmando, setConfirmando] = useState(false);
+  const isMobile = useIsMobile();
+  const panelStyle = isMobile
+    ? { background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: '100%', maxHeight: '94vh', borderTop: '1px solid #E0DFD9', boxShadow: '0 -8px 40px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column' }
+    : { background: '#fff', borderRadius: 14, width: wide ? 540 : 460, maxWidth: '95vw', maxHeight: '90vh', border: '1px solid #E0DFD9', boxShadow: '0 24px 64px rgba(0,0,0,.14)', display: 'flex', flexDirection: 'column' };
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }}
       onClick={e => { if (e.target === e.currentTarget) setConfirmando(true); }}
     >
-      <div className="fade" style={{ background: '#fff', borderRadius: 14, width: wide ? 540 : 460, maxWidth: '95vw', maxHeight: '90vh', border: '1px solid #E0DFD9', boxShadow: '0 24px 64px rgba(0,0,0,.14)', display: 'flex', flexDirection: 'column' }}>
+      <div className="fade" style={panelStyle}>
         <div style={{ padding: '15px 18px', borderBottom: '1px solid #ECEAE4', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 600, flex: 1 }}>{title}</div>
-          <button onClick={() => setConfirmando(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#A5A5A0', lineHeight: 1, padding: '0 4px' }}>×</button>
+          <button onClick={() => setConfirmando(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: '#A5A5A0', lineHeight: 1, padding: '0 4px' }}>×</button>
         </div>
         <div style={{ padding: '16px 18px', overflowY: 'auto', flex: 1 }}>{children}</div>
         {footer && (
-          <div style={{ padding: '12px 18px', borderTop: '1px solid #ECEAE4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ padding: '12px 18px', borderTop: '1px solid #ECEAE4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, gap: 10, paddingBottom: isMobile ? 'calc(12px + env(safe-area-inset-bottom))' : 12 }}>
             {footer}
           </div>
         )}
@@ -198,7 +209,35 @@ function Sidebar({ nav, setNav, stats, user }) {
   );
 }
 
-// ─── Obra Card ────────────────────────────────────────────────────────────────
+// ─── Barra inferior (móvil) ───────────────────────────────────────────────────
+
+function BottomNav({ nav, setNav, stats }) {
+  const items = [
+    { id: 'hoy',     label: 'Hoy',   icon: '📋', badge: stats.hoy,   alert: true  },
+    { id: 'tablero', label: 'Obras', icon: '🏗️', badge: stats.total, alert: false },
+  ];
+  function salir() { if (window.auth) window.auth.signOut(); }
+  return (
+    <div style={{ display: 'flex', background: '#1C1C1A', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      {items.map(it => {
+        const activo = nav === it.id;
+        return (
+          <button key={it.id} onClick={() => setNav(it.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '9px 0 11px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: activo ? '#F2F1ED' : 'rgba(255,255,255,0.4)', position: 'relative' }}>
+            <span style={{ fontSize: 19, opacity: activo ? 1 : 0.7 }}>{it.icon}</span>
+            <span style={{ fontSize: 11, fontWeight: activo ? 600 : 400 }}>{it.label}</span>
+            {it.badge > 0 && (
+              <span style={{ position: 'absolute', top: 5, left: '50%', marginLeft: 6, background: it.alert ? '#E24B4A' : 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 9, minWidth: 16, height: 16, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', fontWeight: 600 }}>{it.badge}</span>
+            )}
+          </button>
+        );
+      })}
+      <button onClick={salir} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '9px 0 11px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: 'rgba(255,255,255,0.4)' }}>
+        <span style={{ fontSize: 19, opacity: 0.7 }}>⏻</span>
+        <span style={{ fontSize: 11 }}>Salir</span>
+      </button>
+    </div>
+  );
+}
 
 const STATUS_ACCENT = {
   en_curso:   '#D48A0C',
@@ -2039,19 +2078,6 @@ function ControlHormigon({ obra, onSave }) {
   );
 }
 
-function LimiteItem({ label, valor, destacado, mini }) {
-  return (
-    <div style={{ flex: mini ? 1 : 'none' }}>
-      <div style={{ fontSize: 10, color: '#B5B4AE', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: mini ? 13 : 14, fontWeight: destacado ? 700 : 500, color: destacado ? '#1A6B3A' : '#141412' }}>{valor}</div>
-    </div>
-  );
-}
-
-function Sep() {
-  return <div style={{ width: 1, background: '#F2F1ED', margin: '0 12px' }} />;
-}
-
 // ─── MÓDULO: Placeholder ──────────────────────────────────────────────────────
 
 function ModuloProximamente({ icono, titulo, descripcion }) {
@@ -2210,7 +2236,7 @@ function VistaHoy({ obras, onIrObra }) {
 
 // ─── Detalle de Obra ──────────────────────────────────────────────────────────
 
-function DetalleObra({ obra, onBack, onSave }) {
+function DetalleObra({ obra, onBack, onSave, isMobile }) {
   const [tab, setTab]               = useState('inspecciones');
   const [editEstado, setEditEstado] = useState(false);
 
@@ -2223,6 +2249,7 @@ function DetalleObra({ obra, onBack, onSave }) {
 
   const accentColor = STATUS_ACCENT[obra.estado] || STATUS_ACCENT.en_curso;
   const e           = ESTADOS_OBRA[obra.estado]  || ESTADOS_OBRA.en_curso;
+  const pad         = isMobile ? '12px 14px' : '18px 22px';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -2231,13 +2258,16 @@ function DetalleObra({ obra, onBack, onSave }) {
       <div style={{ background: '#1C1C1A', flexShrink: 0 }}>
 
         {/* Breadcrumb + nombre + estado */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 22px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-          <button onClick={onBack} style={{ fontSize: 12, color: 'rgba(255,255,255,0.38)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-            ← Mis obras
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '12px 14px 10px' : '14px 22px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+          <button onClick={onBack} style={{ fontSize: isMobile ? 13 : 12, color: 'rgba(255,255,255,0.55)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            ←{isMobile ? '' : ' Mis obras'}
           </button>
-          <span style={{ color: 'rgba(255,255,255,0.15)' }}>/</span>
-          <span style={{ fontSize: 14, fontWeight: 500, color: '#F2F1ED', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obra.nombre}</span>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>{obra.cliente}</span>
+          {!isMobile && <span style={{ color: 'rgba(255,255,255,0.15)' }}>/</span>}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#F2F1ED', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obra.nombre}</div>
+            {isMobile && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obra.cliente}</div>}
+          </div>
+          {!isMobile && <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>{obra.cliente}</span>}
 
           {/* Estado editable */}
           <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -2257,13 +2287,13 @@ function DetalleObra({ obra, onBack, onSave }) {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', padding: '0 22px' }}>
+        {/* Tabs (scroll horizontal en móvil) */}
+        <div className="no-scrollbar" style={{ display: 'flex', padding: isMobile ? '0 8px' : '0 22px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
-              padding: '11px 16px', background: 'none', border: 'none',
+              padding: isMobile ? '12px 14px' : '11px 16px', background: 'none', border: 'none',
               borderBottom: `2px solid ${tab === t.id ? accentColor : 'transparent'}`,
-              cursor: 'pointer', fontSize: 13,
+              cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0,
               fontWeight: tab === t.id ? 500 : 400,
               color: tab === t.id ? '#F2F1ED' : 'rgba(255,255,255,0.32)',
               transition: 'all .15s',
@@ -2275,7 +2305,7 @@ function DetalleObra({ obra, onBack, onSave }) {
       </div>
 
       {/* Contenido */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px', background: '#F2F1ED' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: pad, background: '#F2F1ED' }}>
         {tab === 'inspecciones' && <ModuloInspecciones obra={obra} onSave={onSave} />}
         {tab === 'incidencias'  && <ModuloIncidencias  obra={obra} onSave={onSave} />}
         {tab === 'calidad'      && <ModuloCalidad obra={obra} onSave={onSave} />}
@@ -2339,6 +2369,7 @@ function LoginScreen() {
 // ─── App principal ────────────────────────────────────────────────────────────
 
 export default function App() {
+  const isMobile = useIsMobile();
   const [user,       setUser]       = useState(undefined); // undefined=cargando, null=sin login, obj=dentro
   const [obras,      setObras]      = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -2456,10 +2487,10 @@ export default function App() {
     return (
       <>
         <style>{CSS}</style>
-        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-          <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} />
-          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <DetalleObra obra={fresh} onBack={() => setObraActiva(null)} onSave={actualizarObra} />
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', overflow: 'hidden' }}>
+          {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} />}
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <DetalleObra obra={fresh} onBack={() => setObraActiva(null)} onSave={actualizarObra} isMobile={isMobile} />
           </div>
         </div>
       </>
@@ -2469,9 +2500,9 @@ export default function App() {
   return (
     <>
       <style>{CSS}</style>
-      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', overflow: 'hidden' }}>
+        {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} />}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
           {nav === 'hoy'       && <VistaHoy obras={obras} onIrObra={o => setObraActiva(o)} />}
           {nav === 'tablero'   && (
@@ -2507,6 +2538,7 @@ export default function App() {
           )}
 
         </div>
+        {isMobile && <BottomNav nav={nav} setNav={setNav} stats={stats} />}
       </div>
 
       {showNueva && <ModalNuevaObra onClose={() => setShowNueva(false)} onCreate={crearObra} />}
