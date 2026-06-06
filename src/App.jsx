@@ -155,7 +155,7 @@ function Modal({ title, onClose, children, footer, wide }) {
 
 function Sidebar({ nav, setNav, stats, user }) {
   const navItems = [
-    { id: 'hoy',        label: 'Hoy',        badge: stats.hoy,   alert: stats.hoy > 0 },
+    { id: 'alertas',    label: 'Alertas',     badge: stats.alertas, alert: stats.alertas > 0 },
     { id: 'tablero',    label: 'Tablero',     badge: stats.total, alert: false },
   ];
   const email = user?.email || '';
@@ -169,20 +169,23 @@ function Sidebar({ nav, setNav, stats, user }) {
     <div style={{ width: 210, background: '#1C1C1A', display: 'flex', flexDirection: 'column', flexShrink: 0, height: '100%' }}>
 
       {/* Logo */}
-      <div style={{ padding: '22px 20px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '0.1em', color: '#F2F1ED' }}>PLAAT</div>
-        <div style={{ marginTop: 6, display: 'inline-block', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', background: '#1A6B3A', color: '#A8EDBC', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>DEO</div>
+      <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ fontSize: 21, fontWeight: 600, letterSpacing: '0.14em', color: '#F2F1ED', display: 'flex', alignItems: 'baseline', gap: 7 }}>
+          PLAAT
+          <span style={{ fontSize: 12, fontWeight: 400, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.4)' }}>/ DEO</span>
+        </div>
       </div>
 
       {/* Nav */}
-      <nav style={{ padding: '12px 10px', flex: 1 }}>
-        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '4px 10px 8px' }}>Vistas</div>
+      <nav style={{ padding: '16px 10px', flex: 1 }}>
+        <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.18em', textTransform: 'uppercase', padding: '4px 10px 10px' }}>Vistas</div>
         {navItems.map(item => (
           <div key={item.id} onClick={() => setNav(item.id)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, marginBottom: 2, cursor: 'pointer', background: nav === item.id ? 'rgba(255,255,255,0.1)' : 'transparent', fontSize: 13, color: nav === item.id ? '#F2F1ED' : 'rgba(255,255,255,0.45)', fontWeight: nav === item.id ? 500 : 400, transition: 'all .15s' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 6, marginBottom: 2, cursor: 'pointer', background: nav === item.id ? 'rgba(255,255,255,0.08)' : 'transparent', fontSize: 13, color: nav === item.id ? '#F2F1ED' : 'rgba(255,255,255,0.45)', fontWeight: nav === item.id ? 500 : 400, letterSpacing: '0.01em', transition: 'all .15s' }}>
+            {nav === item.id && <span style={{ color: 'rgba(255,255,255,0.5)' }}>/</span>}
             {item.label}
             {item.badge > 0 && (
-              <span style={{ marginLeft: 'auto', fontSize: 11, padding: '1px 7px', borderRadius: 20, background: item.alert ? 'rgba(228,75,74,0.25)' : 'rgba(255,255,255,0.1)', color: item.alert ? '#FF9090' : 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
+              <span style={{ marginLeft: 'auto', fontSize: 11, padding: '1px 7px', borderRadius: 20, background: item.alert ? 'rgba(228,75,74,0.22)' : 'rgba(255,255,255,0.1)', color: item.alert ? '#FF9090' : 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
                 {item.badge}
               </span>
             )}
@@ -193,14 +196,14 @@ function Sidebar({ nav, setNav, stats, user }) {
       {/* Usuario */}
       <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: email ? 8 : 0 }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#1A6B3A', color: '#A8EDBC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{iniciales}</div>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#F2F1ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 500, flexShrink: 0, letterSpacing: '0.02em' }}>{iniciales}</div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 500, color: '#F2F1ED', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email || 'PLAAT'}</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>DEO · PLAAT</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Arquitectura Técnica</div>
           </div>
         </div>
         {email && (
-          <button onClick={salir} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer' }}>
+          <button onClick={salir} style={{ width: '100%', padding: '7px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer', letterSpacing: '0.02em' }}>
             Cerrar sesión
           </button>
         )}
@@ -212,28 +215,38 @@ function Sidebar({ nav, setNav, stats, user }) {
 // ─── Barra inferior (móvil) ───────────────────────────────────────────────────
 
 function BottomNav({ nav, setNav, stats }) {
+  const ICONS = {
+    alertas: 'M10 4a3 3 0 0 0-3 3c0 4-1.5 5-2 6h10c-.5-1-2-2-2-6a3 3 0 0 0-3-3Z M8.5 16a1.5 1.5 0 0 0 3 0',
+    obras:   'M3 17V8l5-3 5 3v9 M7 17v-4h2v4',
+    salir:   'M7 4H4v12h3 M10 10h7 M14 7l3 3-3 3',
+  };
   const items = [
-    { id: 'hoy',     label: 'Hoy',   icon: '📋', badge: stats.hoy,   alert: true  },
-    { id: 'tablero', label: 'Obras', icon: '🏗️', badge: stats.total, alert: false },
+    { id: 'alertas', label: 'Alertas', badge: stats.alertas, alert: true },
+    { id: 'tablero', label: 'Obras',   badge: stats.total,   alert: false },
   ];
   function salir() { if (window.auth) window.auth.signOut(); }
+  const Icono = ({ d, activo }) => (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: activo ? 1 : 0.65 }}>
+      {d.split(' M').map((seg, i) => <path key={i} d={(i === 0 ? seg : 'M' + seg)} />)}
+    </svg>
+  );
   return (
     <div style={{ display: 'flex', background: '#1C1C1A', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0, paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {items.map(it => {
         const activo = nav === it.id;
         return (
-          <button key={it.id} onClick={() => setNav(it.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '9px 0 11px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: activo ? '#F2F1ED' : 'rgba(255,255,255,0.4)', position: 'relative' }}>
-            <span style={{ fontSize: 19, opacity: activo ? 1 : 0.7 }}>{it.icon}</span>
-            <span style={{ fontSize: 11, fontWeight: activo ? 600 : 400 }}>{it.label}</span>
+          <button key={it.id} onClick={() => setNav(it.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: activo ? '#F2F1ED' : 'rgba(255,255,255,0.4)', position: 'relative' }}>
+            <Icono d={ICONS[it.id]} activo={activo} />
+            <span style={{ fontSize: 11, fontWeight: activo ? 500 : 400, letterSpacing: '0.02em' }}>{it.label}</span>
             {it.badge > 0 && (
-              <span style={{ position: 'absolute', top: 5, left: '50%', marginLeft: 6, background: it.alert ? '#E24B4A' : 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 9, minWidth: 16, height: 16, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', fontWeight: 600 }}>{it.badge}</span>
+              <span style={{ position: 'absolute', top: 6, left: '50%', marginLeft: 7, background: it.alert ? '#E24B4A' : 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 9, minWidth: 16, height: 16, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', fontWeight: 600 }}>{it.badge}</span>
             )}
           </button>
         );
       })}
-      <button onClick={salir} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '9px 0 11px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: 'rgba(255,255,255,0.4)' }}>
-        <span style={{ fontSize: 19, opacity: 0.7 }}>⏻</span>
-        <span style={{ fontSize: 11 }}>Salir</span>
+      <button onClick={salir} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: 'rgba(255,255,255,0.4)' }}>
+        <Icono d={ICONS.salir} activo={false} />
+        <span style={{ fontSize: 11, letterSpacing: '0.02em' }}>Salir</span>
       </button>
     </div>
   );
@@ -254,49 +267,79 @@ function ObraCard({ obra, onClick, onEditar, onEliminar }) {
   const tareasPend  = (obra.apuntes || []).filter(a => a.tipo === 'tarea' && !a.hecha).length;
   const totalPuntos = obra.disciplinas.reduce((s, d) => s + d.puntos.length, 0);
   const inspDone    = obra.disciplinas.reduce((s, d) => s + d.puntos.filter(p => p.estado === 'inspeccionado').length, 0);
+  const inspPct     = totalPuntos > 0 ? Math.round(inspDone / totalPuntos * 100) : 0;
   const tareasVenc  = (obra.apuntes || []).some(a => a.tipo === 'tarea' && !a.hecha && a.fechaLimite && new Date(a.fechaLimite) < new Date(today()));
+  const diasV       = obra.diasVisita || [];
+  const letras      = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+  const iniciales   = (obra.nombre || '?').trim().slice(0, 2).toUpperCase();
 
   return (
     <div className="obra-card fade" onClick={onClick}
-      style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.04)', overflow: 'hidden', borderLeft: `3px solid ${accentColor}`, position: 'relative' }}>
-      <div style={{ padding: '15px 16px 12px' }}>
+      style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 5px 18px rgba(0,0,0,0.05)', overflow: 'hidden', borderLeft: `3px solid ${accentColor}`, position: 'relative' }}>
 
-        {/* Nombre + estado + menú */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#141412', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{obra.nombre}</div>
-          <span style={{ fontSize: 11, color: accentColor, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: '0.04em', flexShrink: 0, paddingTop: 1 }}>{e.label.toUpperCase()}</span>
-          {/* Botón tres puntos */}
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button onClick={ev => { ev.stopPropagation(); setMenu(m => !m); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 18, lineHeight: 1, padding: '0 2px', marginTop: -2 }}>⋮</button>
-            {menu && (
-              <>
-                <div onClick={ev => { ev.stopPropagation(); setMenu(false); }} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
-                <div style={{ position: 'absolute', right: 0, top: '100%', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 9, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 5, zIndex: 21, minWidth: 130 }}>
-                  <div onClick={ev => { ev.stopPropagation(); setMenu(false); onEditar(obra); }} style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#141412' }} className="hov-row">Editar</div>
-                  <div onClick={ev => { ev.stopPropagation(); setMenu(false); onEliminar(obra); }} style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#8A1F1F' }} className="hov-row">Eliminar</div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+      {/* Parte superior */}
+      <div style={{ display: 'flex', gap: 13, padding: '15px 16px 13px' }}>
+        {/* Iniciales ancla */}
+        <div style={{ width: 44, height: 44, borderRadius: 8, flexShrink: 0, background: '#1C1C1A', color: '#F2F1ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 500, letterSpacing: '0.04em' }}>{iniciales}</div>
 
-        {/* Cliente */}
-        <div style={{ fontSize: 12, color: '#9B9B97', marginBottom: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obra.cliente}</div>
-
-        {/* Stats row */}
-        <div style={{ display: 'flex', gap: 0, borderTop: '1px solid #F2F1ED', paddingTop: 11 }}>
-          {[
-            ['Insp.', totalPuntos > 0 ? `${inspDone}/${totalPuntos}` : '—', false],
-            ['Incidencias', incPend > 0 ? `${incPend} pend.` : 'Sin abrir', incPend > 0],
-            ['Tareas', tareasPend > 0 ? `${tareasPend} pend.` : '—', tareasVenc],
-          ].map(([label, value, alert], i) => (
-            <div key={label} style={{ flex: 1, paddingRight: i < 2 ? 12 : 0, borderRight: i < 2 ? '1px solid #F2F1ED' : 'none', marginRight: i < 2 ? 12 : 0 }}>
-              <div style={{ fontSize: 10, color: '#B5B4AE', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>{label}</div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: alert ? '#C47610' : '#141412' }}>{value}</div>
+        {/* Texto */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#141412', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obra.nombre}</div>
+              <div style={{ fontSize: 12.5, color: '#6B6B66', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obra.cliente}</div>
+              {obra.direccion && <div style={{ fontSize: 11.5, color: '#A5A5A0', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obra.direccion}</div>}
             </div>
-          ))}
+            {/* Estado + menú */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+              <span style={{ fontSize: 9.5, color: accentColor, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{e.label}</span>
+              <div style={{ position: 'relative' }}>
+                <button onClick={ev => { ev.stopPropagation(); setMenu(m => !m); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>⋮</button>
+                {menu && (
+                  <>
+                    <div onClick={ev => { ev.stopPropagation(); setMenu(false); }} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
+                    <div style={{ position: 'absolute', right: 0, top: '100%', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 9, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 5, zIndex: 21, minWidth: 130 }}>
+                      <div onClick={ev => { ev.stopPropagation(); setMenu(false); onEditar(obra); }} style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#141412' }} className="hov-row">Editar</div>
+                      <div onClick={ev => { ev.stopPropagation(); setMenu(false); onEliminar(obra); }} style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#8A1F1F' }} className="hov-row">Eliminar</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Barra de inspección */}
+          {totalPuntos > 0 && (
+            <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ flex: 1, height: 4, background: '#F0EFEA', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: inspPct + '%', height: '100%', background: inspPct === 100 ? '#52A124' : '#1C1C1A', borderRadius: 2 }} />
+              </div>
+              <span style={{ fontSize: 11, color: '#6B6B66', fontWeight: 500, whiteSpace: 'nowrap' }}>{inspDone}/{totalPuntos} insp.</span>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Footer: chips de estado + días de visita */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderTop: '1px solid #F2F1ED', background: '#FBFAF8', flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 500, padding: '3px 9px', borderRadius: 4, background: incPend > 0 ? '#FDECEC' : '#F0EFEA', color: incPend > 0 ? '#8A1F1F' : '#9B9B97' }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: incPend > 0 ? '#E24B4A' : '#C5C4BE' }} />
+          {incPend > 0 ? `${incPend} incidencia${incPend > 1 ? 's' : ''}` : 'Sin incidencias'}
+        </span>
+        {tareasPend > 0 && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 500, padding: '3px 9px', borderRadius: 4, background: tareasVenc ? '#FEF3DB' : '#F0EFEA', color: tareasVenc ? '#7C4A00' : '#6B6B66' }}>
+            {tareasPend} tarea{tareasPend > 1 ? 's' : ''}{tareasVenc ? ' · vencida' : ''}
+          </span>
+        )}
+        {/* Días de visita */}
+        {diasV.length > 0 && (
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3 }}>
+            {[1, 2, 3, 4, 5, 6, 0].map(d => (
+              <span key={d} style={{ width: 17, height: 17, borderRadius: 3, fontSize: 9.5, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', background: diasV.includes(d) ? '#1C1C1A' : '#F0EFEA', color: diasV.includes(d) ? '#fff' : '#C5C4BE' }}>{letras[d]}</span>
+            ))}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -557,6 +600,15 @@ function esHoyVisita(obra) {
 function revisadaHoy(inc) {
   return (inc.revisiones || []).some(r => r.fecha === today());
 }
+function diasSinRevisar(inc) {
+  const revisiones = inc.revisiones || [];
+  const ultima = revisiones.length > 0 ? revisiones[revisiones.length - 1].fecha : (inc.fechaCreacion || inc.ultimaActualizacion);
+  return diasDesde(ultima);
+}
+function diasHasta(iso) {
+  if (!iso) return null;
+  return Math.ceil((new Date(iso) - new Date(today())) / 86400000);
+}
 function diasDesde(iso) {
   if (!iso) return 0;
   return Math.floor((Date.now() - new Date(iso)) / 86400000);
@@ -598,26 +650,36 @@ function pickFiles(accept, cb) {
 // ── Card de incidencia ────────────────────────────────────────────────────────
 function IncCard({ inc, esVisitaHoy, onClick, onRevisar }) {
   const est      = ESTADOS_INC[inc.estado] || ESTADOS_INC.detectada;
-  const foto     = (inc.historial || []).flatMap(h => h.adjuntos || []).find(a => a.tipo === 'imagen');
+  const fotos    = (inc.historial || []).flatMap(h => h.adjuntos || []).filter(a => a.tipo === 'imagen');
+  const foto     = fotos[0];
   const revisada = revisadaHoy(inc);
   const dias     = diasDesde(inc.ultimaActualizacion || inc.fechaCreacion);
+  const sinRevisarAlerta = inc.estado !== 'resuelta' && diasSinRevisar(inc) >= 10;
+  // Última nota escrita (no las revisiones automáticas vacías)
+  const ultNota  = (inc.historial || []).slice().reverse().find(h => h.nota && h.nota.trim());
 
   return (
-    <div style={{ background: '#fff', border: `1px solid ${esVisitaHoy && !revisada && inc.estado !== 'resuelta' ? '#F5D98B' : '#E8E7E1'}`, borderRadius: 10, display: 'flex', alignItems: 'stretch', overflow: 'hidden', transition: 'border-color .15s' }}>
+    <div style={{ background: '#fff', border: `1px solid ${esVisitaHoy && !revisada && inc.estado !== 'resuelta' ? '#F5D98B' : '#E8E7E1'}`, borderRadius: 11, display: 'flex', alignItems: 'stretch', overflow: 'hidden', transition: 'border-color .15s', borderLeft: `3px solid ${est.color}` }}>
       {/* Foto */}
-      <div onClick={onClick} style={{ width: 72, flexShrink: 0, background: foto ? 'transparent' : '#F5F4F0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+      <div onClick={onClick} style={{ width: 80, flexShrink: 0, position: 'relative', background: foto ? 'transparent' : '#F5F4F0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
         {foto
-          ? <img src={foto.data} alt="" style={{ width: 72, height: '100%', minHeight: 72, objectFit: 'cover', display: 'block' }} />
-          : <span style={{ fontSize: 22 }}>📋</span>}
+          ? <img src={foto.data} alt="" style={{ width: 80, height: '100%', minHeight: 80, objectFit: 'cover', display: 'block' }} />
+          : <span style={{ fontSize: 20, color: '#C5C4BE', fontWeight: 300 }}>—</span>}
+        {fotos.length > 1 && (
+          <span style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 10, fontWeight: 500, padding: '1px 6px', borderRadius: 3 }}>{fotos.length} fotos</span>
+        )}
       </div>
 
       {/* Info */}
-      <div onClick={onClick} style={{ flex: 1, padding: '10px 12px', cursor: 'pointer' }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: '#18180F', marginBottom: 5, lineHeight: 1.3 }}>{inc.titulo}</div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div onClick={onClick} style={{ flex: 1, minWidth: 0, padding: '10px 13px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: '#141412', marginBottom: 3, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.titulo}</div>
+        {ultNota && (
+          <div style={{ fontSize: 12, color: '#9B9B97', marginBottom: 6, lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>{ultNota.nota}</div>
+        )}
+        <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
           <Pill label={est.label} bg={est.bg} color={est.color} />
-          <span style={{ fontSize: 11, color: '#A5A5A0' }}>
-            {dias === 0 ? 'Hoy' : `Hace ${dias}d`}
+          <span style={{ fontSize: 11, color: sinRevisarAlerta ? '#8A1F1F' : '#A5A5A0', fontWeight: sinRevisarAlerta ? 600 : 400 }}>
+            {sinRevisarAlerta ? `${diasSinRevisar(inc)}d sin revisar` : dias === 0 ? 'Hoy' : `Hace ${dias}d`}
           </span>
         </div>
       </div>
@@ -709,11 +771,13 @@ function FormNuevaIncidencia({ onClose, onCrear }) {
 }
 
 // ── Detalle de incidencia ─────────────────────────────────────────────────────
-function DetalleIncidencia({ inc, onClose, onActualizar }) {
+function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar }) {
   const [nota,     setNota]     = useState('');
   const [adjuntos, setAdjuntos] = useState([]);
   const [estado,   setEstado]   = useState(inc.estado);
   const [preview,  setPreview]  = useState(null); // imagen ampliada
+  const [menu,     setMenu]     = useState(false);
+  const [confirmar, setConfirmar] = useState(false);
 
   function guardar() {
     if (!nota.trim() && adjuntos.length === 0 && estado === inc.estado) return;
@@ -740,7 +804,31 @@ function DetalleIncidencia({ inc, onClose, onActualizar }) {
         <span style={{ color: '#D4D3CE' }}>/</span>
         <span style={{ fontSize: 13, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.titulo}</span>
         <Pill label={est.label} bg={est.bg} color={est.color} />
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button onClick={() => setMenu(m => !m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>⋮</button>
+          {menu && (
+            <>
+              <div onClick={() => setMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
+              <div style={{ position: 'absolute', right: 0, top: '100%', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 9, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 5, zIndex: 21, minWidth: 130 }}>
+                <div onClick={() => { setMenu(false); setConfirmar(true); }} className="hov-row" style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#8A1F1F' }}>Eliminar</div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
+
+      {confirmar && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }} onClick={e => { if (e.target === e.currentTarget) setConfirmar(false); }}>
+          <div className="fade" style={{ background: '#fff', borderRadius: 14, width: 380, maxWidth: '95vw', border: '1px solid #E0DFD9', boxShadow: '0 24px 64px rgba(0,0,0,.14)', padding: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Eliminar incidencia</div>
+            <div style={{ fontSize: 13, color: '#52524E', lineHeight: 1.5, marginBottom: 18 }}>Vas a eliminar <strong>{inc.titulo}</strong> y todo su historial. Esta acción no se puede deshacer.</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn onClick={() => setConfirmar(false)} full>Cancelar</Btn>
+              <Btn danger full onClick={() => { setConfirmar(false); onEliminar(); }}>Eliminar</Btn>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
 
@@ -946,6 +1034,11 @@ function ModuloIncidencias({ obra, onSave }) {
     onSave({ ...obra, incidencias: obra.incidencias.map(i => i.id === updated.id ? updated : i) });
   }
 
+  function borrarInc(incId) {
+    onSave({ ...obra, incidencias: obra.incidencias.filter(i => i.id !== incId) });
+    setIncActiva(null);
+  }
+
   // Revisión sin cambios — solo deja constancia
   function revisarSinCambios(incId) {
     const entrada = { id: uid(), tipo: 'revision', estado: obra.incidencias.find(i => i.id === incId)?.estado, nota: '', adjuntos: [], fecha: now() };
@@ -991,6 +1084,7 @@ function ModuloIncidencias({ obra, onSave }) {
           inc={incDetalle}
           onClose={() => setIncActiva(null)}
           onActualizar={updated => { actualizarInc(updated); }}
+          onEliminar={() => borrarInc(incDetalle.id)}
         />
       </div>
     );
@@ -1982,15 +2076,15 @@ function ControlHormigon({ obra, onSave }) {
           {/* Preview del cálculo */}
           {form.volumen && (
             <div style={{ background: '#F0F6F1', border: '1px solid #C5E3CE', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: '#1A6B3A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontWeight: 600 }}>Lotificación resultante</div>
+              <div style={{ fontSize: 11, color: '#1C1C1A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontWeight: 600 }}>Lotificación resultante</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
-                <span style={{ fontSize: 26, fontWeight: 700, color: '#1A6B3A' }}>{preview.numLotes}</span>
+                <span style={{ fontSize: 26, fontWeight: 600, color: '#1C1C1A' }}>{preview.numLotes}</span>
                 <span style={{ fontSize: 13, color: '#52524E' }}>lote{preview.numLotes > 1 ? 's' : ''}</span>
                 <span style={{ fontSize: 14, color: '#A5A5A0', margin: '0 4px' }}>×</span>
-                <span style={{ fontSize: 26, fontWeight: 700, color: '#1A6B3A' }}>{preview.seriesPorLote}</span>
+                <span style={{ fontSize: 26, fontWeight: 600, color: '#1C1C1A' }}>{preview.seriesPorLote}</span>
                 <span style={{ fontSize: 13, color: '#52524E' }}>series/lote</span>
                 <span style={{ fontSize: 14, color: '#A5A5A0', margin: '0 4px' }}>=</span>
-                <span style={{ fontSize: 26, fontWeight: 700, color: '#1A6B3A' }}>{preview.totalSeries}</span>
+                <span style={{ fontSize: 26, fontWeight: 600, color: '#1C1C1A' }}>{preview.totalSeries}</span>
                 <span style={{ fontSize: 13, color: '#52524E' }}>series totales</span>
               </div>
               <div style={{ fontSize: 12, color: '#6B6B66' }}>{preview.motivo}</div>
@@ -2031,7 +2125,7 @@ function ControlHormigon({ obra, onSave }) {
                         {t.label} · {el.volumen} m³{el.superficie ? ` · ${el.superficie} m²` : ''} · {el.conDOR ? 'Con DOR' : 'Sin DOR'}
                       </div>
                     </div>
-                    <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#F0F6F1', color: '#1A6B3A', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#EEEDE7', color: '#1C1C1A', fontWeight: 600, whiteSpace: 'nowrap' }}>
                       {numLotes} lote{numLotes > 1 ? 's' : ''} · {totalSeries} series
                     </span>
                     <button onClick={e => { e.stopPropagation(); eliminar(el.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
@@ -2093,138 +2187,104 @@ function ModuloProximamente({ icono, titulo, descripcion }) {
 
 // ─── Vista: Hoy ───────────────────────────────────────────────────────────────
 
-function VistaHoy({ obras, onIrObra }) {
-  const hoyDia     = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+// Calcula las alertas activas de todas las obras
+function calcularAlertas(obras) {
+  const incSinRevisar = obras.flatMap(o =>
+    o.incidencias
+      .filter(i => i.estado !== 'resuelta' && diasSinRevisar(i) >= 10)
+      .map(i => ({ obra: o, inc: i, dias: diasSinRevisar(i) }))
+  ).sort((a, b) => b.dias - a.dias);
 
-  // Obras con visita hoy + sus incidencias pendientes de revisar
-  const visitasHoy = obras
-    .filter(o => esHoyVisita(o))
-    .map(o => ({
-      obra: o,
-      sinRevisar: o.incidencias.filter(i => i.estado !== 'resuelta' && !revisadaHoy(i)),
-    }));
-
-  // Tareas vencidas en todas las obras
   const tareasVencidas = obras.flatMap(o =>
     (o.apuntes || [])
-      .filter(a => a.tipo === 'tarea' && !a.hecha && a.fechaLimite && new Date(a.fechaLimite) < new Date(today()))
-      .map(a => ({ obra: o, tarea: a, dias: diasDesde(a.fechaLimite) }))
+      .filter(a => a.tipo === 'tarea' && !a.hecha && a.fechaLimite && diasHasta(a.fechaLimite) < 0)
+      .map(a => ({ obra: o, tarea: a, dias: -diasHasta(a.fechaLimite) }))
   ).sort((a, b) => b.dias - a.dias);
 
-  // Incidencias sin revisar hace +14 días
-  const incViejas = obras.flatMap(o =>
-    o.incidencias
-      .filter(i => i.estado !== 'resuelta' && diasDesde(i.ultimaActualizacion || i.fechaCreacion) >= 14)
-      .map(i => ({ obra: o, inc: i, dias: diasDesde(i.ultimaActualizacion || i.fechaCreacion) }))
-  ).sort((a, b) => b.dias - a.dias);
+  const tareasProximas = obras.flatMap(o =>
+    (o.apuntes || [])
+      .filter(a => a.tipo === 'tarea' && !a.hecha && a.fechaLimite && diasHasta(a.fechaLimite) >= 0 && diasHasta(a.fechaLimite) <= 2)
+      .map(a => ({ obra: o, tarea: a, dias: diasHasta(a.fechaLimite) }))
+  ).sort((a, b) => a.dias - b.dias);
 
-  const hayAlgo = visitasHoy.length > 0 || tareasVencidas.length > 0 || incViejas.length > 0;
+  return { incSinRevisar, tareasVencidas, tareasProximas, total: incSinRevisar.length + tareasVencidas.length + tareasProximas.length };
+}
 
-  const SeccionHeader = ({ icono, titulo, count, color }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-      <span style={{ fontSize: 16 }}>{icono}</span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: '#141412' }}>{titulo}</span>
-      <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 20, background: color + '20', color, fontWeight: 500 }}>{count}</span>
+function VistaAlertas({ obras, onIrObra, isMobile }) {
+  const { incSinRevisar, tareasVencidas, tareasProximas, total } = calcularAlertas(obras);
+  const pad = isMobile ? '14px' : '18px 22px';
+
+  const SeccionHeader = ({ titulo, count, color }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 11 }}>
+      <span style={{ fontSize: 14, color: color, fontWeight: 400 }}>/</span>
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: '#141412', letterSpacing: '0.02em' }}>{titulo}</span>
+      <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 4, background: color + '1A', color, fontWeight: 600 }}>{count}</span>
+    </div>
+  );
+
+  const Fila = ({ obra, titulo, etiqueta, etColor, etBg, accent }) => (
+    <div onClick={() => onIrObra(obra)} className="obra-card"
+      style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '11px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, borderLeft: `3px solid ${accent}` }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: '#141412', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titulo}</div>
+        <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obra.nombre}</div>
+      </div>
+      <span style={{ fontSize: 11, color: etColor, fontWeight: 500, whiteSpace: 'nowrap', background: etBg, padding: '2px 8px', borderRadius: 20, flexShrink: 0 }}>{etiqueta}</span>
     </div>
   );
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Topbar */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #ECEAE4', padding: '13px 22px', flexShrink: 0 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Hoy</div>
-        <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 1, textTransform: 'capitalize' }}>{hoyDia}</div>
+      <div style={{ background: '#fff', borderBottom: '1px solid #ECEAE4', padding: isMobile ? '13px 16px' : '13px 22px', flexShrink: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Alertas</div>
+        <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 1 }}>{total > 0 ? `${total} aviso${total !== 1 ? 's' : ''} requieren tu atención` : 'Sin avisos pendientes'}</div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: pad, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {!hayAlgo && (
+        {total === 0 && (
           <div style={{ textAlign: 'center', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 16, background: '#1C1C1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>✓</div>
+            <div style={{ width: 56, height: 56, borderRadius: 12, background: '#1C1C1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, color: '#fff', fontWeight: 300 }}>✓</div>
             <div style={{ fontSize: 16, fontWeight: 600 }}>Todo al día</div>
-            <div style={{ fontSize: 13, color: '#9B9B97' }}>Sin visitas programadas hoy ni tareas pendientes</div>
-          </div>
-        )}
-
-        {/* Visitas de hoy */}
-        {visitasHoy.length > 0 && (
-          <div>
-            <SeccionHeader icono="🏗️" titulo="Visitas de hoy" count={visitasHoy.length} color="#1A6B3A" />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {visitasHoy.map(({ obra, sinRevisar }) => (
-                <div key={obra.id} onClick={() => onIrObra(obra)}
-                  style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '12px 16px', cursor: 'pointer', borderLeft: `3px solid ${STATUS_ACCENT[obra.estado] || '#D48A0C'}`, transition: 'box-shadow .15s' }}
-                  className="obra-card">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#141412' }}>{obra.nombre}</div>
-                      <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 2 }}>{obra.cliente}</div>
-                    </div>
-                    {sinRevisar.length > 0
-                      ? <span style={{ fontSize: 12, background: '#FEF3DB', color: '#7C4A00', padding: '3px 10px', borderRadius: 20, fontWeight: 500, whiteSpace: 'nowrap' }}>
-                          {sinRevisar.length} inc. por revisar
-                        </span>
-                      : <span style={{ fontSize: 12, background: '#E8F5E0', color: '#2D5E10', padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>
-                          ✓ Al día
-                        </span>
-                    }
-                  </div>
-                  {sinRevisar.length > 0 && (
-                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                      {sinRevisar.slice(0, 3).map(i => (
-                        <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#6B6B66' }}>
-                          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#D48A0C', flexShrink: 0 }} />
-                          {i.titulo}
-                        </div>
-                      ))}
-                      {sinRevisar.length > 3 && <div style={{ fontSize: 11, color: '#9B9B97', paddingLeft: 13 }}>+{sinRevisar.length - 3} más</div>}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <div style={{ fontSize: 13, color: '#9B9B97' }}>No hay incidencias ni tareas que requieran atención</div>
           </div>
         )}
 
         {/* Tareas vencidas */}
         {tareasVencidas.length > 0 && (
           <div>
-            <SeccionHeader icono="⏰" titulo="Tareas vencidas" count={tareasVencidas.length} color="#8A1F1F" />
+            <SeccionHeader titulo="Tareas vencidas" count={tareasVencidas.length} color="#8A1F1F" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {tareasVencidas.map(({ obra, tarea, dias }) => (
-                <div key={tarea.id} onClick={() => onIrObra(obra)}
-                  style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, borderLeft: '3px solid #E24B4A' }}
-                  className="obra-card">
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: '#141412', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tarea.texto}</div>
-                    <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 2 }}>{obra.nombre}</div>
-                  </div>
-                  <span style={{ fontSize: 11, color: '#8A1F1F', fontWeight: 500, whiteSpace: 'nowrap', background: '#FDECEC', padding: '2px 8px', borderRadius: 20 }}>
-                    Hace {dias}d
-                  </span>
-                </div>
+                <Fila key={tarea.id} obra={obra} titulo={tarea.texto}
+                  etiqueta={dias === 0 ? 'Vence hoy' : `Hace ${dias}d`} etColor="#8A1F1F" etBg="#FDECEC" accent="#E24B4A" />
               ))}
             </div>
           </div>
         )}
 
-        {/* Incidencias sin tocar */}
-        {incViejas.length > 0 && (
+        {/* Tareas próximas a vencer */}
+        {tareasProximas.length > 0 && (
           <div>
-            <SeccionHeader icono="👁️" titulo="Incidencias sin revisar +14 días" count={incViejas.length} color="#7C4A00" />
+            <SeccionHeader titulo="Tareas próximas a vencer" count={tareasProximas.length} color="#7C4A00" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {incViejas.map(({ obra, inc, dias }) => (
-                <div key={inc.id} onClick={() => onIrObra(obra)}
-                  style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}
-                  className="obra-card">
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: '#141412', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.titulo}</div>
-                    <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 2 }}>{obra.nombre}</div>
-                  </div>
-                  <span style={{ fontSize: 11, color: '#7C4A00', fontWeight: 500, whiteSpace: 'nowrap', background: '#FEF3DB', padding: '2px 8px', borderRadius: 20 }}>
-                    {dias} días
-                  </span>
-                </div>
+              {tareasProximas.map(({ obra, tarea, dias }) => (
+                <Fila key={tarea.id} obra={obra} titulo={tarea.texto}
+                  etiqueta={dias === 0 ? 'Vence hoy' : dias === 1 ? 'Mañana' : `En ${dias} días`} etColor="#7C4A00" etBg="#FEF3DB" accent="#D48A0C" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Incidencias sin revisar +10 días */}
+        {incSinRevisar.length > 0 && (
+          <div>
+            <SeccionHeader titulo="Incidencias sin revisar +10 días" count={incSinRevisar.length} color="#7C4A00" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {incSinRevisar.map(({ obra, inc, dias }) => (
+                <Fila key={inc.id} obra={obra} titulo={inc.titulo}
+                  etiqueta={`${dias} días`} etColor="#7C4A00" etBg="#FEF3DB" accent="#D48A0C" />
               ))}
             </div>
           </div>
@@ -2341,7 +2401,7 @@ function LoginScreen() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1C1C1A', padding: 20 }}>
       <div className="fade" style={{ background: '#fff', borderRadius: 16, padding: '34px 30px', width: 370, maxWidth: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }}>
         <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '0.1em', color: '#141412' }}>PLAAT</div>
-        <div style={{ display: 'inline-block', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', background: '#E4F5EA', color: '#1A6B3A', padding: '2px 8px', borderRadius: 4, fontWeight: 600, marginTop: 7, marginBottom: 26 }}>DEO</div>
+        <div style={{ fontSize: 12, letterSpacing: '0.18em', color: '#9B9B97', marginTop: 6, marginBottom: 26, fontWeight: 400 }}>/ DEO · ARQUITECTURA TÉCNICA</div>
 
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 5 }}>Correo</label>
@@ -2373,7 +2433,7 @@ export default function App() {
   const [user,       setUser]       = useState(undefined); // undefined=cargando, null=sin login, obj=dentro
   const [obras,      setObras]      = useState([]);
   const [loading,    setLoading]    = useState(true);
-  const [nav,        setNav]        = useState('hoy');
+  const [nav,        setNav]        = useState('alertas');
   const [obraActiva, setObraActiva] = useState(null);
   const [showNueva,  setShowNueva]  = useState(false);
   const [obraEditar,   setObraEditar]   = useState(null);
@@ -2389,14 +2449,23 @@ export default function App() {
   // Cargar obras solo cuando hay usuario
   useEffect(() => {
     if (!user) return;
+    let cancelado = false;
     (async () => {
       setLoading(true);
       try {
-        const r = await window.storage.get(SK, true);
-        if (r?.value) setObras(JSON.parse(r.value));
-      } catch (e) {}
-      setLoading(false);
+        if (window.storage) {
+          const r = await Promise.race([
+            window.storage.get(SK, true),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 7000)),
+          ]);
+          if (!cancelado && r && r.value) setObras(JSON.parse(r.value));
+        }
+      } catch (e) {
+        console.error('Carga de obras:', e);
+      }
+      if (!cancelado) setLoading(false);
     })();
+    return () => { cancelado = true; };
   }, [user]);
 
   async function saveObras(list) {
@@ -2449,17 +2518,9 @@ export default function App() {
   }
 
   // Calcular el contador del badge "Hoy"
-  const hoyCount = (() => {
-    const visitasPend = obras.filter(o => esHoyVisita(o))
-      .reduce((s, o) => s + o.incidencias.filter(i => i.estado !== 'resuelta' && !revisadaHoy(i)).length, 0);
-    const tareasVenc  = obras.reduce((s, o) => s + (o.apuntes || []).filter(a => a.tipo === 'tarea' && !a.hecha && a.fechaLimite && new Date(a.fechaLimite) < new Date(today())).length, 0);
-    const incViejas   = obras.reduce((s, o) => s + o.incidencias.filter(i => i.estado !== 'resuelta' && diasDesde(i.ultimaActualizacion || i.fechaCreacion) >= 14).length, 0);
-    return visitasPend + tareasVenc + incViejas;
-  })();
-
   const stats = {
     total: obras.length,
-    hoy:   hoyCount,
+    alertas: calcularAlertas(obras).total,
     incidencias: obras.reduce((s, o) => s + o.incidencias.filter(i => i.estado !== 'resuelta').length, 0),
   };
 
@@ -2504,7 +2565,7 @@ export default function App() {
         {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} />}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
-          {nav === 'hoy'       && <VistaHoy obras={obras} onIrObra={o => setObraActiva(o)} />}
+          {nav === 'alertas'   && <VistaAlertas obras={obras} onIrObra={o => setObraActiva(o)} isMobile={isMobile} />}
           {nav === 'tablero'   && (
             <>
               {/* Topbar */}
@@ -2521,7 +2582,7 @@ export default function App() {
                   <div style={{ textAlign: 'center', padding: '48px', fontSize: 13, color: '#A5A5A0' }}>Cargando obras…</div>
                 ) : obras.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                    <div style={{ width: 56, height: 56, borderRadius: 16, background: '#1C1C1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🏗️</div>
+                    <div style={{ width: 56, height: 56, borderRadius: 12, background: '#1C1C1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#F2F1ED', fontWeight: 300 }}>/</div>
                     <div>
                       <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Sin obras todavía</div>
                       <div style={{ fontSize: 13, color: '#9B9B97', marginBottom: 18 }}>Crea tu primera obra para empezar el seguimiento</div>
