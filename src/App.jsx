@@ -50,10 +50,46 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #D0CFC9; border-radius: 2px; }
-.fade { animation: fi .2s ease; }
-@keyframes fi { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-.obra-card { transition: box-shadow .2s, transform .15s; cursor: pointer; }
-.obra-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important; transform: translateY(-1px); }
+/* ── Animaciones sutiles ─────────────────────────────── */
+@keyframes fi    { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes pop   { from { opacity: 0; transform: scale(.97);     } to { opacity: 1; transform: none; } }
+@keyframes sheet { from { transform: translateY(100%);          } to { transform: none; } }
+@keyframes overlay { from { opacity: 0; } to { opacity: 1; } }
+
+.fade { animation: fi .22s ease both; }
+
+/* Entrada escalonada de listas */
+.list-in > * { animation: fi .28s ease both; }
+.list-in > *:nth-child(1) { animation-delay: .03s; }
+.list-in > *:nth-child(2) { animation-delay: .07s; }
+.list-in > *:nth-child(3) { animation-delay: .11s; }
+.list-in > *:nth-child(4) { animation-delay: .15s; }
+.list-in > *:nth-child(5) { animation-delay: .19s; }
+.list-in > *:nth-child(6) { animation-delay: .23s; }
+.list-in > *:nth-child(7) { animation-delay: .27s; }
+.list-in > *:nth-child(n+8) { animation-delay: .30s; }
+
+.obra-card { transition: box-shadow .2s, transform .14s ease; cursor: pointer; }
+.obra-card:hover  { box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important; transform: translateY(-1px); }
+.obra-card:active { transform: scale(.985); }
+
+/* Realimentación al tocar */
+.tap { transition: transform .14s ease, box-shadow .15s, border-color .15s; }
+.tap:active { transform: scale(.98); }
+
+/* Barras de progreso que se rellenan suave */
+.bar-fill { transition: width .55s cubic-bezier(.3,.8,.3,1); }
+
+/* Entrada de modales */
+.modal-overlay { animation: overlay .2s ease both; }
+.modal-in { animation: pop .22s cubic-bezier(.2,.8,.2,1) both; }
+.sheet-in { animation: sheet .3s cubic-bezier(.2,.85,.25,1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fade, .list-in > *, .modal-in, .sheet-in, .modal-overlay { animation: none !important; }
+  .obra-card:active, .tap:active { transform: none !important; }
+}
+
 .hov-nav:hover { background: #ECEAE4 !important; }
 .hov-row:hover   { background: #F9F8F5 !important; }
 .hov-chip:hover  { background: #ECEAE4 !important; }
@@ -119,11 +155,11 @@ function Modal({ title, onClose, children, footer, wide }) {
     ? { background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: '100%', maxHeight: '94vh', borderTop: '1px solid #E0DFD9', boxShadow: '0 -8px 40px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column' }
     : { background: '#fff', borderRadius: 14, width: wide ? 540 : 460, maxWidth: '95vw', maxHeight: '90vh', border: '1px solid #E0DFD9', boxShadow: '0 24px 64px rgba(0,0,0,.14)', display: 'flex', flexDirection: 'column' };
   return (
-    <div
+    <div className="modal-overlay"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }}
       onClick={e => { if (e.target === e.currentTarget) setConfirmando(true); }}
     >
-      <div className="fade" style={panelStyle}>
+      <div className={isMobile ? 'sheet-in' : 'modal-in'} style={panelStyle}>
         <div style={{ padding: '15px 18px', borderBottom: '1px solid #ECEAE4', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 600, flex: 1 }}>{title}</div>
           <button onClick={() => setConfirmando(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: '#A5A5A0', lineHeight: 1, padding: '0 4px' }}>×</button>
@@ -274,7 +310,7 @@ function ObraCard({ obra, onClick, onEditar, onEliminar }) {
   const iniciales   = (obra.nombre || '?').trim().slice(0, 2).toUpperCase();
 
   return (
-    <div className="obra-card fade" onClick={onClick}
+    <div className="obra-card" onClick={onClick}
       style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 5px 18px rgba(0,0,0,0.05)', overflow: 'hidden', borderLeft: `3px solid ${accentColor}`, position: 'relative' }}>
 
       {/* Parte superior */}
@@ -313,7 +349,7 @@ function ObraCard({ obra, onClick, onEditar, onEliminar }) {
           {totalPuntos > 0 && (
             <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ flex: 1, height: 4, background: '#F0EFEA', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ width: inspPct + '%', height: '100%', background: inspPct === 100 ? '#52A124' : '#1C1C1A', borderRadius: 2 }} />
+                <div className="bar-fill" style={{ width: inspPct + '%', height: '100%', background: inspPct === 100 ? '#52A124' : '#1C1C1A', borderRadius: 2 }} />
               </div>
               <span style={{ fontSize: 11, color: '#6B6B66', fontWeight: 500, whiteSpace: 'nowrap' }}>{inspDone}/{totalPuntos} insp.</span>
             </div>
@@ -469,8 +505,9 @@ function ModuloInspecciones({ obra, onSave }) {
   const conIncidencia   = obra.disciplinas.reduce((s, d) => s + d.puntos.filter(p => p.estado === 'incidencia').length, 0);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 12, height: '100%' }}>
-      {/* Panel izquierdo: disciplinas */}
+    <div style={{ display: isMobile ? 'flex' : 'grid', flexDirection: isMobile ? 'column' : undefined, gridTemplateColumns: isMobile ? undefined : '220px 1fr', gap: 12, height: isMobile ? 'auto' : '100%' }}>
+      {/* Panel izquierdo: disciplinas (en móvil, solo si no hay disciplina abierta) */}
+      {(!isMobile || !disciplina) && (
       <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 500, padding: '2px 6px 8px' }}>
           Disciplinas
@@ -522,9 +559,14 @@ function ModuloInspecciones({ obra, onSave }) {
           </div>
         )}
       </div>
+      )}
 
-      {/* Panel derecho: puntos de inspección */}
-      <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '14px 16px', overflow: 'auto' }}>
+      {/* Panel derecho: puntos de inspección (en móvil, solo si hay disciplina abierta) */}
+      {(!isMobile || disciplina) && (
+      <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '14px 16px', overflow: isMobile ? 'visible' : 'auto' }}>
+        {isMobile && disciplina && (
+          <button onClick={() => setDisciplinaActiva(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#6B6B66', padding: '0 0 12px', display: 'flex', alignItems: 'center', gap: 5 }}>← Disciplinas</button>
+        )}
         {!disciplina ? (
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#A5A5A0' }}>
             <div style={{ fontSize: 32 }}>📋</div>
@@ -580,6 +622,7 @@ function ModuloInspecciones({ obra, onSave }) {
           </>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -663,7 +706,7 @@ function IncCard({ inc, esVisitaHoy, onClick, onRevisar }) {
   const mostrarRevisar = esVisitaHoy && inc.estado !== 'resuelta';
 
   return (
-    <div style={{ background: '#fff', border: `1px solid ${esVisitaHoy && !revisada && inc.estado !== 'resuelta' ? '#F5D98B' : '#E8E7E1'}`, borderRadius: 11, overflow: 'hidden', transition: 'border-color .15s', borderLeft: `3px solid ${est.color}` }}>
+    <div className="tap" style={{ background: '#fff', border: `1px solid ${esVisitaHoy && !revisada && inc.estado !== 'resuelta' ? '#F5D98B' : '#E8E7E1'}`, borderRadius: 11, overflow: 'hidden', borderLeft: `3px solid ${est.color}` }}>
 
       <div style={{ display: 'flex', alignItems: 'stretch' }}>
         {/* Foto */}
@@ -1182,7 +1225,7 @@ function ModuloIncidencias({ obra, onSave }) {
           {vista === 'pendientes' && !showNueva && <div style={{ marginTop: 12 }}><Btn onClick={() => setShowNueva(true)}>+ Nueva incidencia</Btn></div>}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div className="list-in" style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           {mostradas.map(i => (
             <IncCard
               key={i.id}
@@ -2379,10 +2422,12 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
 
       {/* Contenido */}
       <div style={{ flex: 1, overflow: 'auto', padding: pad, background: '#F2F1ED', minHeight: 0 }}>
-        {tab === 'inspecciones' && <ModuloInspecciones obra={obra} onSave={onSave} />}
-        {tab === 'incidencias'  && <ModuloIncidencias  obra={obra} onSave={onSave} />}
-        {tab === 'calidad'      && <ModuloCalidad obra={obra} onSave={onSave} />}
-        {tab === 'anotaciones'  && <ModuloApuntes obra={obra} onSave={onSave} />}
+        <div key={tab} className="fade">
+          {tab === 'inspecciones' && <ModuloInspecciones obra={obra} onSave={onSave} />}
+          {tab === 'incidencias'  && <ModuloIncidencias  obra={obra} onSave={onSave} />}
+          {tab === 'calidad'      && <ModuloCalidad obra={obra} onSave={onSave} />}
+          {tab === 'anotaciones'  && <ModuloApuntes obra={obra} onSave={onSave} />}
+        </div>
       </div>
 
       {/* Tabs abajo — solo móvil */}
@@ -2617,7 +2662,7 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div className="list-in" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {obras.map(o => <ObraCard key={o.id} obra={o} onClick={() => setObraActiva(o)} onEditar={setObraEditar} onEliminar={setObraEliminar} />)}
                   </div>
                 )}
