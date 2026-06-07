@@ -2236,7 +2236,7 @@ function VistaAlertas({ obras, onIrObra, isMobile }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Topbar */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #ECEAE4', padding: isMobile ? '13px 16px' : '13px 22px', flexShrink: 0 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #ECEAE4', padding: isMobile ? '13px 16px' : '13px 22px', paddingTop: isMobile ? 'calc(13px + env(safe-area-inset-top))' : '13px', flexShrink: 0 }}>
         <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Alertas</div>
         <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 1 }}>{total > 0 ? `${total} aviso${total !== 1 ? 's' : ''} requieren tu atención` : 'Sin avisos pendientes'}</div>
       </div>
@@ -2301,10 +2301,10 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
   const [editEstado, setEditEstado] = useState(false);
 
   const tabs = [
-    { id: 'inspecciones', label: 'Inspecciones' },
-    { id: 'incidencias',  label: 'Incidencias'  },
-    { id: 'calidad',      label: 'Calidad'       },
-    { id: 'anotaciones',  label: 'Notas y tareas' },
+    { id: 'inspecciones', label: 'Inspecciones',   short: 'Insp.'   },
+    { id: 'incidencias',  label: 'Incidencias',    short: 'Incid.'  },
+    { id: 'calidad',      label: 'Calidad',         short: 'Calidad' },
+    { id: 'anotaciones',  label: 'Notas y tareas',  short: 'Notas'   },
   ];
 
   const accentColor = STATUS_ACCENT[obra.estado] || STATUS_ACCENT.en_curso;
@@ -2315,11 +2315,11 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* Header oscuro — mismo estilo que el sidebar */}
-      <div style={{ background: '#1C1C1A', flexShrink: 0 }}>
+      <div style={{ background: '#1C1C1A', flexShrink: 0, paddingTop: isMobile ? 'env(safe-area-inset-top)' : 0 }}>
 
         {/* Breadcrumb + nombre + estado */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '12px 14px 10px' : '14px 22px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-          <button onClick={onBack} style={{ fontSize: isMobile ? 13 : 12, color: 'rgba(255,255,255,0.55)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '12px 14px' : '14px 22px 12px', borderBottom: isMobile ? 'none' : '1px solid rgba(255,255,255,0.07)' }}>
+          <button onClick={onBack} style={{ fontSize: isMobile ? 14 : 12, color: 'rgba(255,255,255,0.55)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             ←{isMobile ? '' : ' Mis obras'}
           </button>
           {!isMobile && <span style={{ color: 'rgba(255,255,255,0.15)' }}>/</span>}
@@ -2347,30 +2347,46 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
           </div>
         </div>
 
-        {/* Tabs (scroll horizontal en móvil) */}
-        <div className="no-scrollbar" style={{ display: 'flex', padding: isMobile ? '0 8px' : '0 22px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              padding: isMobile ? '12px 14px' : '11px 16px', background: 'none', border: 'none',
-              borderBottom: `2px solid ${tab === t.id ? accentColor : 'transparent'}`,
-              cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0,
-              fontWeight: tab === t.id ? 500 : 400,
-              color: tab === t.id ? '#F2F1ED' : 'rgba(255,255,255,0.32)',
-              transition: 'all .15s',
-            }}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {/* Tabs arriba — solo escritorio */}
+        {!isMobile && (
+          <div className="no-scrollbar" style={{ display: 'flex', padding: '0 22px', overflowX: 'auto' }}>
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{
+                padding: '11px 16px', background: 'none', border: 'none',
+                borderBottom: `2px solid ${tab === t.id ? accentColor : 'transparent'}`,
+                cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0,
+                fontWeight: tab === t.id ? 500 : 400,
+                color: tab === t.id ? '#F2F1ED' : 'rgba(255,255,255,0.32)',
+                transition: 'all .15s',
+              }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Contenido */}
-      <div style={{ flex: 1, overflow: 'auto', padding: pad, background: '#F2F1ED' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: pad, background: '#F2F1ED', minHeight: 0 }}>
         {tab === 'inspecciones' && <ModuloInspecciones obra={obra} onSave={onSave} />}
         {tab === 'incidencias'  && <ModuloIncidencias  obra={obra} onSave={onSave} />}
         {tab === 'calidad'      && <ModuloCalidad obra={obra} onSave={onSave} />}
         {tab === 'anotaciones'  && <ModuloApuntes obra={obra} onSave={onSave} />}
       </div>
+
+      {/* Tabs abajo — solo móvil */}
+      {isMobile && (
+        <div style={{ display: 'flex', background: '#1C1C1A', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          {tabs.map(t => {
+            const activo = tab === t.id;
+            return (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, background: 'none', border: 'none', borderTop: `2px solid ${activo ? accentColor : 'transparent'}`, cursor: 'pointer', padding: '11px 2px 12px', color: activo ? '#F2F1ED' : 'rgba(255,255,255,0.4)', fontSize: 11.5, fontWeight: activo ? 600 : 400, letterSpacing: '0.01em' }}>
+                {t.short}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2569,7 +2585,7 @@ export default function App() {
           {nav === 'tablero'   && (
             <>
               {/* Topbar */}
-              <div style={{ background: '#fff', borderBottom: '1px solid #ECEAE4', padding: '13px 22px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <div style={{ background: '#fff', borderBottom: '1px solid #ECEAE4', padding: isMobile ? '13px 16px' : '13px 22px', paddingTop: isMobile ? 'calc(13px + env(safe-area-inset-top))' : '13px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Mis obras</div>
                   {obras.length > 0 && <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 1 }}>{obras.filter(o => o.estado === 'en_curso').length} en curso · {obras.length} en total</div>}
