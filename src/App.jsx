@@ -55,6 +55,7 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
 @keyframes pop   { from { opacity: 0; transform: scale(.97);     } to { opacity: 1; transform: none; } }
 @keyframes sheet { from { transform: translateY(100%);          } to { transform: none; } }
 @keyframes overlay { from { opacity: 0; } to { opacity: 1; } }
+@keyframes spin  { to { transform: rotate(360deg); } }
 
 .fade { animation: fi .22s ease both; }
 
@@ -451,9 +452,236 @@ function ModalNuevaObra({ onClose, onCreate, obra }) {
 
 // ─── MÓDULO: Inspecciones ─────────────────────────────────────────────────────
 
+// ─── PLANOS DE INSPECCIÓN ─────────────────────────────────────────────────────
+
+async function loadPdfJs() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
+    s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar PDF.js'));
+    document.head.appendChild(s);
+  });
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+  return window.pdfjsLib;
+}
+
+async function pdfFileToImgData(file) {
+  const lib = await loadPdfJs();
+  const ab  = await file.arrayBuffer();
+  const pdf  = await lib.getDocument({ data: new Uint8Array(ab) }).promise;
+  const page = await pdf.getPage(1);
+  const vp   = page.getViewport({ scale: 2 });
+  const canvas = document.createElement('canvas');
+  canvas.width = vp.width; canvas.height = vp.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+  return canvas.toDataURL('image/jpeg', 0.75);
+}
+
+function comprimirImagen(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1600;
+        const sc  = Math.min(1, MAX / Math.max(img.width, img.height));
+        const c   = document.createElement('canvas');
+        c.width = Math.round(img.width * sc);
+        c.height = Math.round(img.height * sc);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        res(c.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = rej;
+      img.src = ev.target.result;
+    };
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+function PlanoPunto({ punto, onUpdate }) {
+  const isMobile    = useIsMobile();
+  const imgRef      = useRef(null);
+  const [cargando,   setCargando]   = useState(false);
+  const [marcando,   setMarcando]   = useState(null);   // {x, y} %
+  const [formMarca,  setFormMarca]  = useState({ desc: '', foto: null });
+  const [marcaOpen,  setMarcaOpen]  = useState(null);   // id
+
+  const plano  = punto.plano;
+  const marcas = plano?.marcas || [];
+
+  async function abrirSelector() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.pdf,image/*';
+    inp.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(inp);
+    inp.onchange = async () => {
+      const file = inp.files[0];
+      if (!file) return;
+      document.body.removeChild(inp);
+      if (file.size > 30 * 1024 * 1024) { alert('El archivo supera 30 MB'); return; }
+      setCargando(true);
+      try {
+        const imgData = file.type === 'application/pdf' || file.name.endsWith('.pdf')
+          ? await pdfFileToImgData(file)
+          : await comprimirImagen(file);
+        onUpdate({ ...punto, plano: { nombre: file.name, imgData, marcas: plano?.marcas || [] } });
+      } catch (e) { alert('Error al procesar el plano: ' + e.message); }
+      setCargando(false);
+    };
+    inp.click();
+  }
+
+  function handleTapPlano(e) {
+    if (marcando) return;
+    const rect = imgRef.current.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const x = parseFloat(((clientX - rect.left) / rect.width  * 100).toFixed(1));
+    const y = parseFloat(((clientY - rect.top)  / rect.height * 100).toFixed(1));
+    setMarcando({ x, y });
+    setFormMarca({ desc: '', foto: null });
+  }
+
+  function guardarMarca() {
+    if (!formMarca.desc.trim()) return;
+    const nuevas = [...marcas, {
+      id: uid(), x: marcando.x, y: marcando.y,
+      desc: formMarca.desc.trim(), foto: formMarca.foto,
+      createdAt: new Date().toISOString(),
+    }];
+    onUpdate({ ...punto, plano: { ...plano, marcas: nuevas } });
+    setMarcando(null);
+  }
+
+  function deleteMarca(id) {
+    onUpdate({ ...punto, plano: { ...plano, marcas: marcas.filter(m => m.id !== id) } });
+    if (marcaOpen === id) setMarcaOpen(null);
+  }
+
+  // — Sin plano —
+  if (!plano) return (
+    <div style={{ margin: '10px 0 4px', padding: '14px 16px', background: '#F9F8F5', borderRadius: 10, border: '1.5px dashed #E0DFD9' }}>
+      <div style={{ fontSize: 13, color: '#9B9B97', marginBottom: 10, lineHeight: 1.5 }}>
+        Adjunta un plano (PDF o imagen) para marcar incidencias con su ubicación exacta.
+      </div>
+      {cargando
+        ? <div style={{ fontSize: 13, color: '#9B9B97', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid #D0D0CB', borderTopColor: '#141412', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+            Procesando plano...
+          </div>
+        : <button onClick={abrirSelector} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #D0D0CB', background: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>+ Subir plano (PDF o imagen)</button>
+      }
+    </div>
+  );
+
+  // — Con plano —
+  return (
+    <div style={{ margin: '10px 0 4px' }}>
+      {/* Cabecera plano */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 500, color: '#52524E', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plano.nombre}</span>
+        <span style={{ fontSize: 11, color: '#A5A5A0' }}>{marcas.length} marca{marcas.length !== 1 ? 's' : ''}</span>
+        {cargando
+          ? <span style={{ fontSize: 11, color: '#9B9B97' }}>Procesando...</span>
+          : <button onClick={abrirSelector} style={{ fontSize: 11, color: '#9B9B97', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 6, border: '1px solid #E8E7E1' }}>Reemplazar</button>}
+      </div>
+
+      {/* Imagen del plano con marcas */}
+      <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid #E8E7E1', cursor: marcando ? 'default' : 'crosshair', userSelect: 'none', touchAction: 'none' }}
+        onClick={!marcando ? handleTapPlano : undefined}
+        onTouchEnd={!marcando ? e => { e.preventDefault(); handleTapPlano(e); } : undefined}>
+        <img ref={imgRef} src={plano.imgData} alt="Plano" style={{ width: '100%', display: 'block', pointerEvents: 'none' }} />
+        {/* Marcas existentes */}
+        {marcas.map((m, idx) => (
+          <button key={m.id} onClick={e => { e.stopPropagation(); setMarcaOpen(marcaOpen === m.id ? null : m.id); }}
+            style={{ position: 'absolute', left: m.x + '%', top: m.y + '%', transform: 'translate(-50%,-50%)', width: 26, height: 26, borderRadius: '50%', background: '#E24B4A', color: '#fff', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(0,0,0,.35)', fontSize: 11, fontWeight: 700, cursor: 'pointer', zIndex: 2, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {idx + 1}
+          </button>
+        ))}
+        {/* Nueva marca (pendiente de guardar) */}
+        {marcando && (
+          <div style={{ position: 'absolute', left: marcando.x + '%', top: marcando.y + '%', transform: 'translate(-50%,-50%)', width: 26, height: 26, borderRadius: '50%', background: '#1C1C1A', color: '#fff', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(0,0,0,.35)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 300, zIndex: 2, pointerEvents: 'none' }}>+</div>
+        )}
+        {/* Hint sobre el plano */}
+        {!marcando && marcas.length === 0 && (
+          <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11, padding: '5px 11px', borderRadius: 20, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+            {isMobile ? 'Toca el plano' : 'Clic en el plano'} para marcar una incidencia
+          </div>
+        )}
+      </div>
+
+      {/* Formulario nueva marca */}
+      {marcando && (
+        <div className="fade" style={{ marginTop: 8, padding: '12px 14px', background: '#F9F8F5', borderRadius: 10, border: '1px solid #E8E7E1' }}>
+          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8, color: '#141412' }}>/ Nueva marca — ¿qué has visto?</div>
+          <textarea placeholder="Describe la incidencia observada..." value={formMarca.desc} onChange={e => setFormMarca(f => ({ ...f, desc: e.target.value }))} style={{ marginBottom: 8, minHeight: 64 }} />
+          {formMarca.foto
+            ? <div style={{ position: 'relative', marginBottom: 8 }}>
+                <img src={formMarca.foto} style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
+                <button onClick={() => setFormMarca(f => ({ ...f, foto: null }))} style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', borderRadius: '50%', width: 24, height: 24, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+              </div>
+            : <button onClick={() => pickFiles('image/*', f => setFormMarca(fm => ({ ...fm, foto: f.data })))}
+                style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginBottom: 8 }}>+ Añadir foto</button>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn primary full disabled={!formMarca.desc.trim()} onClick={guardarMarca}>Guardar marca</Btn>
+            <Btn onClick={() => setMarcando(null)}>✕</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de marcas */}
+      {marcas.length > 0 && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {marcas.map((m, idx) => (
+            <div key={m.id} style={{ border: `1px solid ${marcaOpen === m.id ? '#1C1C1A' : '#E8E7E1'}`, borderRadius: 9, overflow: 'hidden', transition: 'border-color .15s' }}>
+              <div onClick={() => setMarcaOpen(marcaOpen === m.id ? null : m.id)}
+                style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', cursor: 'pointer', background: marcaOpen === m.id ? '#F5F4F0' : '#fff' }}>
+                <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#E24B4A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</div>
+                <div style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.desc}</div>
+                <div style={{ fontSize: 11, color: '#A5A5A0', flexShrink: 0 }}>{fmtShort(m.createdAt)}</div>
+                <span style={{ fontSize: 12, color: '#C5C4BE' }}>{marcaOpen === m.id ? '▲' : '▼'}</span>
+              </div>
+              {marcaOpen === m.id && (
+                <div className="fade" style={{ padding: '0 12px 12px' }}>
+                  {m.foto && <img src={m.foto} style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 8, marginBottom: 8, marginTop: 6, display: 'block' }} />}
+                  <p style={{ fontSize: 13, color: '#18180F', lineHeight: 1.55, marginBottom: 10 }}>{m.desc}</p>
+                  <Btn sm danger onClick={() => deleteMarca(m.id)}>Eliminar marca</Btn>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ModuloInspecciones({ obra, onSave }) {
   const isMobile = useIsMobile();
-  const [disciplinaActiva, setDisciplinaActiva] = useState(null);
+  const [disciplinaActiva,    setDisciplinaActiva]    = useState(null);
+  const [showNuevaDisciplina, setShowNuevaDisciplina] = useState(false);
+  const [showNuevoPunto,      setShowNuevoPunto]      = useState(false);
+  const [nombreDisciplina,    setNombreDisciplina]    = useState('');
+  const [nombrePunto,         setNombrePunto]         = useState('');
+  const [puntosExpandidos,    setPuntosExpandidos]    = useState(new Set());
+
+  function togglePunto(id) {
+    setPuntosExpandidos(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function updatePunto(updated) {
+    const disciplinas = obra.disciplinas.map(d => d.id === disciplinaActiva
+      ? { ...d, puntos: d.puntos.map(p => p.id === updated.id ? updated : p) }
+      : d);
+    onSave({ ...obra, disciplinas });
+  }
   const [showNuevaDisciplina, setShowNuevaDisciplina] = useState(false);
   const [showNuevoPunto, setShowNuevoPunto] = useState(false);
   const [nombreDisciplina, setNombreDisciplina] = useState('');
@@ -588,23 +816,36 @@ function ModuloInspecciones({ obra, onSave }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
               {disciplina.puntos.map(p => {
-                const est = ESTADOS_INSP[p.estado] || ESTADOS_INSP.pendiente;
+                const est       = ESTADOS_INSP[p.estado] || ESTADOS_INSP.pendiente;
+                const expandido = puntosExpandidos.has(p.id);
+                const nMarcas   = p.plano?.marcas?.length || 0;
                 return (
-                  <div key={p.id} style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? 8 : 10, padding: '10px 12px', border: '1px solid #E8E7E1', borderRadius: 9 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 400, color: '#18180F' }}>{p.nombre}</div>
-                      {p.fecha && <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 2 }}>{fmtDate(p.fecha)}</div>}
+                  <div key={p.id} style={{ border: `1px solid ${expandido ? '#C5C4BE' : '#E8E7E1'}`, borderRadius: 9, overflow: 'hidden', transition: 'border-color .15s' }}>
+                    {/* Fila principal */}
+                    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? 8 : 10, padding: '10px 12px', background: expandido ? '#FAFAF8' : '#fff' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 400, color: '#18180F' }}>{p.nombre}</div>
+                        {p.fecha && <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 2 }}>{fmtDate(p.fecha)}</div>}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
+                        <select value={p.estado} onChange={e => updatePuntoEstado(p.id, e.target.value)}
+                          style={{ width: isMobile ? '100%' : 'auto', fontSize: 12, padding: '5px 9px', borderRadius: 20, border: `1px solid ${est.color}30`, background: est.bg, color: est.color, fontWeight: 500, cursor: 'pointer' }}>
+                          {Object.entries(ESTADOS_INSP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </select>
+                        {/* Botón plano */}
+                        <button onClick={() => togglePunto(p.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 6, border: '1px solid #E0DFD9', background: expandido ? '#1C1C1A' : '#fff', color: expandido ? '#F2F1ED' : '#6B6B66', fontSize: 11, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                          / Plano{nMarcas > 0 ? ` (${nMarcas})` : ''}
+                        </button>
+                        <button onClick={() => deletePunto(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
-                      <select
-                        value={p.estado}
-                        onChange={e => updatePuntoEstado(p.id, e.target.value)}
-                        style={{ width: isMobile ? '100%' : 'auto', fontSize: 12, padding: '5px 9px', borderRadius: 20, border: `1px solid ${est.color}30`, background: est.bg, color: est.color, fontWeight: 500, cursor: 'pointer' }}
-                      >
-                        {Object.entries(ESTADOS_INSP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                      </select>
-                      <button onClick={() => deletePunto(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
-                    </div>
+                    {/* Plano expandido */}
+                    {expandido && (
+                      <div className="fade" style={{ padding: '0 12px 12px', borderTop: '1px solid #F2F1ED', background: '#FAFAF8' }}>
+                        <PlanoPunto punto={p} onUpdate={updatePunto} />
+                      </div>
+                    )}
                   </div>
                 );
               })}
