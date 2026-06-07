@@ -217,7 +217,7 @@ function Sidebar({ nav, setNav, stats, user }) {
 function BottomNav({ nav, setNav, stats }) {
   const ICONS = {
     alertas: 'M10 4a3 3 0 0 0-3 3c0 4-1.5 5-2 6h10c-.5-1-2-2-2-6a3 3 0 0 0-3-3Z M8.5 16a1.5 1.5 0 0 0 3 0',
-    obras:   'M3 17V8l5-3 5 3v9 M7 17v-4h2v4',
+    tablero: 'M3 17V8l5-3 5 3v9 M7 17v-4h2v4',
     salir:   'M7 4H4v12h3 M10 10h7 M14 7l3 3-3 3',
   };
   const items = [
@@ -227,7 +227,7 @@ function BottomNav({ nav, setNav, stats }) {
   function salir() { if (window.auth) window.auth.signOut(); }
   const Icono = ({ d, activo }) => (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: activo ? 1 : 0.65 }}>
-      {d.split(' M').map((seg, i) => <path key={i} d={(i === 0 ? seg : 'M' + seg)} />)}
+      {(d || '').split(' M').map((seg, i) => <path key={i} d={(i === 0 ? seg : 'M' + seg)} />)}
     </svg>
   );
   return (
