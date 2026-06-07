@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -682,10 +682,6 @@ function ModuloInspecciones({ obra, onSave }) {
       : d);
     onSave({ ...obra, disciplinas });
   }
-  const [showNuevaDisciplina, setShowNuevaDisciplina] = useState(false);
-  const [showNuevoPunto, setShowNuevoPunto] = useState(false);
-  const [nombreDisciplina, setNombreDisciplina] = useState('');
-  const [nombrePunto, setNombrePunto] = useState('');
 
   const disciplina = obra.disciplinas.find(d => d.id === disciplinaActiva);
 
