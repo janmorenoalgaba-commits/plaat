@@ -416,6 +416,7 @@ function ModalNuevaObra({ onClose, onCreate, obra }) {
 // ─── MÓDULO: Inspecciones ─────────────────────────────────────────────────────
 
 function ModuloInspecciones({ obra, onSave }) {
+  const isMobile = useIsMobile();
   const [disciplinaActiva, setDisciplinaActiva] = useState(null);
   const [showNuevaDisciplina, setShowNuevaDisciplina] = useState(false);
   const [showNuevoPunto, setShowNuevoPunto] = useState(false);
@@ -547,19 +548,21 @@ function ModuloInspecciones({ obra, onSave }) {
               {disciplina.puntos.map(p => {
                 const est = ESTADOS_INSP[p.estado] || ESTADOS_INSP.pendiente;
                 return (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #E8E7E1', borderRadius: 9 }}>
-                    <div style={{ flex: 1 }}>
+                  <div key={p.id} style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? 8 : 10, padding: '10px 12px', border: '1px solid #E8E7E1', borderRadius: 9 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 400, color: '#18180F' }}>{p.nombre}</div>
                       {p.fecha && <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 2 }}>{fmtDate(p.fecha)}</div>}
                     </div>
-                    <select
-                      value={p.estado}
-                      onChange={e => updatePuntoEstado(p.id, e.target.value)}
-                      style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 20, border: `1px solid ${est.color}20`, background: est.bg, color: est.color, fontWeight: 500, cursor: 'pointer' }}
-                    >
-                      {Object.entries(ESTADOS_INSP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                    <button onClick={() => deletePunto(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
+                      <select
+                        value={p.estado}
+                        onChange={e => updatePuntoEstado(p.id, e.target.value)}
+                        style={{ width: isMobile ? '100%' : 'auto', fontSize: 12, padding: '5px 9px', borderRadius: 20, border: `1px solid ${est.color}30`, background: est.bg, color: est.color, fontWeight: 500, cursor: 'pointer' }}
+                      >
+                        {Object.entries(ESTADOS_INSP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                      </select>
+                      <button onClick={() => deletePunto(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                    </div>
                   </div>
                 );
               })}
@@ -649,52 +652,60 @@ function pickFiles(accept, cb) {
 
 // ── Card de incidencia ────────────────────────────────────────────────────────
 function IncCard({ inc, esVisitaHoy, onClick, onRevisar }) {
+  const isMobile = useIsMobile();
   const est      = ESTADOS_INC[inc.estado] || ESTADOS_INC.detectada;
   const fotos    = (inc.historial || []).flatMap(h => h.adjuntos || []).filter(a => a.tipo === 'imagen');
   const foto     = fotos[0];
   const revisada = revisadaHoy(inc);
   const dias     = diasDesde(inc.ultimaActualizacion || inc.fechaCreacion);
   const sinRevisarAlerta = inc.estado !== 'resuelta' && diasSinRevisar(inc) >= 10;
-  // Última nota escrita (no las revisiones automáticas vacías)
   const ultNota  = (inc.historial || []).slice().reverse().find(h => h.nota && h.nota.trim());
+  const mostrarRevisar = esVisitaHoy && inc.estado !== 'resuelta';
 
   return (
-    <div style={{ background: '#fff', border: `1px solid ${esVisitaHoy && !revisada && inc.estado !== 'resuelta' ? '#F5D98B' : '#E8E7E1'}`, borderRadius: 11, display: 'flex', alignItems: 'stretch', overflow: 'hidden', transition: 'border-color .15s', borderLeft: `3px solid ${est.color}` }}>
-      {/* Foto */}
-      <div onClick={onClick} style={{ width: 80, flexShrink: 0, position: 'relative', background: foto ? 'transparent' : '#F5F4F0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-        {foto
-          ? <img src={foto.data} alt="" style={{ width: 80, height: '100%', minHeight: 80, objectFit: 'cover', display: 'block' }} />
-          : <span style={{ fontSize: 20, color: '#C5C4BE', fontWeight: 300 }}>—</span>}
-        {fotos.length > 1 && (
-          <span style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 10, fontWeight: 500, padding: '1px 6px', borderRadius: 3 }}>{fotos.length} fotos</span>
-        )}
-      </div>
+    <div style={{ background: '#fff', border: `1px solid ${esVisitaHoy && !revisada && inc.estado !== 'resuelta' ? '#F5D98B' : '#E8E7E1'}`, borderRadius: 11, overflow: 'hidden', transition: 'border-color .15s', borderLeft: `3px solid ${est.color}` }}>
 
-      {/* Info */}
-      <div onClick={onClick} style={{ flex: 1, minWidth: 0, padding: '10px 13px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <div style={{ fontSize: 13.5, fontWeight: 600, color: '#141412', marginBottom: 3, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.titulo}</div>
-        {ultNota && (
-          <div style={{ fontSize: 12, color: '#9B9B97', marginBottom: 6, lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>{ultNota.nota}</div>
-        )}
-        <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Pill label={est.label} bg={est.bg} color={est.color} />
-          <span style={{ fontSize: 11, color: sinRevisarAlerta ? '#8A1F1F' : '#A5A5A0', fontWeight: sinRevisarAlerta ? 600 : 400 }}>
-            {sinRevisarAlerta ? `${diasSinRevisar(inc)}d sin revisar` : dias === 0 ? 'Hoy' : `Hace ${dias}d`}
-          </span>
-        </div>
-      </div>
-
-      {/* Botón revisar (solo en días de visita y si no está resuelta) */}
-      {esVisitaHoy && inc.estado !== 'resuelta' && (
-        <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', borderLeft: '1px solid #E8E7E1', flexShrink: 0 }}>
-          {revisada ? (
-            <span style={{ fontSize: 12, color: '#2D5E10', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>✓ Revisada</span>
-          ) : (
-            <button
-              onClick={e => { e.stopPropagation(); onRevisar(); }}
-              style={{ padding: '6px 11px', borderRadius: 8, border: '1px solid #D4820A', background: '#FEF3DB', color: '#7C4A00', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >Revisar</button>
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+        {/* Foto */}
+        <div onClick={onClick} style={{ width: isMobile ? 70 : 80, flexShrink: 0, position: 'relative', background: foto ? 'transparent' : '#F5F4F0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          {foto
+            ? <img src={foto.data} alt="" style={{ width: '100%', height: '100%', minHeight: isMobile ? 78 : 80, objectFit: 'cover', display: 'block' }} />
+            : <span style={{ fontSize: 20, color: '#C5C4BE', fontWeight: 300 }}>—</span>}
+          {fotos.length > 1 && (
+            <span style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 10, fontWeight: 500, padding: '1px 6px', borderRadius: 3 }}>{fotos.length} fotos</span>
           )}
+        </div>
+
+        {/* Info */}
+        <div onClick={onClick} style={{ flex: 1, minWidth: 0, padding: '10px 13px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: '#141412', marginBottom: 3, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.titulo}</div>
+          {ultNota && (
+            <div style={{ fontSize: 12, color: '#9B9B97', marginBottom: 6, lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>{ultNota.nota}</div>
+          )}
+          <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Pill label={est.label} bg={est.bg} color={est.color} />
+            <span style={{ fontSize: 11, color: sinRevisarAlerta ? '#8A1F1F' : '#A5A5A0', fontWeight: sinRevisarAlerta ? 600 : 400 }}>
+              {sinRevisarAlerta ? `${diasSinRevisar(inc)}d sin revisar` : dias === 0 ? 'Hoy' : `Hace ${dias}d`}
+            </span>
+          </div>
+        </div>
+
+        {/* Revisar a la derecha — solo escritorio */}
+        {mostrarRevisar && !isMobile && (
+          <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', borderLeft: '1px solid #E8E7E1', flexShrink: 0 }}>
+            {revisada
+              ? <span style={{ fontSize: 12, color: '#2D5E10', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>✓ Revisada</span>
+              : <button onClick={e => { e.stopPropagation(); onRevisar(); }} style={{ padding: '6px 11px', borderRadius: 8, border: '1px solid #D4820A', background: '#FEF3DB', color: '#7C4A00', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>Revisar</button>}
+          </div>
+        )}
+      </div>
+
+      {/* Revisar abajo a lo ancho — solo móvil */}
+      {mostrarRevisar && isMobile && (
+        <div style={{ borderTop: '1px solid #F2F1ED', padding: '8px 12px' }}>
+          {revisada
+            ? <span style={{ fontSize: 12.5, color: '#2D5E10', fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>✓ Revisada hoy</span>
+            : <button onClick={e => { e.stopPropagation(); onRevisar(); }} style={{ width: '100%', padding: '9px', borderRadius: 8, border: '1px solid #D4820A', background: '#FEF3DB', color: '#7C4A00', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Revisar en visita</button>}
         </div>
       )}
     </div>
