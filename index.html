@@ -9,20 +9,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="PLAAT" />
     <title>PLAAT</title>
-    <script>
-      // Diagnóstico: si algo falla, lo escribe en pantalla en vez de quedarse en blanco
-      function plaatError(msg) {
-        var d = document.getElementById('root') || document.body;
-        d.innerHTML = '<pre style="white-space:pre-wrap;word-break:break-word;padding:18px;margin:0;font:13px/1.5 monospace;color:#8A1F1F;background:#FDECEC;min-height:100vh">⚠ ERROR PLAAT:\n\n' + msg + '</pre>';
-      }
-      window.addEventListener('error', function (e) {
-        plaatError((e.message || e) + '\n\n' + (e.filename || '') + ' : línea ' + (e.lineno || '') + ':' + (e.colno || ''));
-      });
-      window.addEventListener('unhandledrejection', function (e) {
-        var r = e.reason || {};
-        plaatError('Promesa rechazada:\n' + (r.message || (r.toString ? r.toString() : JSON.stringify(r))));
-      });
-    </script>
   </head>
   <body>
     <div id="root"></div>
