@@ -424,8 +424,8 @@ function DiasPicker({ value, onChange }) {
 function ModalNuevaObra({ onClose, onCreate, obra }) {
   const editando = !!obra;
   const [form, setForm] = useState(obra
-    ? { nombre: obra.nombre || '', cliente: obra.cliente || '', direccion: obra.direccion || '', responsable: obra.responsable || RESPONSABLES[0], diasVisita: obra.diasVisita || [] }
-    : { nombre: '', cliente: '', direccion: '', responsable: RESPONSABLES[0], diasVisita: [] });
+    ? { nombre: obra.nombre || '', cliente: obra.cliente || '', direccion: obra.direccion || '', responsable: obra.responsable || RESPONSABLES[0], diasVisita: obra.diasVisita || [], emplazamiento: obra.emplazamiento || '', propiedad: obra.propiedad || '', proyectista: obra.proyectista || '', direccionObra: obra.direccionObra || '', constructora: obra.constructora || '', deoFirmante: obra.deoFirmante || '' }
+    : { nombre: '', cliente: '', direccion: '', responsable: RESPONSABLES[0], diasVisita: [], emplazamiento: '', propiedad: '', proyectista: '', direccionObra: '', constructora: '', deoFirmante: '' });
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const footer = (
     <>
@@ -446,6 +446,16 @@ function ModalNuevaObra({ onClose, onCreate, obra }) {
       <Field label="Días de visita a obra" hint="Selecciona los días que sueles ir a esta obra">
         <DiasPicker value={form.diasVisita} onChange={v => upd('diasVisita', v)} />
       </Field>
+
+      <div style={{ margin: '6px 0 14px', padding: '12px 14px', background: '#F9F8F5', borderRadius: 10, border: '1px solid #ECEAE4' }}>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 600, marginBottom: 12 }}>Datos para el acta de inspección</div>
+        <Field label="Emplazamiento"><input placeholder="Carrer Pamplona, 93-99. 08018 Barcelona" value={form.emplazamiento} onChange={e => upd('emplazamiento', e.target.value)} /></Field>
+        <Field label="Propiedad"><input placeholder="Conren Tramway Catorce, S.L.U" value={form.propiedad} onChange={e => upd('propiedad', e.target.value)} /></Field>
+        <Field label="Proyectista"><input placeholder="BCRA Arquitectes Associats SLP" value={form.proyectista} onChange={e => upd('proyectista', e.target.value)} /></Field>
+        <Field label="Dirección de Obra (DO)"><input placeholder="BCRA Arquitectes Associats SLP" value={form.direccionObra} onChange={e => upd('direccionObra', e.target.value)} /></Field>
+        <Field label="Constructora"><input placeholder="Certis" value={form.constructora} onChange={e => upd('constructora', e.target.value)} /></Field>
+        <Field label="DEO firmante"><input placeholder="Nombre del director de ejecución" value={form.deoFirmante} onChange={e => upd('deoFirmante', e.target.value)} /></Field>
+      </div>
     </Modal>
   );
 }
@@ -476,7 +486,7 @@ async function pdfFileToImgData(file) {
   const canvas = document.createElement('canvas');
   canvas.width = vp.width; canvas.height = vp.height;
   await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-  return canvas.toDataURL('image/jpeg', 0.65);
+  return { imgData: canvas.toDataURL('image/jpeg', 0.65), w: canvas.width, h: canvas.height };
 }
 
 function comprimirImagen(file) {
@@ -491,7 +501,7 @@ function comprimirImagen(file) {
         c.width = Math.round(img.width * sc);
         c.height = Math.round(img.height * sc);
         c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        res(c.toDataURL('image/jpeg', 0.75));
+        res({ imgData: c.toDataURL('image/jpeg', 0.75), w: c.width, h: c.height });
       };
       img.onerror = rej;
       img.src = ev.target.result;
@@ -501,12 +511,12 @@ function comprimirImagen(file) {
   });
 }
 
-function PlanoPunto({ punto, onUpdate, nombreObra, nombreDisciplina }) {
+function PlanoPunto({ punto, onUpdate, obra, nombreDisciplina, numActa, onActaGenerada }) {
   const isMobile    = useIsMobile();
   const imgRef      = useRef(null);
   const [cargando,      setCargando]      = useState(false);
   const [marcando,      setMarcando]      = useState(null);
-  const [formMarca,     setFormMarca]     = useState({ desc: '', foto: null });
+  const [formMarca,     setFormMarca]     = useState({ titulo: '', desc: '', foto: null });
   const [marcaOpen,     setMarcaOpen]     = useState(null);
   const [planoVisible,  setPlanoVisible]  = useState(true);
   const [generandoActa, setGenerandoActa] = useState(false);
@@ -514,12 +524,11 @@ function PlanoPunto({ punto, onUpdate, nombreObra, nombreDisciplina }) {
   const plano  = punto.plano;
   const marcas = plano?.marcas || [];
 
-  // ── Generar acta PDF ────────────────────────────────────────────────────────
+  // ── Generar acta PDF (estructura profesional PLAAT) ─────────────────────────
   async function generarActa() {
     if (!marcas.length) { alert('No hay marcas en el plano para generar el acta.'); return; }
     setGenerandoActa(true);
     try {
-      // Cargar jsPDF dinámicamente
       if (!window.jspdf) {
         await new Promise((res, rej) => {
           const s = document.createElement('script');
@@ -530,99 +539,183 @@ function PlanoPunto({ punto, onUpdate, nombreObra, nombreDisciplina }) {
       }
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const PW = 210; const PH = 297;
-      const MARGIN = 15;
-      const CONTENT_W = PW - MARGIN * 2;
-      let y = MARGIN;
+      const PW = 210, PH = 297, M = 18, CW = PW - M * 2;
+      const num = String(numActa || 1).padStart(2, '0');
+      const fechaCorta = new Date().toLocaleDateString('es-ES');
+      const fechaLarga = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+      const G = [20, 20, 18], GRIS = [107, 107, 102], LINEA = [200, 199, 193];
 
-      // ── Cabecera ────────────────────────────────────────────────────────────
-      doc.setFillColor(28, 28, 26);
-      doc.rect(0, 0, PW, 28, 'F');
-      doc.setTextColor(242, 241, 237);
-      doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-      doc.text('PLAAT / DEO', MARGIN, 12);
-      doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-      doc.text('Acta de Inspección', MARGIN, 19);
-      doc.setFontSize(8);
-      doc.text(new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }), PW - MARGIN, 19, { align: 'right' });
-      y = 36;
+      // — Cabecera y pie repetibles —
+      function cabecera() {
+        doc.setTextColor(...G);
+        doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+        doc.text(`PARTE DE INSPECCIÓN Nº: ${num}`, M, 13);
+        doc.text(`FECHA PARTE INSPECCIÓN: ${fechaCorta}`, M, 17);
+        doc.setFontSize(26); doc.setFont('helvetica', 'bold');
+        doc.text('Plaat.', PW - M, 16, { align: 'right' });
+        doc.setDrawColor(...LINEA); doc.setLineWidth(0.2);
+      }
+      function pie() {
+        doc.setTextColor(...GRIS);
+        doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+        doc.text('Plaat Arquitectura Técnica', M, PH - 10);
+        doc.text('Barcelona – Madrid', PW / 2, PH - 10, { align: 'center' });
+        doc.text('www.plaat.es', PW - M, PH - 10, { align: 'right' });
+      }
+      function nuevaPagina() { doc.addPage(); cabecera(); pie(); }
 
-      // ── Info obra / disciplina / punto ──────────────────────────────────────
-      doc.setTextColor(20, 20, 18);
-      doc.setFontSize(13); doc.setFont('helvetica', 'bold');
-      doc.text(nombreObra || 'Obra', MARGIN, y); y += 6;
-      doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-      doc.setTextColor(107, 107, 102);
-      doc.text(`${nombreDisciplina || 'Disciplina'} / ${punto.nombre}`, MARGIN, y); y += 10;
-
-      // ── Plano completo con marcas ───────────────────────────────────────────
-      if (plano?.imgData) {
-        const planoH = Math.round(CONTENT_W * 0.55);
-        doc.addImage(plano.imgData, 'JPEG', MARGIN, y, CONTENT_W, planoH);
-        // Dibujar círculos de marcas sobre el plano
-        marcas.forEach((m, idx) => {
-          const mx = MARGIN + (m.x / 100) * CONTENT_W;
-          const my = y + (m.y / 100) * planoH;
-          doc.setFillColor(226, 75, 74);
-          doc.circle(mx, my, 3.5, 'F');
-          doc.setTextColor(255, 255, 255);
-          doc.setFontSize(7); doc.setFont('helvetica', 'bold');
-          doc.text(String(idx + 1), mx, my + 0.8, { align: 'center' });
-        });
-        y += planoH + 10;
+      // Tabla simple clave/valor estilo acta
+      function filaTabla(x, yy, wLabel, wValue, label, value, h) {
+        doc.setDrawColor(...LINEA); doc.setLineWidth(0.2);
+        doc.rect(x, yy, wLabel, h);
+        doc.rect(x + wLabel, yy, wValue, h);
+        doc.setFillColor(238, 237, 231);
+        doc.rect(x, yy, wLabel, h, 'F');
+        doc.rect(x, yy, wLabel, h);
+        doc.setTextColor(...G); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+        doc.text(label, x + 2.5, yy + h / 2 + 1.2);
+        doc.setFont('helvetica', 'bold');
+        const vlines = doc.splitTextToSize(value || '', wValue - 5);
+        doc.text(vlines, x + wLabel + 2.5, yy + h / 2 + 1.2);
       }
 
-      // ── Detalle de cada marca ───────────────────────────────────────────────
-      doc.setTextColor(20, 20, 18);
-      doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-      doc.text('/ Incidencias detectadas', MARGIN, y); y += 7;
+      // ═══ PÁGINA 1 — Portada ═══
+      cabecera(); pie();
+      let y = 26;
+      // Banda título
+      doc.setFillColor(238, 237, 231);
+      doc.rect(M, y, CW, 8, 'F'); doc.setDrawColor(...LINEA); doc.rect(M, y, CW, 8);
+      doc.setTextColor(...G); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+      doc.text('ACTA DE INSPECCIÓN DE OBRA', M + 3, y + 5.5);
+      doc.text(`NÚM.: ${num}`, PW - M - 3, y + 5.5, { align: 'right' });
+      y += 14;
+
+      // Obra / Emplazamiento
+      filaTabla(M, y, 45, CW - 45, 'OBRA', (obra?.nombre || '').toUpperCase(), 9); y += 9;
+      filaTabla(M, y, 45, CW - 45, 'EMPLAZAMIENTO', (obra?.emplazamiento || obra?.direccion || '').toUpperCase(), 9); y += 16;
+
+      // Datos de la obra
+      doc.setTextColor(...G); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+      doc.text('DATOS DE LA OBRA:', M, y); y += 6;
+      const datos = [
+        ['PROPIEDAD', obra?.propiedad || obra?.cliente || ''],
+        ['PROYECTISTA', obra?.proyectista || ''],
+        ['DO', obra?.direccionObra || ''],
+        ['DEO', 'PLAAT ARQUITECTURA TÉCNICA S.L.'],
+        ['CONSTRUCTORA', obra?.constructora || ''],
+      ];
+      datos.forEach(([k, v]) => { filaTabla(M, y, 45, CW - 45, k, v, 9); y += 9; });
+      y += 10;
+
+      // Fecha firma + firmante
+      doc.setTextColor(...G); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+      doc.text('FECHA FIRMA:', M, y); y += 6;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      doc.text(`Barcelona, ${fechaLarga}.`, M, y);
+      // Firmante abajo
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+      doc.text('DIRECTOR DE EJECUCIÓN DE OBRA', M, PH - 60);
+      doc.setFont('helvetica', 'normal');
+      doc.text(obra?.deoFirmante || obra?.responsable || '', M, PH - 55);
+
+      // ═══ PÁGINA 2 — Aspectos revisados ═══
+      nuevaPagina(); y = 28;
+      doc.setTextColor(...G); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+      doc.text('Aspecto revisado:', M, y); y += 7;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+      doc.text('Durante la visita realizada, se han revisado los siguientes aspectos:', M, y); y += 7;
+
+      // Tabla temas tratados
+      doc.setFillColor(238, 237, 231);
+      doc.rect(M, y, 18, 8, 'F'); doc.rect(M, y, 18, 8);
+      doc.rect(M + 18, y, CW - 18, 8);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...G);
+      doc.text('N.º', M + 4, y + 5.3);
+      doc.text('TEMAS TRATADOS', M + 21, y + 5.3);
+      y += 8;
+      marcas.forEach((m, idx) => {
+        const titulo = (m.titulo || m.desc || '').toUpperCase();
+        const tl = doc.splitTextToSize(titulo, CW - 24);
+        const h = Math.max(9, tl.length * 4.5 + 4);
+        doc.rect(M, y, 18, h); doc.rect(M + 18, y, CW - 18, h);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+        doc.text(`N${idx + 1}`, M + 4, y + h / 2 + 1);
+        doc.text(tl, M + 21, y + h / 2 - (tl.length - 1) * 2 + 1);
+        y += h;
+      });
+      y += 8;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+      doc.text('Incidencias detectadas:', M, y); y += 6;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+      const intro = doc.splitTextToSize('Las incidencias detectadas deberán subsanarse y dar respuesta a la DEO. Para ello deberán rellenar los datos solicitados en cada incidencia y enviar fotografías a la DEO con las rectificaciones.', CW);
+      doc.text(intro, M, y); y += intro.length * 4.5 + 6;
+
+      // Plano general con marcas (respetando proporción)
+      if (plano?.imgData) {
+        const ratio = plano.h && plano.w ? plano.h / plano.w : 0.6;
+        let planoW = CW, planoH = CW * ratio;
+        if (planoH > 150) { planoH = 150; planoW = planoH / ratio; }
+        const px = M + (CW - planoW) / 2;
+        if (y + planoH > PH - 20) { nuevaPagina(); y = 28; }
+        doc.addImage(plano.imgData, 'JPEG', px, y, planoW, planoH);
+        doc.setDrawColor(...LINEA); doc.rect(px, y, planoW, planoH);
+        marcas.forEach((m, idx) => {
+          const mx = px + (m.x / 100) * planoW;
+          const my = y + (m.y / 100) * planoH;
+          doc.setFillColor(226, 75, 74); doc.circle(mx, my, 3, 'F');
+          doc.setTextColor(255, 255, 255); doc.setFontSize(7); doc.setFont('helvetica', 'bold');
+          doc.text(String(idx + 1), mx, my + 1, { align: 'center' });
+        });
+        y += planoH + 8;
+      }
+
+      // ═══ FICHAS POR INCIDENCIA ═══
+      nuevaPagina(); y = 28;
+      doc.setTextColor(...G); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+      doc.text('1. ZONAS REVISADAS', M, y); y += 8;
 
       for (let idx = 0; idx < marcas.length; idx++) {
         const m = marcas[idx];
-        // Salto de página si no hay espacio
-        if (y > PH - 60) { doc.addPage(); y = MARGIN + 10; }
+        if (y > PH - 80) { nuevaPagina(); y = 28; }
 
-        // Número + descripción
-        doc.setFillColor(226, 75, 74);
-        doc.circle(MARGIN + 3.5, y + 1, 3.5, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(7); doc.setFont('helvetica', 'bold');
-        doc.text(String(idx + 1), MARGIN + 3.5, y + 1.8, { align: 'center' });
+        // Cabecera ficha
+        doc.setFillColor(248, 248, 246);
+        doc.rect(M, y, CW, 8, 'F'); doc.setDrawColor(...LINEA); doc.rect(M, y, CW, 8);
+        doc.setTextColor(...G); doc.setFontSize(9.5); doc.setFont('helvetica', 'bold');
+        doc.text(`N${idx + 1}`, M + 3, y + 5.3);
+        doc.text((m.titulo || `Incidencia ${idx + 1}`).toUpperCase(), M + 18, y + 5.3);
+        y += 12;
 
-        doc.setTextColor(20, 20, 18);
-        doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-        const lines = doc.splitTextToSize(m.desc, CONTENT_W - 14);
-        doc.text(lines, MARGIN + 10, y + 2);
-        y += Math.max(10, lines.length * 5 + 4);
+        // Descripción
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...G);
+        const dl = doc.splitTextToSize(m.desc || '', CW - 4);
+        doc.text(dl, M + 2, y); y += dl.length * 4.5 + 5;
 
-        // Foto si existe
+        // Foto a tamaño normal (respetando proporción)
         if (m.foto) {
-          if (y > PH - 65) { doc.addPage(); y = MARGIN + 10; }
-          const fotoH = 55;
-          const fotoW = Math.min(CONTENT_W * 0.6, 90);
-          doc.addImage(m.foto, 'JPEG', MARGIN + 10, y, fotoW, fotoH);
-          y += fotoH + 6;
+          const fw = 80, fh = 60;
+          if (y + fh > PH - 20) { nuevaPagina(); y = 28; }
+          doc.addImage(m.foto, 'JPEG', M + 2, y, fw, fh);
+          doc.setDrawColor(226, 75, 74); doc.setLineWidth(0.5); doc.rect(M + 2, y, fw, fh);
+          doc.setLineWidth(0.2);
+          y += fh + 5;
         }
-
-        // Fecha
-        doc.setTextColor(165, 165, 160);
-        doc.setFontSize(8); doc.setFont('helvetica', 'normal');
-        doc.text(new Date(m.createdAt).toLocaleDateString('es-ES'), MARGIN + 10, y);
+        doc.setTextColor(...GRIS); doc.setFontSize(8);
+        doc.text(`Fecha: ${new Date(m.createdAt).toLocaleDateString('es-ES')}`, M + 2, y);
         y += 10;
-
-        // Separador
-        doc.setDrawColor(232, 231, 225);
-        doc.line(MARGIN, y - 4, PW - MARGIN, y - 4);
       }
 
-      // ── Pie ─────────────────────────────────────────────────────────────────
-      doc.setTextColor(165, 165, 160);
-      doc.setFontSize(7);
-      doc.text('Generado con PLAAT DEO', MARGIN, PH - 8);
-      doc.text(`Página 1 de ${doc.getNumberOfPages()}`, PW - MARGIN, PH - 8, { align: 'right' });
+      // Numeración de páginas
+      const total = doc.getNumberOfPages();
+      for (let p = 1; p <= total; p++) {
+        doc.setPage(p);
+        doc.setTextColor(...GRIS); doc.setFontSize(7);
+        doc.text(`Pág. ${p} / ${total}`, PW / 2, PH - 6, { align: 'center' });
+      }
 
-      const fecha = new Date().toISOString().slice(0, 10);
-      doc.save(`acta_${(punto.nombre || 'inspeccion').replace(/\s+/g, '_')}_${fecha}.pdf`);
+      const fname = new Date().toISOString().slice(0, 10);
+      doc.save(`Acta_Inspeccion_${num}_${(obra?.nombre || 'obra').replace(/\s+/g, '_')}_${fname}.pdf`);
+      if (onActaGenerada) onActaGenerada(numActa);
     } catch (e) {
       alert('Error generando el acta: ' + e.message);
     }
@@ -641,10 +734,10 @@ function PlanoPunto({ punto, onUpdate, nombreObra, nombreDisciplina }) {
       if (file.size > 30 * 1024 * 1024) { alert('El archivo supera 30 MB'); return; }
       setCargando(true);
       try {
-        const imgData = file.type === 'application/pdf' || file.name.endsWith('.pdf')
+        const r = file.type === 'application/pdf' || file.name.endsWith('.pdf')
           ? await pdfFileToImgData(file)
           : await comprimirImagen(file);
-        onUpdate({ ...punto, plano: { nombre: file.name, imgData, marcas: plano?.marcas || [] } });
+        onUpdate({ ...punto, plano: { nombre: file.name, imgData: r.imgData, w: r.w, h: r.h, marcas: plano?.marcas || [] } });
       } catch (e) { alert('Error al procesar el plano: ' + e.message); }
       setCargando(false);
     };
@@ -659,14 +752,14 @@ function PlanoPunto({ punto, onUpdate, nombreObra, nombreDisciplina }) {
     const x = parseFloat(((clientX - rect.left) / rect.width  * 100).toFixed(1));
     const y = parseFloat(((clientY - rect.top)  / rect.height * 100).toFixed(1));
     setMarcando({ x, y });
-    setFormMarca({ desc: '', foto: null });
+    setFormMarca({ titulo: '', desc: '', foto: null });
   }
 
   function guardarMarca() {
     if (!formMarca.desc.trim()) return;
     const nuevas = [...marcas, {
       id: uid(), x: marcando.x, y: marcando.y,
-      desc: formMarca.desc.trim(), foto: formMarca.foto,
+      titulo: formMarca.titulo.trim(), desc: formMarca.desc.trim(), foto: formMarca.foto,
       createdAt: new Date().toISOString(),
     }];
     onUpdate({ ...punto, plano: { ...plano, marcas: nuevas } });
@@ -746,10 +839,11 @@ function PlanoPunto({ punto, onUpdate, nombreObra, nombreDisciplina }) {
       {marcando && (
         <div className="fade" style={{ marginTop: 8, padding: '12px 14px', background: '#F9F8F5', borderRadius: 10, border: '1px solid #E8E7E1' }}>
           <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8, color: '#141412' }}>/ Nueva marca — ¿qué has visto?</div>
+          <input placeholder="Título breve (ej. Anclajes pantallas)" value={formMarca.titulo} onChange={e => setFormMarca(f => ({ ...f, titulo: e.target.value }))} style={{ marginBottom: 8 }} />
           <textarea placeholder="Describe la incidencia observada..." value={formMarca.desc} onChange={e => setFormMarca(f => ({ ...f, desc: e.target.value }))} style={{ marginBottom: 8, minHeight: 64 }} />
           {formMarca.foto
-            ? <div style={{ position: 'relative', marginBottom: 8 }}>
-                <img src={formMarca.foto} style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
+            ? <div style={{ position: 'relative', marginBottom: 8, display: 'inline-block' }}>
+                <img src={formMarca.foto} style={{ maxWidth: '100%', maxHeight: 140, objectFit: 'contain', borderRadius: 8, display: 'block' }} />
                 <button onClick={() => setFormMarca(f => ({ ...f, foto: null }))} style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', borderRadius: '50%', width: 24, height: 24, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               </div>
             : <button onClick={() => pickFiles('image/*', f => setFormMarca(fm => ({ ...fm, foto: f.data })))}
@@ -769,13 +863,14 @@ function PlanoPunto({ punto, onUpdate, nombreObra, nombreDisciplina }) {
               <div onClick={() => setMarcaOpen(marcaOpen === m.id ? null : m.id)}
                 style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', cursor: 'pointer', background: marcaOpen === m.id ? '#F5F4F0' : '#fff' }}>
                 <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#E24B4A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</div>
-                <div style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.desc}</div>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: m.titulo ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.titulo || m.desc}</div>
                 <div style={{ fontSize: 11, color: '#A5A5A0', flexShrink: 0 }}>{fmtShort(m.createdAt)}</div>
                 <span style={{ fontSize: 12, color: '#C5C4BE' }}>{marcaOpen === m.id ? '▲' : '▼'}</span>
               </div>
               {marcaOpen === m.id && (
                 <div className="fade" style={{ padding: '0 12px 12px' }}>
-                  {m.foto && <img src={m.foto} style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 8, marginBottom: 8, marginTop: 6, display: 'block' }} />}
+                  {m.foto && <img src={m.foto} style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 8, marginBottom: 8, marginTop: 6, display: 'block' }} />}
+                  {m.titulo && <div style={{ fontSize: 13, fontWeight: 600, color: '#141412', marginBottom: 3 }}>{m.titulo}</div>}
                   <p style={{ fontSize: 13, color: '#18180F', lineHeight: 1.55, marginBottom: 10 }}>{m.desc}</p>
                   <Btn sm danger onClick={() => deleteMarca(m.id)}>Eliminar marca</Btn>
                 </div>
@@ -968,7 +1063,7 @@ function ModuloInspecciones({ obra, onSave }) {
                     {/* Plano expandido */}
                     {expandido && (
                       <div className="fade" style={{ padding: '0 12px 12px', borderTop: '1px solid #F2F1ED', background: '#FAFAF8' }}>
-                        <PlanoPunto punto={p} onUpdate={updatePunto} nombreObra={obra.nombre} nombreDisciplina={disciplina.nombre} />
+                        <PlanoPunto punto={p} onUpdate={updatePunto} obra={obra} nombreDisciplina={disciplina.nombre} numActa={(obra.numActaSeq || 0) + 1} onActaGenerada={n => onSave({ ...obra, numActaSeq: n })} />
                       </div>
                     )}
                   </div>
@@ -2924,6 +3019,13 @@ export default function App() {
       direccion:    data.direccion,
       responsable:  data.responsable,
       diasVisita:   data.diasVisita || [],
+      emplazamiento: data.emplazamiento || '',
+      propiedad:     data.propiedad || '',
+      proyectista:   data.proyectista || '',
+      direccionObra: data.direccionObra || '',
+      constructora:  data.constructora || '',
+      deoFirmante:   data.deoFirmante || '',
+      numActaSeq:    0,
       estado:       'en_curso',
       disciplinas:  [],
       lotes:        [],
