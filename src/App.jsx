@@ -3,7 +3,9 @@ import * as XLSX from "xlsx";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const SK = 'plaat_deo_v1';
+const SK     = 'plaat_deo_v1';         // clave legada (migración)
+const SK_IDX = 'plaat_v1_idx';         // índice de IDs de obras
+const SK_OBR = id => 'plaat_v1_o_' + id; // datos completos por obra
 
 const RESPONSABLES = [
   'Sergi Castellar','Alex Pla','Ferran Sancho','Adriana de la Barrera',
@@ -522,13 +524,13 @@ function comprimirImagen(file) {
     r.onload = ev => {
       const img = new Image();
       img.onload = () => {
-        const MAX = 1600;
+        const MAX = 1200;  // reducido para ahorrar espacio
         const sc  = Math.min(1, MAX / Math.max(img.width, img.height));
         const c   = document.createElement('canvas');
         c.width = Math.round(img.width * sc);
         c.height = Math.round(img.height * sc);
         c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        res({ imgData: c.toDataURL('image/jpeg', 0.75), w: c.width, h: c.height });
+        res({ imgData: c.toDataURL('image/jpeg', 0.60), w: c.width, h: c.height });
       };
       img.onerror = rej;
       img.src = ev.target.result;
@@ -1252,12 +1254,12 @@ function pickFiles(accept, cb) {
         if (f.type.startsWith('image/')) {
           const img = new Image();
           img.onload = () => {
-            const maxW = 1000, ratio = Math.min(1, maxW / img.width);
+            const maxW = 720, ratio = Math.min(1, maxW / img.width);
             const c = document.createElement('canvas');
             c.width = Math.round(img.width * ratio);
             c.height = Math.round(img.height * ratio);
             c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-            cb({ id: uid(), nombre: f.name, tipo: 'imagen', data: c.toDataURL('image/jpeg', 0.72) });
+            cb({ id: uid(), nombre: f.name, tipo: 'imagen', data: c.toDataURL('image/jpeg', 0.55) });
           };
           img.onerror = () => alert('No se pudo procesar la imagen: ' + f.name);
           img.src = ev.target.result;
@@ -3711,7 +3713,7 @@ export default function App() {
     window.auth.onChange(u => setUser(u || null));
   }, []);
 
-  // Cargar obras solo cuando hay usuario
+  // Cargar obras: primero intenta índice nuevo, luego migra del blob antiguo
   useEffect(() => {
     if (!user) return;
     let cancelado = false;
@@ -3719,73 +3721,100 @@ export default function App() {
       setLoading(true);
       try {
         if (window.storage) {
-          const r = await Promise.race([
-            window.storage.get(SK, true),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 7000)),
-          ]);
-          if (!cancelado && r && r.value) setObras(JSON.parse(r.value));
+          const T = ms => new Promise((_, r) => setTimeout(() => r(new Error('timeout')), ms));
+          let listaObras = [];
+
+          // 1. Intenta índice nuevo
+          const idxR = await Promise.race([window.storage.get(SK_IDX, true), T(8000)]).catch(() => null);
+          if (idxR?.value) {
+            const ids = JSON.parse(idxR.value);
+            const resultados = await Promise.all(ids.map(id =>
+              Promise.race([window.storage.get(SK_OBR(id), true), T(8000)])
+                .then(r => r?.value ? JSON.parse(r.value) : null)
+                .catch(() => null)
+            ));
+            listaObras = resultados.filter(Boolean);
+          } else {
+            // 2. Migra blob antiguo
+            const viejoR = await Promise.race([window.storage.get(SK, true), T(8000)]).catch(() => null);
+            if (viejoR?.value) {
+              listaObras = JSON.parse(viejoR.value);
+              // Guarda cada obra por separado
+              await Promise.all(listaObras.map(o =>
+                window.storage.set(SK_OBR(o.id), JSON.stringify(o), true).catch(() => null)
+              ));
+              await window.storage.set(SK_IDX, JSON.stringify(listaObras.map(o => o.id)), true).catch(() => null);
+              console.log('Migración completada:', listaObras.length, 'obras');
+            }
+          }
+          if (!cancelado) setObras(listaObras);
         }
-      } catch (e) {
-        console.error('Carga de obras:', e);
-      }
+      } catch (e) { console.error('Carga de obras:', e); }
       if (!cancelado) setLoading(false);
     })();
     return () => { cancelado = true; };
   }, [user]);
 
-  async function saveObras(list) {
-    setObras(list);
+  // Guarda UNA obra + actualiza el índice (operación mínima de escritura)
+  async function saveUnaObra(obra, lista) {
+    const T = ms => new Promise((_, r) => setTimeout(() => r(new Error('timeout')), ms));
+    const obraJSON = JSON.stringify(obra);
+    const kb = Math.round(obraJSON.length / 1024);
+    if (kb > 4000) {
+      alert(`Esta obra ocupa ${kb} KB. Las fotos y planos consumen mucho espacio — considera reducirlas o eliminar las antiguas. Se intentará guardar igualmente.`);
+    }
     try {
-      await window.storage.set(SK, JSON.stringify(list), true);
+      if (!window.storage) return;
+      await Promise.race([window.storage.set(SK_OBR(obra.id), obraJSON, true), T(10000)]);
+      await Promise.race([window.storage.set(SK_IDX, JSON.stringify(lista.map(o => o.id)), true), T(10000)]);
     } catch (e) {
-      console.error('Error guardando:', e);
-      alert('No se pudieron guardar los cambios. Es posible que se haya superado el límite de almacenamiento (las fotos ocupan espacio). Avísame para revisarlo.');
+      console.error('Error guardando obra:', e);
+      alert('No se pudieron guardar los cambios. Esta obra tiene demasiados datos (fotos/planos). Prueba a eliminar fotos antiguas de incidencias o planos para liberar espacio.');
     }
   }
 
   async function crearObra(data) {
     const obra = {
-      id:           uid(),
-      nombre:       data.nombre,
-      cliente:      data.cliente,
-      direccion:    data.direccion,
-      responsable:  data.responsable,
-      diasVisita:   data.diasVisita || [],
-      emplazamiento: data.emplazamiento || '',
-      propiedad:     data.propiedad || '',
-      proyectista:   data.proyectista || '',
-      direccionObra: data.direccionObra || '',
-      constructora:  data.constructora || '',
-      deoFirmante:   data.deoFirmante || '',
-      numActaSeq:    0,
-      estado:       'en_curso',
-      disciplinas:  [],
-      lotes:        [],
-      incidencias:  [],
-      apuntes:      [],
-      creadaEn:     now(),
+      id: uid(), nombre: data.nombre, cliente: data.cliente, direccion: data.direccion,
+      responsable: data.responsable, diasVisita: data.diasVisita || [],
+      emplazamiento: data.emplazamiento || '', propiedad: data.propiedad || '',
+      proyectista: data.proyectista || '', direccionObra: data.direccionObra || '',
+      constructora: data.constructora || '', deoFirmante: data.deoFirmante || '',
+      numActaSeq: 0, estado: 'en_curso',
+      disciplinas: [], lotes: [], incidencias: [], apuntes: [], creadaEn: now(),
     };
-    await saveObras([obra, ...obras]);
+    const lista = [obra, ...obras];
+    setObras(lista);
+    await saveUnaObra(obra, lista);
     setShowNueva(false);
     setObraActiva(obra);
   }
 
   async function actualizarObra(updated) {
-    const list = obras.map(o => o.id === updated.id ? updated : o);
-    await saveObras(list);
+    const lista = obras.map(o => o.id === updated.id ? updated : o);
+    setObras(lista);
     setObraActiva(updated);
+    await saveUnaObra(updated, lista);
   }
 
-  // Editar datos básicos de una obra (conserva el resto)
   async function guardarEdicion(datos) {
     const updated = { ...obraEditar, ...datos };
-    await saveObras(obras.map(o => o.id === obraEditar.id ? updated : o));
+    const lista = obras.map(o => o.id === obraEditar.id ? updated : o);
+    setObras(lista);
+    await saveUnaObra(updated, lista);
     setObraEditar(null);
   }
 
-  // Eliminar obra
   async function eliminarObra() {
-    await saveObras(obras.filter(o => o.id !== obraEliminar.id));
+    const id = obraEliminar.id;
+    const lista = obras.filter(o => o.id !== id);
+    setObras(lista);
+    try {
+      if (window.storage) {
+        await window.storage.delete(SK_OBR(id), true).catch(() => null);
+        await window.storage.set(SK_IDX, JSON.stringify(lista.map(o => o.id)), true);
+      }
+    } catch (e) { console.error('Error eliminando obra:', e); }
     setObraEliminar(null);
   }
 
