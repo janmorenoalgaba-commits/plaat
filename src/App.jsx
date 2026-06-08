@@ -1187,6 +1187,35 @@ const ESTADOS_INC = {
 };
 
 const DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
+// ─── Acta de Visita de Obra (VO) ──────────────────────────────────────────────
+const ROLES_VO = [
+  { k: 'promotor',     label: 'Promotor (PR)' },
+  { k: 'do',           label: 'Dirección de Obra (DO)' },
+  { k: 'deo',          label: 'Dirección de Ejecución (DEO)' },
+  { k: 'estructuras',  label: 'Ing. Estructuras (DOE)' },
+  { k: 'instalaciones',label: 'Ing. Instalaciones (DOI)' },
+  { k: 'css',          label: 'Coordinador Seguridad (CSS)' },
+  { k: 'contratista',  label: 'Contratista (EC)' },
+];
+const SECCIONES_VO = [
+  { codigo: '1',   titulo: 'TEMAS TRATADOS' },
+  { codigo: '2',   titulo: 'CONTROL DE CALIDAD' },
+  { codigo: '3.1', titulo: 'INSTALACIONES' },
+  { codigo: '3.2', titulo: 'ACOMETIDAS' },
+  { codigo: '4',   titulo: 'SEGURIDAD Y SALUD' },
+  { codigo: '5',   titulo: 'SEGUIMIENTO PLANIFICACIÓN' },
+  { codigo: '6',   titulo: 'SEGUIMIENTO HITOS CONTRACTUALES' },
+  { codigo: '7',   titulo: 'SEGUIMIENTO CONTRATACIÓN' },
+  { codigo: '8',   titulo: 'SEGUIMIENTO PERSONAL' },
+  { codigo: '9',   titulo: 'SEGUIMIENTO LEED / WELL / WIREDSCORE' },
+];
+const ESTADOS_VO = {
+  P: { label: 'Pendiente',   bg: '#FEF3DB', color: '#7C4A00' },
+  R: { label: 'Resuelto',    bg: '#E8F5E0', color: '#2D5E10' },
+  I: { label: 'Informativo', bg: '#EEEDE7', color: '#52524E' },
+};
+const RESP_VO = ['', 'EC', 'DO', 'DEO', 'PR', 'DOE', 'DOI', 'CSS'];
 const DIAS_DEFAULT = [1, 3]; // Lunes y Miércoles
 
 function esHoyVisita(obra) {
@@ -1812,6 +1841,7 @@ function ModuloApuntes({ obra, onSave }) {
   const [filtro,   setFiltro]   = useState('todo');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ tipo: 'tarea', texto: '', categoria: 'Otros', fechaLimite: '' });
+  const [confirmacion, setConfirmacion] = useState(null);
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   function guardar() {
@@ -1973,12 +2003,13 @@ function ModuloApuntes({ obra, onSave }) {
                 </div>
 
                 {/* Eliminar */}
-                <button onClick={() => eliminar(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                <button onClick={() => setConfirmacion({ titulo: 'Eliminar', texto: 'Vas a eliminar este elemento. Esta acción no se puede deshacer.', onSi: () => { eliminar(item.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
               </div>
             );
           })}
         </div>
       )}
+      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
   );
 }
@@ -2904,6 +2935,612 @@ function VistaAlertas({ obras, onIrObra, isMobile }) {
 
 // ─── Detalle de Obra ──────────────────────────────────────────────────────────
 
+// ─── Módulo Acta de Visita de Obra ────────────────────────────────────────────
+
+function getDefaultEquipo() {
+  return [
+    { id: uid(), nombre: 'PROJECT MANAGER',                    personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'DIRECCIÓN DE OBRA (DO)',             personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'DIRECCIÓN DE EJECUCIÓN (DEO)',       personas: [{ id: uid(), empresa: 'PLAAT', nombre: 'Xavier Pla', email: 'xpla@plaat.es', tel: '629 72 72 62', asistio: false }] },
+    { id: uid(), nombre: 'ING. ESTRUCTURAS',                   personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'ING. INSTALACIONES',                 personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'COORDINADOR DE SEGURIDAD (CSS)',     personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'CONTRATISTA (EC)',                   personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+  ];
+}
+
+function getDefaultSecciones() {
+  return [
+    { id: uid(), codigo: '1',   titulo: 'TEMAS TRATADOS',                  temas: [] },
+    { id: uid(), codigo: '2',   titulo: 'CONTROL DE CALIDAD',               temas: [] },
+    { id: uid(), codigo: '3.1', titulo: 'INSTALACIONES',                    temas: [] },
+    { id: uid(), codigo: '3.2', titulo: 'ACOMETIDAS',                       temas: [] },
+    { id: uid(), codigo: '4',   titulo: 'SEGURIDAD Y SALUD',                temas: [] },
+    { id: uid(), codigo: '5',   titulo: 'SEGUIMIENTO PLANIFICACIÓN',        temas: [] },
+    { id: uid(), codigo: '6',   titulo: 'SEGUIMIENTO HITOS CONTRACTUALES',  temas: [] },
+    { id: uid(), codigo: '7',   titulo: 'SEGUIMIENTO CONTRATACIÓN',         temas: [] },
+    { id: uid(), codigo: '8',   titulo: 'SEGUIMIENTO PERSONAL',             temas: [] },
+    { id: uid(), codigo: '9',   titulo: 'SEGUIMIENTO LEED / WELL / WIREDSCORE', temas: [] },
+  ];
+}
+
+function migrateVO(raw) {
+  let vo = raw ? { ...raw } : {};
+  if (!vo.num) vo.num = 1;
+  if (!vo.estadoObra) vo.estadoObra = { descripcion: '', fotos: [] };
+  if (!Array.isArray(vo.equipo)) {
+    const eq = getDefaultEquipo();
+    // try to recover old object-style equipo
+    if (vo.equipo && typeof vo.equipo === 'object') {
+      const old = vo.equipo;
+      eq.forEach(r => {
+        const k = r.nombre.toLowerCase().includes('deo') ? 'deo' : r.nombre.toLowerCase().includes('do') ? 'do' : null;
+        if (k && old[k]) { const d = old[k]; r.personas[0] = { ...r.personas[0], empresa: d.empresa||'', nombre: d.personas||'', email: d.contacto||'' }; }
+      });
+    }
+    vo.equipo = eq;
+  }
+  if (!Array.isArray(vo.secciones)) {
+    const secs = getDefaultSecciones();
+    if (Array.isArray(vo.temas)) {
+      vo.temas.forEach(t => {
+        const sec = secs.find(s => s.codigo === t.seccion);
+        if (sec) sec.temas.push({ ...t, entradas: (t.entradas||[]).map(e => ({ ...e, fin: e.fin||'' })) });
+      });
+    }
+    vo.secciones = secs;
+  }
+  // ensure every entry has fin field
+  vo.secciones = vo.secciones.map(s => ({ ...s, temas: (s.temas||[]).map(t => ({ ...t, entradas: (t.entradas||[]).map(e => ({ fin: '', ...e })) })) }));
+  return vo;
+}
+
+// ── ModuloActaVO ─────────────────────────────────────────────────────────────
+function ModuloActaVO({ obra, onSave }) {
+  const isMobile = useIsMobile();
+  const vo = migrateVO(obra.actaVO);
+  const [showEquipo,    setShowEquipo]    = useState(false);
+  const [showHistorico, setShowHistorico] = useState(false);
+  const [borrar,        setBorrar]        = useState(null);
+  const [generando,     setGenerando]     = useState(false);
+  const [editandoSec,   setEditandoSec]   = useState(null); // id sección editando nombre
+
+  function guardarVO(nuevo) { onSave({ ...obra, actaVO: nuevo }); }
+
+  // Equipo
+  function updRol(id, campo, val) {
+    guardarVO({ ...vo, equipo: vo.equipo.map(r => r.id === id ? { ...r, [campo]: val } : r) });
+  }
+  function addPersona(rolId) {
+    guardarVO({ ...vo, equipo: vo.equipo.map(r => r.id === rolId ? { ...r, personas: [...(r.personas||[]), { id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] } : r) });
+  }
+  function updPersona(rolId, pId, campo, val) {
+    guardarVO({ ...vo, equipo: vo.equipo.map(r => r.id !== rolId ? r : { ...r, personas: r.personas.map(p => p.id === pId ? { ...p, [campo]: val } : p) }) });
+  }
+  function delPersona(rolId, pId) {
+    guardarVO({ ...vo, equipo: vo.equipo.map(r => r.id !== rolId ? r : { ...r, personas: r.personas.filter(p => p.id !== pId) }) });
+  }
+  function addRol() {
+    guardarVO({ ...vo, equipo: [...vo.equipo, { id: uid(), nombre: 'NUEVO ROL', personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] }] });
+  }
+  function delRol(id) { guardarVO({ ...vo, equipo: vo.equipo.filter(r => r.id !== id) }); }
+
+  // Secciones
+  function addSeccion() {
+    const n = vo.secciones.length + 1;
+    guardarVO({ ...vo, secciones: [...vo.secciones, { id: uid(), codigo: String(n), titulo: 'NUEVA SECCIÓN', temas: [] }] });
+  }
+  function updSeccion(id, campo, val) {
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id === id ? { ...s, [campo]: val } : s) });
+  }
+  function delSeccion(id) { guardarVO({ ...vo, secciones: vo.secciones.filter(s => s.id !== id) }); setBorrar(null); }
+
+  // Temas
+  function nextNum(sec) {
+    const nums = (sec.temas||[]).map(t => parseInt((t.num||'').split('.').pop()||'0', 10));
+    const n = (nums.length ? Math.max(...nums) : 0) + 1;
+    return `${sec.codigo}.${String(n).padStart(2,'0')}`;
+  }
+  function addTema(secId, texto) {
+    if (!texto.trim()) return;
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: [...(s.temas||[]), { id: uid(), num: nextNum(s), resuelto: false, resueltoEnActa: null, entradas: [{ id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '' }] }] }) });
+  }
+  function addEntrada(secId, temaId, texto) {
+    if (!texto.trim()) return;
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: [...t.entradas, { id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '' }] }) }) });
+  }
+  function updEntrada(secId, temaId, entId, campo, val) {
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => {
+      if (t.id !== temaId) return t;
+      const entradas = t.entradas.map(e => e.id !== entId ? e : { ...e, [campo]: val });
+      const ult = entradas[entradas.length - 1];
+      const resuelto = ult.estado === 'R';
+      return { ...t, entradas, resuelto, resueltoEnActa: resuelto ? (t.resueltoEnActa || vo.num) : null };
+    }) }) });
+  }
+  function delTema(secId, temaId) {
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.filter(t => t.id !== temaId) }) });
+    setBorrar(null);
+  }
+
+  // Estado de obra
+  function updEstado(campo, val) { guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), [campo]: val } }); }
+  function addFotoEstado() {
+    pickFiles('image/*', f => guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: [...((vo.estadoObra||{}).fotos||[]), { id: uid(), data: f.data }] } }));
+  }
+  function delFotoEstado(id) { guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: (vo.estadoObra.fotos||[]).filter(f => f.id !== id) } }); }
+
+  async function exportar() {
+    setGenerando(true);
+    try { await generarActaVO(obra, vo); guardarVO({ ...vo, num: vo.num + 1 }); }
+    catch (e) { alert('Error al exportar: ' + e.message); }
+    setGenerando(false);
+  }
+
+  // Activos = no resueltos en acta anterior; resueltos = para histórico
+  const todosResueltos = vo.secciones.flatMap(s => (s.temas||[]).filter(t => t.resuelto));
+  const activosPorSec = id => (vo.secciones.find(s => s.id === id)?.temas||[]).filter(t => !(t.resuelto && t.resueltoEnActa && t.resueltoEnActa < vo.num));
+
+  return (
+    <div>
+      {/* Cabecera */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Acta de Visita de Obra</div>
+          <div style={{ fontSize: 12, color: '#9B9B97' }}>Próxima exportación: Nº {String(vo.num).padStart(2,'0')}</div>
+        </div>
+        <Btn onClick={() => setShowHistorico(true)}>Resueltos ({todosResueltos.length})</Btn>
+        <Btn primary disabled={generando} onClick={exportar}>{generando ? 'Generando...' : `↓ Exportar Acta Nº ${String(vo.num).padStart(2,'0')}`}</Btn>
+      </div>
+
+      {/* Fase + lugar */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+        <Field label="Fase"><input value={vo.fase||''} onChange={e => guardarVO({...vo, fase: e.target.value})} placeholder="Estructura, acabados..." /></Field>
+        <Field label="Lugar"><input value={vo.lugar||''} onChange={e => guardarVO({...vo, lugar: e.target.value})} placeholder="Obra / oficina" /></Field>
+      </div>
+
+      {/* Equipo técnico */}
+      <div style={{ border: '1px solid #E8E7E1', borderRadius: 10, marginBottom: 14, overflow: 'hidden' }}>
+        <button onClick={() => setShowEquipo(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: '#FAFAF8', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#141412' }}>
+          <span style={{ fontSize: 10, color: '#A5A5A0', display: 'inline-block', transition: 'transform .2s', transform: showEquipo ? 'rotate(90deg)' : 'none' }}>▶</span>
+          Equipo técnico y datos de contacto
+        </button>
+        {showEquipo && (
+          <div className="fade" style={{ padding: '10px 14px' }}>
+            {/* Encabezado columnas */}
+            {!isMobile && (
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1.6fr 1.8fr 1.3fr 60px 26px', gap: 5, marginBottom: 4 }}>
+                {['Rol','Empresa','Nombre','Email','Teléfono','Asistido',''].map((h,i) => <div key={i} style={{ fontSize: 10, color: '#A5A5A0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 3px' }}>{h}</div>)}
+              </div>
+            )}
+            {(vo.equipo||[]).map(rol => (
+              <div key={rol.id} style={{ marginBottom: 10, border: '1px solid #F2F1ED', borderRadius: 8, overflow: 'hidden' }}>
+                {/* Nombre del rol (editable) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#F5F4F0' }}>
+                  <input value={rol.nombre} onChange={e => updRol(rol.id, 'nombre', e.target.value)} style={{ flex: 1, fontSize: 11, fontWeight: 600, background: 'transparent', border: 'none', padding: 0, boxShadow: 'none', color: '#141412' }} />
+                  <button onClick={() => delRol(rol.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
+                </div>
+                {/* Personas */}
+                {(rol.personas||[]).map(p => (
+                  <div key={p.id} style={{ display: isMobile ? 'flex' : 'grid', gridTemplateColumns: isMobile ? undefined : '2fr 1.4fr 1.6fr 1.8fr 1.3fr 60px 26px', flexDirection: isMobile ? 'column' : undefined, gap: 5, padding: '6px 10px', borderTop: '1px solid #F2F1ED', alignItems: 'center' }}>
+                    {isMobile && <div style={{ fontSize: 10, color: '#A5A5A0', marginBottom: 3 }}>Empresa / Nombre / Email / Tel</div>}
+                    <input placeholder="Empresa" value={p.empresa||''} onChange={e => updPersona(rol.id, p.id, 'empresa', e.target.value)} style={{ fontSize: 12 }} />
+                    <input placeholder="Nombre" value={p.nombre||''} onChange={e => updPersona(rol.id, p.id, 'nombre', e.target.value)} style={{ fontSize: 12 }} />
+                    <input placeholder="Email" value={p.email||''} onChange={e => updPersona(rol.id, p.id, 'email', e.target.value)} style={{ fontSize: 12 }} />
+                    <input placeholder="Teléfono" value={p.tel||''} onChange={e => updPersona(rol.id, p.id, 'tel', e.target.value)} style={{ fontSize: 12 }} />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: '#52524E', paddingLeft: isMobile ? 0 : 4 }}>
+                      <input type="checkbox" checked={!!p.asistio} onChange={e => updPersona(rol.id, p.id, 'asistio', e.target.checked)} style={{ width: 14, height: 14 }} />
+                      {isMobile ? 'Asistido' : ''}
+                    </label>
+                    <button onClick={() => delPersona(rol.id, p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, textAlign: 'center' }}>×</button>
+                  </div>
+                ))}
+                <button onClick={() => addPersona(rol.id)} style={{ width: '100%', padding: '5px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#9B9B97', borderTop: '1px dashed #E8E7E1' }}>+ Añadir persona</button>
+              </div>
+            ))}
+            <button onClick={addRol} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginTop: 4 }}>+ Añadir rol</button>
+          </div>
+        )}
+      </div>
+
+      {/* Sección 0 — Estado de la obra */}
+      <div style={{ border: '1px solid #E8E7E1', borderRadius: 10, marginBottom: 14, padding: '12px 14px' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#141412', letterSpacing: '0.02em', marginBottom: 8 }}>
+          <span style={{ color: '#52524E', marginRight: 6 }}>0</span>ESTADO DE LA OBRA
+        </div>
+        <textarea placeholder="Describe brevemente el estado general de la obra en esta visita..." value={vo.estadoObra?.descripcion||''} onChange={e => updEstado('descripcion', e.target.value)} style={{ minHeight: 64, marginBottom: 10 }} />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          {(vo.estadoObra?.fotos||[]).map(f => (
+            <div key={f.id} style={{ position: 'relative', width: isMobile ? 80 : 110, height: isMobile ? 60 : 80 }}>
+              <img src={f.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }} />
+              <button onClick={() => delFotoEstado(f.id)} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
+            </div>
+          ))}
+          <button onClick={addFotoEstado} style={{ width: isMobile ? 80 : 110, height: isMobile ? 60 : 80, borderRadius: 7, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 22, color: '#D0D0CB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+        </div>
+      </div>
+
+      {/* Secciones editables */}
+      {(vo.secciones||[]).map(sec => {
+        const activos = activosPorSec(sec.id);
+        return (
+          <div key={sec.id} style={{ marginBottom: 16 }}>
+            {/* Cabecera sección con editar nombre */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#52524E', flexShrink: 0 }}>{sec.codigo}</span>
+              {editandoSec === sec.id
+                ? <input autoFocus value={sec.titulo} onChange={e => updSeccion(sec.id, 'titulo', e.target.value)} onBlur={() => setEditandoSec(null)} style={{ flex: 1, fontSize: 12, fontWeight: 600 }} />
+                : <span onClick={() => setEditandoSec(sec.id)} style={{ fontSize: 12, fontWeight: 600, color: '#141412', cursor: 'text', flex: 1 }}>{sec.titulo}</span>}
+              <span style={{ fontSize: 11, color: '#A5A5A0' }}>{activos.length}</span>
+              <button onClick={() => setBorrar({ tipo: 'seccion', id: sec.id, label: sec.titulo })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
+            </div>
+            {/* Temas activos */}
+            {activos.map(t => {
+              const ult = t.entradas[t.entradas.length - 1];
+              const est = ESTADOS_VO[ult.estado] || ESTADOS_VO.P;
+              return (
+                <TemaVO key={t.id} t={t} est={est} secId={sec.id}
+                  onUpdEntrada={(tId,eId,campo,val) => updEntrada(sec.id, tId, eId, campo, val)}
+                  onAddEntrada={(tId,txt) => addEntrada(sec.id, tId, txt)}
+                  onDel={() => setBorrar({ tipo: 'tema', secId: sec.id, id: t.id, label: t.num })} />
+              );
+            })}
+            <NuevoTema onAdd={txt => addTema(sec.id, txt)} />
+          </div>
+        );
+      })}
+      <button onClick={addSeccion} style={{ width: '100%', padding: '8px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginBottom: 14 }}>+ Añadir sección</button>
+
+      {/* Modal histórico */}
+      {showHistorico && (
+        <Modal title="Histórico de temas resueltos" onClose={() => setShowHistorico(false)}>
+          {todosResueltos.length === 0 ? <div style={{ fontSize: 13, color: '#A5A5A0' }}>Ningún tema resuelto todavía.</div>
+            : todosResueltos.map(t => (
+              <div key={t.id} style={{ padding: '9px 0', borderBottom: '1px solid #F2F1ED' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 3 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#52524E' }}>{t.num}</span>
+                  <Pill label="Resuelto" bg={ESTADOS_VO.R.bg} color={ESTADOS_VO.R.color} />
+                  <span style={{ fontSize: 11, color: '#A5A5A0', marginLeft: 'auto' }}>Acta {String(t.resueltoEnActa||'—').padStart(2,'0')}</span>
+                </div>
+                <div style={{ fontSize: 13, color: '#18180F', lineHeight: 1.5 }}>{t.entradas[t.entradas.length-1].texto}</div>
+              </div>
+            ))}
+        </Modal>
+      )}
+
+      {/* Confirmaciones */}
+      {borrar && <ConfirmMini
+        titulo={borrar.tipo === 'seccion' ? 'Eliminar sección' : 'Eliminar tema'}
+        texto={borrar.tipo === 'seccion' ? `Vas a eliminar "${borrar.label}" y todos sus temas.` : `Vas a eliminar el tema ${borrar.label} y su historial.`}
+        onSi={() => borrar.tipo === 'seccion' ? delSeccion(borrar.id) : delTema(borrar.secId, borrar.id)}
+        onNo={() => setBorrar(null)} />}
+    </div>
+  );
+}
+
+// Componente de un tema (para evitar closures stale en los selects)
+function TemaVO({ t, est, secId, onUpdEntrada, onAddEntrada, onDel }) {
+  const [abierto, setAbierto] = useState(false);
+  const ult = t.entradas[t.entradas.length - 1];
+  return (
+    <div style={{ border: `1px solid ${abierto ? '#C5C4BE' : '#E8E7E1'}`, borderRadius: 9, marginBottom: 6, overflow: 'hidden' }}>
+      <div onClick={() => setAbierto(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', cursor: 'pointer', background: abierto ? '#FAFAF8' : '#fff' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#52524E', flexShrink: 0, minWidth: 34 }}>{t.num}</span>
+        <span style={{ flex: 1, fontSize: 13, color: '#18180F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ult.texto}</span>
+        <Pill label={est.label} bg={est.bg} color={est.color} />
+      </div>
+      {abierto && (
+        <div className="fade" style={{ padding: '4px 12px 12px', borderTop: '1px solid #F2F1ED' }}>
+          {t.entradas.map(en => (
+            <div key={en.id} style={{ padding: '8px 0', borderBottom: '1px solid #F5F4F0' }}>
+              <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 11, color: '#A5A5A0', whiteSpace: 'nowrap', paddingTop: 2, minWidth: 36 }}>{fmtShort(en.fecha)}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: '#18180F', lineHeight: 1.5, marginBottom: 5 }}>{en.texto}</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
+                      style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: `1px solid ${ESTADOS_VO[en.estado].color}40`, background: ESTADOS_VO[en.estado].bg, color: ESTADOS_VO[en.estado].color, fontWeight: 500 }}>
+                      {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                    {en.estado === 'R' && <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)} style={{ width: 'auto', fontSize: 11 }} />}
+                    <select value={en.resp||''} onChange={ev => onUpdEntrada(t.id, en.id, 'resp', ev.target.value)}
+                      style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: '1px solid #E0DFD9' }}>
+                      {RESP_VO.map(r => <option key={r} value={r}>{r ? `${r}` : '— resp.'}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+          <NuevaEntrada onAdd={txt => onAddEntrada(t.id, txt)} />
+          <div style={{ marginTop: 8, textAlign: 'right' }}><Btn sm danger onClick={onDel}>Eliminar tema</Btn></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NuevoTema({ onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [txt, setTxt] = useState('');
+  if (!open) return <button onClick={() => setOpen(true)} style={{ width: '100%', padding: '6px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97' }}>+ Nuevo tema</button>;
+  return (
+    <div className="fade" style={{ background: '#F9F8F5', borderRadius: 9, padding: 10, marginTop: 2 }}>
+      <textarea autoFocus value={txt} onChange={e => setTxt(e.target.value)} placeholder="Describe el tema tratado..." style={{ minHeight: 50, marginBottom: 8 }} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn primary full disabled={!txt.trim()} onClick={() => { onAdd(txt); setTxt(''); setOpen(false); }}>Añadir tema</Btn>
+        <Btn onClick={() => { setTxt(''); setOpen(false); }}>✕</Btn>
+      </div>
+    </div>
+  );
+}
+function NuevaEntrada({ onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [txt, setTxt] = useState('');
+  if (!open) return <button onClick={() => setOpen(true)} style={{ marginTop: 8, fontSize: 12, color: '#6B6B66', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Añadir seguimiento de esta visita</button>;
+  return (
+    <div className="fade" style={{ marginTop: 8 }}>
+      <textarea autoFocus value={txt} onChange={e => setTxt(e.target.value)} placeholder="Novedad de esta visita..." style={{ minHeight: 50, marginBottom: 6 }} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn sm primary disabled={!txt.trim()} onClick={() => { onAdd(txt); setTxt(''); setOpen(false); }}>Añadir</Btn>
+        <Btn sm onClick={() => { setTxt(''); setOpen(false); }}>✕</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ── Generador PDF Acta VO ────────────────────────────────────────────────────
+async function generarActaVO(obra, vo) {
+  if (!window.jspdf) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar jsPDF'));
+      document.head.appendChild(s);
+    });
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const PW = 210, PH = 297, M = 14, CW = PW - M * 2;
+  const NEGRO = [0,0,0], GRIS = [217,217,217], LH = 4;
+  const num = String(vo.num).padStart(2,'0');
+  const fecha = new Date().toLocaleDateString('es-ES');
+  let y = 0;
+
+  function pie() {
+    doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); doc.setFontSize(7);
+    doc.text('Plaat Arquitectura Técnica', M, PH-8);
+    doc.text('Barcelona – Madrid', PW/2, PH-8, { align:'center' });
+    doc.text('www.plaat.es', PW-M, PH-8, { align:'right' });
+  }
+  function cabecera() {
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+    doc.text(`ACTA DE VISITA DE OBRA N.º ${num}`, M, 10);
+    doc.setFontSize(22); doc.text('Plaat.', PW-M, 12, { align:'right' });
+  }
+  function check(h) {
+    if (y + h > PH - 18) { doc.addPage(); cabecera(); pie(); y = 20; }
+  }
+  function rectRow(x, yy, cols, h, fillHeader) {
+    let cx = x;
+    cols.forEach(([w]) => {
+      if (fillHeader) { doc.setFillColor(...GRIS); doc.rect(cx, yy, w, h, 'F'); }
+      doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(cx, yy, w, h);
+      cx += w;
+    });
+  }
+  function textInCell(x, yy, w, h, txt, bold, size) {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(size || 8);
+    doc.setTextColor(0,0,0);
+    const ll = doc.splitTextToSize(String(txt||''), w - 3);
+    const ty = yy + h/2 - (ll.length-1)*(size||8)*0.352645/2 + (size||8)*0.352645/2;
+    doc.text(ll, x+2, ty);
+  }
+
+  cabecera(); pie(); y = 18;
+
+  // ── Título + Fecha/Lugar/Fase ────────────────────────────────────────────
+  doc.setFillColor(...GRIS); doc.rect(M,y,CW,8,'F');
+  doc.setDrawColor(...NEGRO); doc.rect(M,y,CW,8);
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(0,0,0);
+  doc.text(`ACTA DE VISITA DE OBRA N.º ${num}`, M+3, y+5.5);
+  y += 8;
+  [['FECHA', fecha], ['LUGAR', vo.lugar||'Obra'], ['FASE', vo.fase||'']].forEach(([k,v]) => {
+    check(7);
+    doc.rect(M,y,40,7); doc.rect(M+40,y,CW-40,7);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.text(k, M+2, y+4.7);
+    doc.setFont('helvetica','normal'); doc.text(String(v), M+42, y+4.7);
+    y += 7;
+  });
+  y += 4;
+
+  // ── Equipo técnico ──────────────────────────────────────────────────────
+  check(8);
+  doc.setFillColor(...GRIS); doc.rect(M,y,CW,7,'F'); doc.rect(M,y,CW,7);
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+  doc.text('EQUIPO TÉCNICO Y DATOS DE CONTACTO', M+2, y+4.8); y += 7;
+
+  // Col widths: Rol 44 | Empresa 24 | Nombre 30 | Email 34 | Tel 22 | Asistido 28
+  const eW = [44,24,30,34,22,28];
+  // Header de columnas
+  check(6);
+  let hx = M;
+  [['ROL','bold'], ['EMPRESA','bold'], ['NOMBRE','bold'], ['EMAIL','bold'], ['TEL.','bold'], ['ASISTIDO','bold']].forEach(([t,b], i) => {
+    doc.setFillColor(235,235,230); doc.rect(hx, y, eW[i], 6, 'F');
+    doc.setDrawColor(...NEGRO); doc.rect(hx,y,eW[i],6);
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(80,80,75);
+    doc.text(t, hx+2, y+4); hx += eW[i];
+  });
+  y += 6;
+
+  (vo.equipo||[]).forEach(rol => {
+    const ps = rol.personas||[{ empresa:'', nombre:'', email:'', tel:'', asistio: false }];
+    ps.forEach((p, pi) => {
+      const h = 7;
+      check(h);
+      const rx = M;
+      doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
+      if (pi === 0) {
+        const rowH = h * ps.length;
+        doc.setFillColor(...GRIS); doc.rect(rx, y, eW[0], rowH, 'F');
+        doc.rect(rx, y, eW[0], rowH);
+        doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+        const ll = doc.splitTextToSize(rol.nombre||'', eW[0]-3);
+        doc.text(ll, rx+2, y + 4);
+      } else {
+        doc.rect(rx, y, eW[0], h);
+      }
+      let cx = rx + eW[0];
+      [p.empresa, p.nombre, p.email, p.tel].forEach((v,i) => {
+        doc.rect(cx, y, eW[i+1], h);
+        doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+        const ll = doc.splitTextToSize(String(v||''), eW[i+1]-3);
+        doc.text(ll, cx+2, y+4.2);
+        cx += eW[i+1];
+      });
+      // Asistido checkbox
+      doc.rect(cx, y, eW[5], h);
+      const chx = cx + eW[5]/2 - 2.5, chy = y + h/2 - 2.5;
+      doc.rect(chx, chy, 5, 5);
+      if (p.asistio) { doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('✓', chx+0.8, chy+4); }
+      y += h;
+    });
+  });
+  y += 5;
+
+  // ── Sección 0: Estado de la obra ────────────────────────────────────────
+  const eo = vo.estadoObra || {};
+  if (eo.descripcion || (eo.fotos||[]).length > 0) {
+    check(14);
+    // Cabecera sección 0
+    doc.setFillColor(...GRIS); doc.rect(M,y,16,7,'F'); doc.rect(M+16,y,CW-16,7,'F');
+    doc.setDrawColor(...NEGRO); doc.rect(M,y,16,7); doc.rect(M+16,y,CW-16,7);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text('0', M+3, y+4.8); doc.text('ESTADO DE LA OBRA (FOTOGRAFÍAS)', M+19, y+4.8);
+    y += 7;
+
+    if (eo.descripcion) {
+      const dl = doc.splitTextToSize(eo.descripcion, CW-4);
+      const dh = dl.length * LH + 5;
+      check(dh);
+      doc.rect(M, y, CW, dh);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+      doc.text(dl, M+2, y+5);
+      y += dh + 2;
+    }
+
+    // Fotos 2 por fila, proporción real
+    const fotos = eo.fotos||[];
+    const fW2 = (CW - 4) / 2;
+    for (let fi = 0; fi < fotos.length; fi += 2) {
+      let rowH = 0;
+      const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
+      const dims = pair.map(f => {
+        try { const pr = doc.getImageProperties(f.data); const r = pr.height/pr.width; const h = Math.min(fW2 * r, 68); return { w: h/r, h }; }
+        catch(e) { return { w: fW2, h: 55 }; }
+      });
+      rowH = Math.max(...dims.map(d => d.h));
+      check(rowH + 3);
+      pair.forEach((f, pi) => {
+        const x = M + pi * (fW2 + 4);
+        doc.addImage(f.data, 'JPEG', x, y, dims[pi].w, dims[pi].h);
+      });
+      y += rowH + 4;
+    }
+    y += 3;
+  }
+
+  // ── Secciones 1-N ────────────────────────────────────────────────────────
+  const secciones = vo.secciones||[];
+  secciones.forEach(sec => {
+    const activos = (sec.temas||[]).filter(t => !(t.resuelto && t.resueltoEnActa && t.resueltoEnActa < vo.num));
+    if (!activos.length) return;
+
+    // Widths: Núm 14 | Descripción adaptada | Estado 14 | Inicio 18 | Fin 18 | Res 14
+    const col = { n:14, e:14, ini:18, fin:18, res:14, desc: CW-14-14-18-18-14 };
+
+    check(8);
+    // Cabecera sección
+    [M, M+col.n, M+col.n+col.desc, M+col.n+col.desc+col.e, M+col.n+col.desc+col.e+col.ini, M+col.n+col.desc+col.e+col.ini+col.fin].forEach((x,i) => {
+      const w = [col.n, col.desc, col.e, col.ini, col.fin, col.res][i];
+      doc.setFillColor(...GRIS); doc.rect(x, y, w, 7, 'F');
+      doc.setDrawColor(...NEGRO); doc.rect(x, y, w, 7);
+    });
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text(sec.codigo, M+2, y+4.8);
+    doc.text(sec.titulo, M+col.n+2, y+4.8);
+    doc.setFontSize(6.5);
+    ['Estado','Inicio','Fin','Res.'].forEach((t,i) => {
+      const x = [M+col.n+col.desc, M+col.n+col.desc+col.e, M+col.n+col.desc+col.e+col.ini, M+col.n+col.desc+col.e+col.ini+col.fin][i];
+      doc.text(t, x+1, y+4.5);
+    });
+    y += 7;
+
+    // Temas
+    activos.forEach(t => {
+      t.entradas.forEach((en, ei) => {
+        const txt = en.texto||'';
+        const tl = doc.splitTextToSize(txt, col.desc-3);
+        const h = Math.max(6, tl.length*LH + 2.5);
+        check(h);
+        doc.setDrawColor(...NEGRO); doc.setLineWidth(0.15);
+        doc.rect(M, y, col.n, h);
+        doc.rect(M+col.n, y, col.desc, h);
+        doc.rect(M+col.n+col.desc, y, col.e, h);
+        doc.rect(M+col.n+col.desc+col.e, y, col.ini, h);
+        doc.rect(M+col.n+col.desc+col.e+col.ini, y, col.fin, h);
+        doc.rect(M+col.n+col.desc+col.e+col.ini+col.fin, y, col.res, h);
+        doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+        if (ei === 0) doc.text(t.num, M+2, y+4);
+        doc.setFont('helvetica','normal');
+        doc.text(tl, M+col.n+2, y+4);
+        doc.text(en.estado||'', M+col.n+col.desc+1, y+4);
+        const isR = en.estado === 'R';
+        doc.text(isR ? '' : fmtFechaCorta(en.fecha), M+col.n+col.desc+col.e+1, y+4);
+        doc.text(isR ? fmtFechaCorta(en.fin||en.fecha) : '', M+col.n+col.desc+col.e+col.ini+1, y+4);
+        doc.text(en.resp||'', M+col.n+col.desc+col.e+col.ini+col.fin+1, y+4);
+        y += h;
+      });
+    });
+    y += 4;
+  });
+
+  // ── Seguimiento conforme / NOTA ─────────────────────────────────────────
+  check(24);
+  y += 4;
+  doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+  const nota = 'NOTA: La presente acta se entenderá como conforme en caso de no manifestar comentarios en el plazo de 48 horas tras su difusión.';
+  const notaL = doc.splitTextToSize(nota, CW);
+  doc.text(notaL, M, y); y += notaL.length * LH + 3;
+  doc.setFont('helvetica','normal');
+  doc.text('Conforme, firma y fecha:', M, y); y += 8;
+
+  // ── Cuadro de firmas ─────────────────────────────────────────────────────
+  check(28);
+  const firmas = ['PROMOTOR', 'DIRECCIÓN DE OBRA', 'DIRECCIÓN DE EJECUCIÓN\nCOORD. SEGURIDAD', 'CONTRATISTA'];
+  const fw = CW/4;
+  firmas.forEach((f, i) => {
+    const fx = M + i*fw;
+    doc.rect(fx, y, fw, 24);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+    const fl = doc.splitTextToSize(f, fw-4);
+    doc.text(fl, fx+2, y+4);
+  });
+
+  const total = doc.getNumberOfPages();
+  for (let p=1; p<=total; p++) { doc.setPage(p); pie(); }
+  doc.save(`Acta_VO_${num}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`);
+}
+
+function fmtFechaCorta(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(2)}`;
+}
+
+
+
 function DetalleObra({ obra, onBack, onSave, isMobile }) {
   const [tab, setTab]               = useState('inspecciones');
   const [editEstado, setEditEstado] = useState(false);
@@ -2912,6 +3549,7 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
     { id: 'inspecciones', label: 'Inspecciones',   short: 'Insp.'   },
     { id: 'incidencias',  label: 'Incidencias',    short: 'Incid.'  },
     { id: 'calidad',      label: 'Calidad',         short: 'Calidad' },
+    { id: 'actavo',       label: 'Acta VO',         short: 'Acta VO' },
     { id: 'anotaciones',  label: 'Notas y tareas',  short: 'Notas'   },
   ];
 
@@ -2980,6 +3618,7 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
           {tab === 'inspecciones' && <ModuloInspecciones obra={obra} onSave={onSave} />}
           {tab === 'incidencias'  && <ModuloIncidencias  obra={obra} onSave={onSave} />}
           {tab === 'calidad'      && <ModuloCalidad obra={obra} onSave={onSave} />}
+          {tab === 'actavo'       && <ModuloActaVO obra={obra} onSave={onSave} />}
           {tab === 'anotaciones'  && <ModuloApuntes obra={obra} onSave={onSave} />}
         </div>
       </div>
