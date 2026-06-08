@@ -2608,6 +2608,7 @@ function ControlHormigon({ obra, onSave }) {
   const [showNuevo, setShowNuevo] = useState(false);
   const [expandido, setExpandido] = useState(null);
   const [form, setForm] = useState({ nombre: '', tipo: 'flexion', volumen: '', superficie: '', conDOR: false });
+  const [confirmacion, setConfirmacion] = useState(null);
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const tipoForm = TIPOS_ELEMENTO[form.tipo];
@@ -2769,7 +2770,7 @@ function ControlHormigon({ obra, onSave }) {
                     <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#EEEDE7', color: '#1C1C1A', fontWeight: 600, whiteSpace: 'nowrap' }}>
                       {numLotes} lote{numLotes > 1 ? 's' : ''} · {totalSeries} series
                     </span>
-                    <button onClick={e => { e.stopPropagation(); eliminar(el.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
+                    <button onClick={e => { e.stopPropagation(); setConfirmacion({ titulo: 'Eliminar lotificación', texto: `Vas a eliminar "${el.nombre}" y todos sus datos. Esta acción no se puede deshacer.`, onSi: () => { eliminar(el.id); setConfirmacion(null); } }); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
                     <div style={{ flex: 1, height: 4, background: '#ECEAE4', borderRadius: 2 }}>
@@ -2809,6 +2810,7 @@ function ControlHormigon({ obra, onSave }) {
           })}
         </div>
       )}
+      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
   );
 }
@@ -3005,7 +3007,8 @@ function ModuloActaVO({ obra, onSave }) {
   const [showHistorico, setShowHistorico] = useState(false);
   const [borrar,        setBorrar]        = useState(null);
   const [generando,     setGenerando]     = useState(false);
-  const [editandoSec,   setEditandoSec]   = useState(null); // id sección editando nombre
+  const [editandoSec,   setEditandoSec]   = useState(null);
+  const [confirmacion,  setConfirmacion]  = useState(null); // id sección editando nombre
 
   function guardarVO(nuevo) { onSave({ ...obra, actaVO: nuevo }); }
 
@@ -3045,11 +3048,11 @@ function ModuloActaVO({ obra, onSave }) {
   }
   function addTema(secId, texto) {
     if (!texto.trim()) return;
-    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: [...(s.temas||[]), { id: uid(), num: nextNum(s), resuelto: false, resueltoEnActa: null, entradas: [{ id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '' }] }] }) });
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: [...(s.temas||[]), { id: uid(), num: nextNum(s), resuelto: false, resueltoEnActa: null, entradas: [{ id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '', actaNum: vo.num }] }] }) });
   }
   function addEntrada(secId, temaId, texto) {
     if (!texto.trim()) return;
-    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: [...t.entradas, { id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '' }] }) }) });
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: [...t.entradas, { id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '', actaNum: vo.num }] }) }) });
   }
   function updEntrada(secId, temaId, entId, campo, val) {
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => {
@@ -3109,32 +3112,42 @@ function ModuloActaVO({ obra, onSave }) {
         </button>
         {showEquipo && (
           <div className="fade" style={{ padding: '10px 14px' }}>
-            {/* Encabezado columnas */}
+            {/* Cabecera — mismo grid que filas de datos para alineado perfecto */}
             {!isMobile && (
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1.6fr 1.8fr 1.3fr 60px 26px', gap: 5, marginBottom: 4 }}>
-                {['Rol','Empresa','Nombre','Email','Teléfono','Asistido',''].map((h,i) => <div key={i} style={{ fontSize: 10, color: '#A5A5A0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 3px' }}>{h}</div>)}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1.6fr 1.8fr 1.3fr 50px 22px', gap: 4, padding: '2px 0 6px' }}>
+                {['Rol','Empresa','Nombre','Email','Teléfono','Asistido',''].map((h,i) => (
+                  <div key={i} style={{ fontSize: 10, color: '#A5A5A0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', paddingLeft: 4 }}>{h}</div>
+                ))}
               </div>
             )}
             {(vo.equipo||[]).map(rol => (
               <div key={rol.id} style={{ marginBottom: 10, border: '1px solid #F2F1ED', borderRadius: 8, overflow: 'hidden' }}>
-                {/* Nombre del rol (editable) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#F5F4F0' }}>
+                {/* Nombre del rol — separado, fondo tenue */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: '#F5F4F0', borderBottom: '1px solid #ECEAE4' }}>
                   <input value={rol.nombre} onChange={e => updRol(rol.id, 'nombre', e.target.value)} style={{ flex: 1, fontSize: 11, fontWeight: 600, background: 'transparent', border: 'none', padding: 0, boxShadow: 'none', color: '#141412' }} />
-                  <button onClick={() => delRol(rol.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
+                  <button onClick={() => setConfirmacion({ titulo: 'Eliminar rol', texto: `Vas a eliminar el rol "${rol.nombre}" y todas sus personas.`, onSi: () => { delRol(rol.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
                 </div>
-                {/* Personas */}
+                {/* Filas de personas — mismo grid que el header */}
                 {(rol.personas||[]).map(p => (
-                  <div key={p.id} style={{ display: isMobile ? 'flex' : 'grid', gridTemplateColumns: isMobile ? undefined : '2fr 1.4fr 1.6fr 1.8fr 1.3fr 60px 26px', flexDirection: isMobile ? 'column' : undefined, gap: 5, padding: '6px 10px', borderTop: '1px solid #F2F1ED', alignItems: 'center' }}>
+                  <div key={p.id} style={{
+                    display: isMobile ? 'flex' : 'grid',
+                    gridTemplateColumns: isMobile ? undefined : '2fr 1.4fr 1.6fr 1.8fr 1.3fr 50px 22px',
+                    flexDirection: isMobile ? 'column' : undefined,
+                    gap: 4, padding: '5px 8px',
+                    borderBottom: '1px solid #F9F8F5', alignItems: 'center'
+                  }}>
                     {isMobile && <div style={{ fontSize: 10, color: '#A5A5A0', marginBottom: 3 }}>Empresa / Nombre / Email / Tel</div>}
+                    {/* Primera columna: vacía (el rol ya está arriba) */}
+                    {!isMobile && <div />}
                     <input placeholder="Empresa" value={p.empresa||''} onChange={e => updPersona(rol.id, p.id, 'empresa', e.target.value)} style={{ fontSize: 12 }} />
                     <input placeholder="Nombre" value={p.nombre||''} onChange={e => updPersona(rol.id, p.id, 'nombre', e.target.value)} style={{ fontSize: 12 }} />
                     <input placeholder="Email" value={p.email||''} onChange={e => updPersona(rol.id, p.id, 'email', e.target.value)} style={{ fontSize: 12 }} />
                     <input placeholder="Teléfono" value={p.tel||''} onChange={e => updPersona(rol.id, p.id, 'tel', e.target.value)} style={{ fontSize: 12 }} />
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: '#52524E', paddingLeft: isMobile ? 0 : 4 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', fontSize: 12, color: '#52524E' }}>
                       <input type="checkbox" checked={!!p.asistio} onChange={e => updPersona(rol.id, p.id, 'asistio', e.target.checked)} style={{ width: 14, height: 14 }} />
                       {isMobile ? 'Asistido' : ''}
                     </label>
-                    <button onClick={() => delPersona(rol.id, p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, textAlign: 'center' }}>×</button>
+                    <button onClick={() => setConfirmacion({ titulo: 'Eliminar persona', texto: `Vas a eliminar a "${p.nombre||'esta persona'}".`, onSi: () => { delPersona(rol.id, p.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, textAlign: 'center' }}>×</button>
                   </div>
                 ))}
                 <button onClick={() => addPersona(rol.id)} style={{ width: '100%', padding: '5px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#9B9B97', borderTop: '1px dashed #E8E7E1' }}>+ Añadir persona</button>
@@ -3155,7 +3168,7 @@ function ModuloActaVO({ obra, onSave }) {
           {(vo.estadoObra?.fotos||[]).map(f => (
             <div key={f.id} style={{ position: 'relative', width: isMobile ? 80 : 110, height: isMobile ? 60 : 80 }}>
               <img src={f.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }} />
-              <button onClick={() => delFotoEstado(f.id)} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
+              <button onClick={() => setConfirmacion({ titulo: 'Eliminar foto', texto: 'Vas a eliminar esta foto del estado de obra.', onSi: () => { delFotoEstado(f.id); setConfirmacion(null); } })} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
             </div>
           ))}
           <button onClick={addFotoEstado} style={{ width: isMobile ? 80 : 110, height: isMobile ? 60 : 80, borderRadius: 7, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 22, color: '#D0D0CB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
@@ -3216,6 +3229,7 @@ function ModuloActaVO({ obra, onSave }) {
         texto={borrar.tipo === 'seccion' ? `Vas a eliminar "${borrar.label}" y todos sus temas.` : `Vas a eliminar el tema ${borrar.label} y su historial.`}
         onSi={() => borrar.tipo === 'seccion' ? delSeccion(borrar.id) : delTema(borrar.secId, borrar.id)}
         onNo={() => setBorrar(null)} />}
+      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
   );
 }
@@ -3240,11 +3254,13 @@ function TemaVO({ t, est, secId, onUpdEntrada, onAddEntrada, onDel }) {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, color: '#18180F', lineHeight: 1.5, marginBottom: 5 }}>{en.texto}</div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
-                      style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: `1px solid ${ESTADOS_VO[en.estado].color}40`, background: ESTADOS_VO[en.estado].bg, color: ESTADOS_VO[en.estado].color, fontWeight: 500 }}>
-                      {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                    {en.estado === 'R' && <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)} style={{ width: 'auto', fontSize: 11 }} />}
+                    {en.actaNum === vo.num
+                      ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: '#F2F1ED', color: '#52524E', fontWeight: 600, border: '1px solid #E0DFD9' }}>N — Nueva</span>
+                      : <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
+                          style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: `1px solid ${ESTADOS_VO[en.estado].color}40`, background: ESTADOS_VO[en.estado].bg, color: ESTADOS_VO[en.estado].color, fontWeight: 500 }}>
+                          {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </select>}
+                    {en.estado === 'R' && en.actaNum !== vo.num && <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)} style={{ width: 'auto', fontSize: 11 }} />}
                     <select value={en.resp||''} onChange={ev => onUpdEntrada(t.id, en.id, 'resp', ev.target.value)}
                       style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: '1px solid #E0DFD9' }}>
                       {RESP_VO.map(r => <option key={r} value={r}>{r ? `${r}` : '— resp.'}</option>)}
@@ -3304,232 +3320,216 @@ async function generarActaVO(obra, vo) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PW = 210, PH = 297, M = 14, CW = PW - M * 2;
-  const NEGRO = [0,0,0], GRIS = [217,217,217], LH = 4;
+  const NEGRO = [0,0,0], GRIS = [217,217,217], GRIS_H = [200,200,195];
+  const C_P = [255,235,200], C_R = [200,240,200], C_I = [210,228,255]; // colores estado
+  const FS = 8, LH = 4.2; // font size y line height mm
   const num = String(vo.num).padStart(2,'0');
   const fecha = new Date().toLocaleDateString('es-ES');
   let y = 0;
 
-  function pie() {
-    doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); doc.setFontSize(7);
-    doc.text('Plaat Arquitectura Técnica', M, PH-8);
-    doc.text('Barcelona – Madrid', PW/2, PH-8, { align:'center' });
-    doc.text('www.plaat.es', PW-M, PH-8, { align:'right' });
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  // Calcula nº líneas de texto en un ancho dado
+  function nLines(txt, w) {
+    return doc.splitTextToSize(String(txt||''), w - 3).length;
+  }
+  // Calcula altura de fila para el conjunto de textos/anchos de sus celdas
+  function calcH(pairs) { // pairs = [{txt, w}]
+    const n = Math.max(...pairs.map(({txt, w}) => nLines(txt, w)));
+    return Math.max(7, n * LH + 4);
+  }
+  // Dibuja una celda con fondo opcional y texto envuelto
+  function cell(x, yy, w, h, txt, bold, fill, center) {
+    if (fill) { doc.setFillColor(...fill); doc.rect(x, yy, w, h, 'F'); }
+    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(x, yy, w, h);
+    if (txt === null || txt === undefined || txt === '') return;
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(FS); doc.setTextColor(0,0,0);
+    const ll = doc.splitTextToSize(String(txt), w - 3);
+    const topY = yy + 3;
+    if (center && ll.length === 1) {
+      doc.text(ll[0], x + w/2, yy + h/2 + FS*0.352645/2, { align: 'center' });
+    } else {
+      doc.text(ll, x + 2, topY + FS*0.352645);
+    }
+  }
+  // Checkbox manual (no depende de unicode)
+  function checkbox(x, yy, h, checked) {
+    const s = 4, cx = x + 4, cy = yy + h/2 - s/2;
+    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.3);
+    doc.rect(cx, cy, s, s);
+    if (checked) {
+      doc.setLineWidth(0.5);
+      doc.line(cx+0.7, cy+s/2, cx+s*0.4, cy+s*0.85);
+      doc.line(cx+s*0.4, cy+s*0.85, cx+s-0.5, cy+0.5);
+    }
+  }
+  function checkPage(h) {
+    if (y + h > PH - 18) { doc.addPage(); cabecera(); pie(); y = 20; }
   }
   function cabecera() {
     doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
     doc.text(`ACTA DE VISITA DE OBRA N.º ${num}`, M, 10);
     doc.setFontSize(22); doc.text('Plaat.', PW-M, 12, { align:'right' });
   }
-  function check(h) {
-    if (y + h > PH - 18) { doc.addPage(); cabecera(); pie(); y = 20; }
-  }
-  function rectRow(x, yy, cols, h, fillHeader) {
-    let cx = x;
-    cols.forEach(([w]) => {
-      if (fillHeader) { doc.setFillColor(...GRIS); doc.rect(cx, yy, w, h, 'F'); }
-      doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(cx, yy, w, h);
-      cx += w;
-    });
-  }
-  function textInCell(x, yy, w, h, txt, bold, size) {
-    doc.setFont('helvetica', bold ? 'bold' : 'normal');
-    doc.setFontSize(size || 8);
-    doc.setTextColor(0,0,0);
-    const ll = doc.splitTextToSize(String(txt||''), w - 3);
-    const ty = yy + h/2 - (ll.length-1)*(size||8)*0.352645/2 + (size||8)*0.352645/2;
-    doc.text(ll, x+2, ty);
+  function pie() {
+    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+    doc.text('Plaat Arquitectura Técnica', M, PH-8);
+    doc.text('Barcelona \u2013 Madrid', PW/2, PH-8, { align:'center' });
+    doc.text('www.plaat.es', PW-M, PH-8, { align:'right' });
   }
 
   cabecera(); pie(); y = 18;
 
-  // ── Título + Fecha/Lugar/Fase ────────────────────────────────────────────
-  doc.setFillColor(...GRIS); doc.rect(M,y,CW,8,'F');
-  doc.setDrawColor(...NEGRO); doc.rect(M,y,CW,8);
-  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(0,0,0);
-  doc.text(`ACTA DE VISITA DE OBRA N.º ${num}`, M+3, y+5.5);
-  y += 8;
+  // ── 1. Título + Fecha/Lugar/Fase ──────────────────────────────────────────
+  cell(M, y, CW, 9, `ACTA DE VISITA DE OBRA N.\u00ba ${num}`, true, GRIS);
+  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text(`ACTA DE VISITA DE OBRA N.\u00ba ${num}`, M+3, y+6.2);
+  y += 9;
   [['FECHA', fecha], ['LUGAR', vo.lugar||'Obra'], ['FASE', vo.fase||'']].forEach(([k,v]) => {
-    check(7);
-    doc.rect(M,y,40,7); doc.rect(M+40,y,CW-40,7);
-    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.text(k, M+2, y+4.7);
-    doc.setFont('helvetica','normal'); doc.text(String(v), M+42, y+4.7);
-    y += 7;
+    const h = calcH([{txt:k,w:42},{txt:v,w:CW-42}]);
+    checkPage(h); cell(M,y,42,h,k,true,GRIS); cell(M+42,y,CW-42,h,v,false,null); y += h;
   });
   y += 4;
 
-  // ── Equipo técnico ──────────────────────────────────────────────────────
-  check(8);
-  doc.setFillColor(...GRIS); doc.rect(M,y,CW,7,'F'); doc.rect(M,y,CW,7);
-  doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-  doc.text('EQUIPO TÉCNICO Y DATOS DE CONTACTO', M+2, y+4.8); y += 7;
-
-  // Col widths: Rol 44 | Empresa 24 | Nombre 30 | Email 34 | Tel 22 | Asistido 28
-  const eW = [44,24,30,34,22,28];
-  // Header de columnas
-  check(6);
+  // ── 2. Equipo técnico ─────────────────────────────────────────────────────
+  checkPage(10);
+  cell(M, y, CW, 8, 'EQUIPO T\u00c9CNICO Y DATOS DE CONTACTO', true, GRIS); y += 8;
+  // Anchos: Rol 42 | Empresa 26 | Nombre 28 | Email 38 | Tel 22 | Asistido 26
+  const eW = [42, 26, 28, 38, 22, 26]; const eSum = eW.reduce((a,b)=>a+b,0);
+  // Ajuste proporcional si no cuadra
+  const scale = CW / eSum;
+  const ew = eW.map(w => Math.round(w*scale));
+  ew[ew.length-1] = CW - ew.slice(0,-1).reduce((a,b)=>a+b,0); // fix rounding
+  // Header columnas
+  checkPage(7);
   let hx = M;
-  [['ROL','bold'], ['EMPRESA','bold'], ['NOMBRE','bold'], ['EMAIL','bold'], ['TEL.','bold'], ['ASISTIDO','bold']].forEach(([t,b], i) => {
-    doc.setFillColor(235,235,230); doc.rect(hx, y, eW[i], 6, 'F');
-    doc.setDrawColor(...NEGRO); doc.rect(hx,y,eW[i],6);
-    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(80,80,75);
-    doc.text(t, hx+2, y+4); hx += eW[i];
-  });
-  y += 6;
+  [['ROL',true], ['EMPRESA',true], ['NOMBRE',true], ['EMAIL',true], ['TEL.',true], ['ASISTIDO',true]].forEach(([t,b],i) => {
+    cell(hx, y, ew[i], 7, t, b, GRIS_H); hx += ew[i];
+  }); y += 7;
 
   (vo.equipo||[]).forEach(rol => {
-    const ps = rol.personas||[{ empresa:'', nombre:'', email:'', tel:'', asistio: false }];
+    const ps = (rol.personas||[{ empresa:'', nombre:'', email:'', tel:'', asistio:false }]);
+    if (!ps.length) return;
+    // Calcula altura de cada fila persona
+    const rowHs = ps.map(p => calcH([
+      {txt:'', w:ew[0]}, {txt:p.empresa||'', w:ew[1]}, {txt:p.nombre||'', w:ew[2]},
+      {txt:p.email||'', w:ew[3]}, {txt:p.tel||'', w:ew[4]}, {txt:'', w:ew[5]}
+    ]));
+    const rolH = rowHs.reduce((a,b)=>a+b,0);
+    checkPage(rolH);
+    // Celda Rol (span todas las personas)
+    cell(M, y, ew[0], rolH, rol.nombre||'', true, GRIS);
+    let py = y;
     ps.forEach((p, pi) => {
-      const h = 7;
-      check(h);
-      const rx = M;
-      doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
-      if (pi === 0) {
-        const rowH = h * ps.length;
-        doc.setFillColor(...GRIS); doc.rect(rx, y, eW[0], rowH, 'F');
-        doc.rect(rx, y, eW[0], rowH);
-        doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        const ll = doc.splitTextToSize(rol.nombre||'', eW[0]-3);
-        doc.text(ll, rx+2, y + 4);
-      } else {
-        doc.rect(rx, y, eW[0], h);
-      }
-      let cx = rx + eW[0];
-      [p.empresa, p.nombre, p.email, p.tel].forEach((v,i) => {
-        doc.rect(cx, y, eW[i+1], h);
-        doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        const ll = doc.splitTextToSize(String(v||''), eW[i+1]-3);
-        doc.text(ll, cx+2, y+4.2);
-        cx += eW[i+1];
-      });
-      // Asistido checkbox
-      doc.rect(cx, y, eW[5], h);
-      const chx = cx + eW[5]/2 - 2.5, chy = y + h/2 - 2.5;
-      doc.rect(chx, chy, 5, 5);
-      if (p.asistio) { doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('✓', chx+0.8, chy+4); }
-      y += h;
+      const rh = rowHs[pi];
+      // Empresa: solo primera persona del rol
+      cell(M+ew[0], py, ew[1], rh, pi===0 ? (p.empresa||'') : '', false, null);
+      cell(M+ew[0]+ew[1], py, ew[2], rh, p.nombre||'', false, null);
+      cell(M+ew[0]+ew[1]+ew[2], py, ew[3], rh, p.email||'', false, null);
+      cell(M+ew[0]+ew[1]+ew[2]+ew[3], py, ew[4], rh, p.tel||'', false, null);
+      // Celda asistido: checkbox dibujado
+      cell(M+ew[0]+ew[1]+ew[2]+ew[3]+ew[4], py, ew[5], rh, null, false, null);
+      checkbox(M+ew[0]+ew[1]+ew[2]+ew[3]+ew[4], py, rh, !!p.asistio);
+      py += rh;
     });
+    y += rolH;
   });
   y += 5;
 
-  // ── Sección 0: Estado de la obra ────────────────────────────────────────
+  // ── 3. Estado de la obra ──────────────────────────────────────────────────
   const eo = vo.estadoObra || {};
   if (eo.descripcion || (eo.fotos||[]).length > 0) {
-    check(14);
-    // Cabecera sección 0
-    doc.setFillColor(...GRIS); doc.rect(M,y,16,7,'F'); doc.rect(M+16,y,CW-16,7,'F');
-    doc.setDrawColor(...NEGRO); doc.rect(M,y,16,7); doc.rect(M+16,y,CW-16,7);
-    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-    doc.text('0', M+3, y+4.8); doc.text('ESTADO DE LA OBRA (FOTOGRAFÍAS)', M+19, y+4.8);
-    y += 7;
-
+    checkPage(12);
+    cell(M, y, 16, 8, '0', true, GRIS, true);
+    cell(M+16, y, CW-16, 8, 'ESTADO DE LA OBRA (FOTOGRAF\u00cdAS)', true, GRIS);
+    y += 8;
     if (eo.descripcion) {
       const dl = doc.splitTextToSize(eo.descripcion, CW-4);
-      const dh = dl.length * LH + 5;
-      check(dh);
-      doc.rect(M, y, CW, dh);
-      doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-      doc.text(dl, M+2, y+5);
+      const dh = Math.max(10, dl.length*LH + 5);
+      checkPage(dh);
+      cell(M, y, CW, dh, null, false, null);
+      doc.setFont('helvetica','normal'); doc.setFontSize(FS); doc.setTextColor(0,0,0);
+      doc.text(dl, M+2, y+4);
       y += dh + 2;
     }
-
-    // Fotos 2 por fila, proporción real
     const fotos = eo.fotos||[];
-    const fW2 = (CW - 4) / 2;
-    for (let fi = 0; fi < fotos.length; fi += 2) {
-      let rowH = 0;
+    const fW = (CW - 4) / 2;
+    for (let fi=0; fi<fotos.length; fi+=2) {
       const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
+      let rowH = 0;
       const dims = pair.map(f => {
-        try { const pr = doc.getImageProperties(f.data); const r = pr.height/pr.width; const h = Math.min(fW2 * r, 68); return { w: h/r, h }; }
-        catch(e) { return { w: fW2, h: 55 }; }
+        try { const pr = doc.getImageProperties(f.data); const r=pr.height/pr.width; const h=Math.min(fW*r,72); return {w:h/r,h}; }
+        catch(e) { return {w:fW,h:56}; }
       });
-      rowH = Math.max(...dims.map(d => d.h));
-      check(rowH + 3);
-      pair.forEach((f, pi) => {
-        const x = M + pi * (fW2 + 4);
-        doc.addImage(f.data, 'JPEG', x, y, dims[pi].w, dims[pi].h);
-      });
-      y += rowH + 4;
+      rowH = Math.max(...dims.map(d=>d.h));
+      checkPage(rowH+3);
+      pair.forEach((f,pi) => { doc.addImage(f.data,'JPEG', M+pi*(fW+4), y, dims[pi].w, dims[pi].h); });
+      y += rowH+4;
     }
-    y += 3;
+    y += 4;
   }
 
-  // ── Secciones 1-N ────────────────────────────────────────────────────────
-  const secciones = vo.secciones||[];
-  secciones.forEach(sec => {
+  // ── 4. Secciones ─────────────────────────────────────────────────────────
+  // Anchos: Núm 18 | Desc variable | Estado 14 | Inicio 20 | Fin 20 | Res 14
+  const cN=18, cE=14, cIn=20, cFi=20, cR=14, cD=CW-cN-cE-cIn-cFi-cR;
+
+  (vo.secciones||[]).forEach(sec => {
     const activos = (sec.temas||[]).filter(t => !(t.resuelto && t.resueltoEnActa && t.resueltoEnActa < vo.num));
     if (!activos.length) return;
-
-    // Widths: Núm 14 | Descripción adaptada | Estado 14 | Inicio 18 | Fin 18 | Res 14
-    const col = { n:14, e:14, ini:18, fin:18, res:14, desc: CW-14-14-18-18-14 };
-
-    check(8);
+    checkPage(10);
     // Cabecera sección
-    [M, M+col.n, M+col.n+col.desc, M+col.n+col.desc+col.e, M+col.n+col.desc+col.e+col.ini, M+col.n+col.desc+col.e+col.ini+col.fin].forEach((x,i) => {
-      const w = [col.n, col.desc, col.e, col.ini, col.fin, col.res][i];
-      doc.setFillColor(...GRIS); doc.rect(x, y, w, 7, 'F');
-      doc.setDrawColor(...NEGRO); doc.rect(x, y, w, 7);
-    });
-    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-    doc.text(sec.codigo, M+2, y+4.8);
-    doc.text(sec.titulo, M+col.n+2, y+4.8);
-    doc.setFontSize(6.5);
-    ['Estado','Inicio','Fin','Res.'].forEach((t,i) => {
-      const x = [M+col.n+col.desc, M+col.n+col.desc+col.e, M+col.n+col.desc+col.e+col.ini, M+col.n+col.desc+col.e+col.ini+col.fin][i];
-      doc.text(t, x+1, y+4.5);
-    });
-    y += 7;
+    cell(M, y, cN, 8, sec.codigo, true, GRIS, true);
+    cell(M+cN, y, cD+cE+cIn+cFi+cR, 8, sec.titulo, true, GRIS);
+    // Sub-cabecera columnas
+    const subY = y+8;
+    doc.setFillColor(...GRIS_H);
+    [[cN,''],  [cD,'DESCRIPCI\u00d3N'], [cE,'ESTADO'], [cIn,'INICIO'], [cFi,'FIN'], [cR,'RES.']].reduce((x,[w,t])=>{
+      cell(M+x, subY, w, 6, t, true, GRIS_H, true); return x+w;
+    }, 0);
+    y += 14;
 
-    // Temas
     activos.forEach(t => {
       t.entradas.forEach((en, ei) => {
-        const txt = en.texto||'';
-        const tl = doc.splitTextToSize(txt, col.desc-3);
-        const h = Math.max(6, tl.length*LH + 2.5);
-        check(h);
-        doc.setDrawColor(...NEGRO); doc.setLineWidth(0.15);
-        doc.rect(M, y, col.n, h);
-        doc.rect(M+col.n, y, col.desc, h);
-        doc.rect(M+col.n+col.desc, y, col.e, h);
-        doc.rect(M+col.n+col.desc+col.e, y, col.ini, h);
-        doc.rect(M+col.n+col.desc+col.e+col.ini, y, col.fin, h);
-        doc.rect(M+col.n+col.desc+col.e+col.ini+col.fin, y, col.res, h);
-        doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        if (ei === 0) doc.text(t.num, M+2, y+4);
-        doc.setFont('helvetica','normal');
-        doc.text(tl, M+col.n+2, y+4);
-        doc.text(en.estado||'', M+col.n+col.desc+1, y+4);
-        const isR = en.estado === 'R';
-        doc.text(isR ? '' : fmtFechaCorta(en.fecha), M+col.n+col.desc+col.e+1, y+4);
-        doc.text(isR ? fmtFechaCorta(en.fin||en.fecha) : '', M+col.n+col.desc+col.e+col.ini+1, y+4);
-        doc.text(en.resp||'', M+col.n+col.desc+col.e+col.ini+col.fin+1, y+4);
-        y += h;
+        const esNueva = en.actaNum === vo.num;
+        const estado = esNueva ? 'N' : (en.estado||'P');
+        const fill = esNueva ? null : (estado==='R' ? C_R : estado==='I' ? C_I : C_P);
+
+        const rowH = calcH([{txt:en.texto||'', w:cD}, {txt:estado, w:cE}]);
+        checkPage(rowH);
+
+        // Num (solo en primera entrada del tema, centrado)
+        cell(M, y, cN, rowH, ei===0 ? t.num : '', true, fill, true);
+        cell(M+cN, y, cD, rowH, en.texto||'', false, fill);
+        cell(M+cN+cD, y, cE, rowH, estado, true, fill, true);
+        // Fecha inicio/fin según estado
+        const isR = en.estado==='R' && !esNueva;
+        cell(M+cN+cD+cE, y, cIn, rowH, isR ? '' : fmtFechaCorta(en.fecha), false, fill, true);
+        cell(M+cN+cD+cE+cIn, y, cFi, rowH, isR ? fmtFechaCorta(en.fin||en.fecha) : '', false, fill, true);
+        cell(M+cN+cD+cE+cIn+cFi, y, cR, rowH, en.resp||'', true, fill, true);
+        y += rowH;
       });
     });
     y += 4;
   });
 
-  // ── Seguimiento conforme / NOTA ─────────────────────────────────────────
-  check(24);
+  // ── 5. NOTA + Firmas ──────────────────────────────────────────────────────
+  checkPage(32);
   y += 4;
-  doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-  const nota = 'NOTA: La presente acta se entenderá como conforme en caso de no manifestar comentarios en el plazo de 48 horas tras su difusión.';
-  const notaL = doc.splitTextToSize(nota, CW);
-  doc.text(notaL, M, y); y += notaL.length * LH + 3;
+  doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+  const notaL = doc.splitTextToSize('NOTA: La presente acta se entender\u00e1 como conforme en caso de no manifestar comentarios en el plazo de 48 horas tras su difusi\u00f3n.', CW);
+  doc.text(notaL, M, y); y += notaL.length*LH + 4;
   doc.setFont('helvetica','normal');
   doc.text('Conforme, firma y fecha:', M, y); y += 8;
 
-  // ── Cuadro de firmas ─────────────────────────────────────────────────────
-  check(28);
-  const firmas = ['PROMOTOR', 'DIRECCIÓN DE OBRA', 'DIRECCIÓN DE EJECUCIÓN\nCOORD. SEGURIDAD', 'CONTRATISTA'];
   const fw = CW/4;
-  firmas.forEach((f, i) => {
-    const fx = M + i*fw;
-    doc.rect(fx, y, fw, 24);
+  ['PROMOTOR','DIRECCI\u00d3N DE OBRA','DIRECCI\u00d3N DE EJECUCI\u00d3N\nCOORD. SEGURIDAD','CONTRATISTA'].forEach((f,i) => {
+    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
+    doc.rect(M+i*fw, y, fw, 26);
     doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
-    const fl = doc.splitTextToSize(f, fw-4);
-    doc.text(fl, fx+2, y+4);
+    doc.text(doc.splitTextToSize(f, fw-4), M+i*fw+2, y+4.5);
   });
 
+  // Numeración páginas
   const total = doc.getNumberOfPages();
   for (let p=1; p<=total; p++) { doc.setPage(p); pie(); }
   doc.save(`Acta_VO_${num}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`);
