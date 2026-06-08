@@ -98,13 +98,24 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 `;
 
-// Detecta pantalla estrecha (móvil) y se actualiza al rotar/redimensionar
+// Detecta móvil: pantalla estrecha Y en vertical. En horizontal usa la interfaz de ordenador.
 function useIsMobile() {
-  const [m, setM] = useState(typeof window !== 'undefined' ? window.innerWidth < 760 : false);
+  const calc = () => {
+    if (typeof window === 'undefined') return false;
+    const portrait = window.matchMedia
+      ? window.matchMedia('(orientation: portrait)').matches
+      : window.innerHeight >= window.innerWidth;
+    return window.innerWidth < 760 && portrait;
+  };
+  const [m, setM] = useState(calc);
   useEffect(() => {
-    const onR = () => setM(window.innerWidth < 760);
+    const onR = () => setM(calc());
     window.addEventListener('resize', onR);
-    return () => window.removeEventListener('resize', onR);
+    window.addEventListener('orientationchange', onR);
+    return () => {
+      window.removeEventListener('resize', onR);
+      window.removeEventListener('orientationchange', onR);
+    };
   }, []);
   return m;
 }
@@ -127,6 +138,22 @@ function Btn({ children, onClick, primary, sm, danger, ghost, disabled, full }) 
     : ghost   ? { ...base, background: 'transparent', color: '#6B6B66', borderColor: 'transparent' }
     : { ...base, background: 'transparent', color: '#18180F', borderColor: '#E0DFD9' };
   return <button style={style} onClick={disabled ? undefined : onClick}>{children}</button>;
+}
+
+function ConfirmMini({ titulo, texto, onSi, onNo }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(3px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onNo(); }}>
+      <div className="modal-in fade" style={{ background: '#fff', borderRadius: 14, width: 340, maxWidth: '92vw', padding: 20, border: '1px solid #E0DFD9', boxShadow: '0 16px 48px rgba(0,0,0,.15)' }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#141412', marginBottom: 8 }}>{titulo || '¿Eliminar?'}</div>
+        <div style={{ fontSize: 13, color: '#52524E', lineHeight: 1.55, marginBottom: 18 }}>{texto || 'Esta acción no se puede deshacer.'}</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Btn full onClick={onNo}>Cancelar</Btn>
+          <Btn full danger onClick={onSi}>Eliminar</Btn>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Field({ label, children, hint }) {
@@ -520,11 +547,12 @@ function PlanoPunto({ punto, onUpdate, obra, nombreDisciplina, numActa, onActaGe
   const [marcaOpen,     setMarcaOpen]     = useState(null);
   const [planoVisible,  setPlanoVisible]  = useState(true);
   const [generandoActa, setGenerandoActa] = useState(false);
+  const [confirmacion,  setConfirmacion]  = useState(null);
 
   const plano  = punto.plano;
   const marcas = plano?.marcas || [];
 
-  // ── Generar acta PDF (estructura profesional PLAAT) ─────────────────────────
+  // ── Generar acta PDF — réplica del acta oficial PLAAT ───────────────────────
   async function generarActa() {
     if (!marcas.length) { alert('No hay marcas en el plano para generar el acta.'); return; }
     setGenerandoActa(true);
@@ -539,193 +567,194 @@ function PlanoPunto({ punto, onUpdate, obra, nombreDisciplina, numActa, onActaGe
       }
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const PW = 210, PH = 297, M = 20, CW = PW - M * 2;
+      const PW = 210, PH = 297, M = 18, CW = PW - M * 2;
       const num = String(numActa || 1).padStart(2, '0');
       const fechaCorta = new Date().toLocaleDateString('es-ES');
       const fechaLarga = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
-      const TINTA = [26, 26, 24], GRIS = [120, 120, 114], LINEA = [214, 213, 207], FONDO = [244, 243, 239];
-      const LH = 4.6; // interlineado base
+      const NEGRO = [0, 0, 0], GRIS = [217, 217, 217], LH = 4.6;
 
-      // — Cabecera y pie (en cada página) —
+      // Cabecera (cada página): Parte/Fecha bold izq + "Plaat." grande dcha
       function cabecera() {
-        doc.setTextColor(...GRIS);
-        doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
-        doc.text(`Parte de inspección Nº ${num}`, M, 12);
-        doc.text(fechaCorta, M, 16);
-        doc.setTextColor(...TINTA);
-        doc.setFontSize(22); doc.setFont('helvetica', 'bold');
-        doc.text('Plaat.', PW - M, 15, { align: 'right' });
-        doc.setDrawColor(...LINEA); doc.setLineWidth(0.3);
-        doc.line(M, 20, PW - M, 20);
+        doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+        doc.text(`PARTE DE INSPECCIÓN Nº: ${num}`, M, 12);
+        doc.text(`FECHA PARTE INSPECCIÓN: ${fechaCorta}`, M, 16.5);
+        doc.setFontSize(30);
+        doc.text('Plaat.', PW - M, 17, { align: 'right' });
       }
-      function pie(p, total) {
-        doc.setDrawColor(...LINEA); doc.setLineWidth(0.3);
-        doc.line(M, PH - 14, PW - M, PH - 14);
-        doc.setTextColor(...GRIS); doc.setFontSize(7); doc.setFont('helvetica', 'normal');
-        doc.text('Plaat Arquitectura Técnica', M, PH - 9);
-        doc.text('Barcelona — Madrid', PW / 2, PH - 9, { align: 'center' });
-        doc.text('www.plaat.es', PW - M, PH - 9, { align: 'right' });
+      // Pie (cada página)
+      function pie() {
+        doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+        doc.text('Plaat Arquitectura Técnica', M, PH - 12);
+        doc.text('Barcelona – Madrid', PW / 2, PH - 12, { align: 'center' });
+        doc.text('www.plaat.es', PW - M, PH - 12, { align: 'right' });
       }
       function nuevaPagina() { doc.addPage(); cabecera(); }
 
-      // Título de sección con filete fino debajo
-      function tituloSeccion(txt, yy) {
-        doc.setTextColor(...TINTA); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-        doc.text(txt, M, yy);
-        doc.setDrawColor(...TINTA); doc.setLineWidth(0.4);
-        doc.line(M, yy + 2, M + 14, yy + 2);
-        return yy + 9;
-      }
-
-      // Fila de tabla clave/valor (etiqueta con fondo suave)
-      function filaTabla(yy, label, value) {
-        const wL = 48;
-        const vlines = doc.splitTextToSize(value || '—', CW - wL - 6);
-        const h = Math.max(8, vlines.length * LH + 3.5);
-        doc.setFillColor(...FONDO);
-        doc.rect(M, yy, wL, h, 'F');
-        doc.setDrawColor(...LINEA); doc.setLineWidth(0.2);
-        doc.rect(M, yy, CW, h);
-        doc.line(M + wL, yy, M + wL, yy + h);
-        doc.setTextColor(...GRIS); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
-        doc.text(label.toUpperCase(), M + 3, yy + h / 2 + 1);
-        doc.setTextColor(...TINTA); doc.setFontSize(9.5); doc.setFont('helvetica', 'normal');
-        doc.text(vlines, M + wL + 3.5, yy + h / 2 - (vlines.length - 1) * (LH / 2) + 1.2);
+      // Tabla clave/valor: etiqueta gris + valor blanco, todo bordeado, negrita
+      function fila(yy, label, value, wL) {
+        wL = wL || 50;
+        const vlines = doc.splitTextToSize(value || '', CW - wL - 5);
+        const h = Math.max(8, vlines.length * LH + 4);
+        doc.setFillColor(...GRIS); doc.rect(M, yy, wL, h, 'F');
+        doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
+        doc.rect(M, yy, wL, h); doc.rect(M + wL, yy, CW - wL, h);
+        doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+        doc.text(label, M + 2.5, yy + h / 2 + 1.2);
+        doc.text(vlines, M + wL + 2.5, yy + h / 2 - (vlines.length - 1) * (LH / 2) + 1.2);
         return yy + h;
       }
 
-      // ═══ PÁGINA 1 — Portada ═══
+      // ═══ PÁGINA 1 ═══
       cabecera();
-      let y = 34;
-      doc.setTextColor(...TINTA); doc.setFontSize(15); doc.setFont('helvetica', 'bold');
-      doc.text('Acta de inspección de obra', M, y);
-      doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRIS);
-      doc.text(`Núm. ${num}`, PW - M, y, { align: 'right' });
-      y += 4; doc.setDrawColor(...TINTA); doc.setLineWidth(0.5); doc.line(M, y, M + 16, y);
+      let y = 30;
+      // Banda título
+      doc.setFillColor(...GRIS); doc.rect(M, y, CW, 8, 'F');
+      doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(M, y, CW, 8);
+      doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+      doc.text('ACTA DE INSPECCIÓN DE OBRA', M + 3, y + 5.5);
+      doc.text(`NÚM.: ${num}`, PW - M - 3, y + 5.5, { align: 'right' });
+      y += 14;
+
+      // OBRA / EMPLAZAMIENTO
+      y = fila(y, 'OBRA', (obra?.nombre || '').toUpperCase());
+      y = fila(y, 'EMPLAZAMIENTO', (obra?.emplazamiento || obra?.direccion || '').toUpperCase());
       y += 12;
 
-      y = filaTabla(y, 'Obra', obra?.nombre || '');
-      y = filaTabla(y, 'Emplazamiento', obra?.emplazamiento || obra?.direccion || '');
-      y += 12;
-
-      y = tituloSeccion('Datos de la obra', y);
+      // DATOS DE LA OBRA
+      doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+      doc.text('DATOS DE LA OBRA:', M, y); y += 7;
       [
-        ['Propiedad', obra?.propiedad || obra?.cliente || ''],
-        ['Proyectista', obra?.proyectista || ''],
-        ['Dirección de obra', obra?.direccionObra || ''],
-        ['DEO', 'Plaat Arquitectura Técnica S.L.'],
-        ['Constructora', obra?.constructora || ''],
-      ].forEach(([k, v]) => { y = filaTabla(y, k, v); });
+        ['PROPIEDAD', (obra?.propiedad || obra?.cliente || '').toUpperCase()],
+        ['PROYECTISTA', obra?.proyectista || ''],
+        ['DO', obra?.direccionObra || ''],
+        ['DEO', 'PLAAT ARQUITECTURA TÉCNICA S.L.'],
+        ['CONSTRUCTORA', (obra?.constructora || '').toUpperCase()],
+      ].forEach(([k, v]) => { y = fila(y, k, v); });
       y += 16;
 
-      doc.setTextColor(...GRIS); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
-      doc.text('FECHA Y FIRMA', M, y); y += 6;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...TINTA);
+      // FECHA FIRMA
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+      doc.text('FECHA FIRMA:', M, y); y += 7;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
       doc.text(`Barcelona, ${fechaLarga}.`, M, y);
 
       // Firmante (parte inferior)
-      doc.setDrawColor(...LINEA); doc.setLineWidth(0.3);
-      doc.line(M, PH - 52, M + 70, PH - 52);
-      doc.setTextColor(...TINTA); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
-      doc.text('Director de ejecución de obra', M, PH - 47);
-      doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRIS);
-      doc.text(obra?.deoFirmante || obra?.responsable || '', M, PH - 42);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+      doc.text('DIRECTOR DE EJECUCIÓN DE OBRA', M, PH - 40);
+      doc.setFont('helvetica', 'normal');
+      doc.text(obra?.deoFirmante || obra?.responsable || '', M, PH - 35);
 
-      // ═══ PÁGINA 2 — Incidencias revisadas ═══
-      nuevaPagina(); y = 34;
-      y = tituloSeccion('Aspectos revisados', y);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...TINTA);
-      doc.text('Durante la visita se han revisado las siguientes incidencias:', M, y); y += 8;
+      // ═══ PÁGINA 2 — Aspecto revisado ═══
+      nuevaPagina(); y = 30;
+      doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+      doc.text('Aspecto revisado:', M, y); y += 7;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+      doc.text('Durante la visita realizada, se han revisado los siguientes aspectos:', M, y); y += 8;
 
-      // Tabla resumen de incidencias
-      const wNum = 16;
-      doc.setFillColor(...FONDO); doc.setDrawColor(...LINEA); doc.setLineWidth(0.2);
-      doc.rect(M, y, CW, 7.5, 'F'); doc.rect(M, y, CW, 7.5);
-      doc.line(M + wNum, y, M + wNum, y + 7.5);
-      doc.setTextColor(...GRIS); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-      doc.text('Nº', M + 4, y + 5);
-      doc.text('INCIDENCIAS', M + wNum + 3.5, y + 5);
-      y += 7.5;
+      // Tabla N.º / INCIDENCIAS
+      const wN = 18;
+      doc.setFillColor(...GRIS); doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
+      doc.rect(M, y, wN, 8, 'F'); doc.rect(M + wN, y, CW - wN, 8, 'F');
+      doc.rect(M, y, wN, 8); doc.rect(M + wN, y, CW - wN, 8);
+      doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+      doc.text('N.º', M + 4, y + 5.3);
+      doc.text('INCIDENCIAS', M + wN + 3, y + 5.3);
+      y += 8;
       marcas.forEach((m, idx) => {
-        const titulo = m.titulo || m.desc || '';
-        const tl = doc.splitTextToSize(titulo, CW - wNum - 7);
-        const h = Math.max(8, tl.length * LH + 3.5);
-        doc.setDrawColor(...LINEA); doc.setLineWidth(0.2);
-        doc.rect(M, y, CW, h); doc.line(M + wNum, y, M + wNum, y + h);
-        doc.setTextColor(...TINTA); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+        const titulo = (m.titulo || m.desc || '').toUpperCase();
+        const tl = doc.splitTextToSize(titulo, CW - wN - 6);
+        const h = Math.max(10, tl.length * LH + 5);
+        doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
+        doc.rect(M, y, wN, h); doc.rect(M + wN, y, CW - wN, h);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...NEGRO);
         doc.text(`N${idx + 1}`, M + 4, y + h / 2 + 1);
-        doc.setFont('helvetica', 'normal');
-        doc.text(tl, M + wNum + 3.5, y + h / 2 - (tl.length - 1) * (LH / 2) + 1.2);
+        doc.text(tl, M + wN + 3, y + h / 2 - (tl.length - 1) * (LH / 2) + 1.2);
         y += h;
       });
-      y += 12;
+      y += 8;
 
-      // Plano con marcas (proporción correcta, círculos pequeños)
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+      doc.text('Se adjunta tabla con las zonas revisadas.', M, y); y += 10;
+
+      // Incidencias detectadas (subrayado)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+      doc.text('Incidencias detectadas:', M, y);
+      const wTit = doc.getTextWidth('Incidencias detectadas:');
+      doc.setLineWidth(0.3); doc.line(M, y + 1, M + wTit, y + 1);
+      y += 8;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+      [
+        'Las incidencias detectadas, deberán subsanarse y dar respuesta a la DEO.',
+        'Para ello deberán rellenar los datos solicitados en cada una de las incidencias detectadas y enviar fotografías a la DEO con las rectificaciones.',
+        'Se adjuntan tablas con las incidencias detectadas.',
+        'Este Acta de Inspección de obra se ha llevado a cabo en base a las inspecciones y muestreos realizados por el DEO en la fecha indicada y en base a Partes de Inspección procedimentados.',
+      ].forEach(p => {
+        const pl = doc.splitTextToSize(p, CW);
+        doc.text(pl, M, y); y += pl.length * LH + 4;
+      });
+
+      // ═══ PÁGINA 3 — Zonas revisadas (plano + fichas) ═══
+      nuevaPagina(); y = 30;
+      doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+      doc.text('1. ZONAS REVISADAS', M, y); y += 8;
+
+      // Plano con marcas (proporción real)
       if (plano?.imgData) {
-        y = tituloSeccion('Localización en plano', y);
         const ratio = plano.h && plano.w ? plano.h / plano.w : 0.6;
-        let planoW = CW, planoH = CW * ratio;
-        if (planoH > 150) { planoH = 150; planoW = planoH / ratio; }
-        const px = M + (CW - planoW) / 2;
-        if (y + planoH > PH - 18) { nuevaPagina(); y = 34; }
-        doc.addImage(plano.imgData, 'JPEG', px, y, planoW, planoH);
-        doc.setDrawColor(...LINEA); doc.setLineWidth(0.2); doc.rect(px, y, planoW, planoH);
+        let pw = CW, ph = CW * ratio;
+        if (ph > 150) { ph = 150; pw = ph / ratio; }
+        const px = M + (CW - pw) / 2;
+        if (y + ph > PH - 18) { nuevaPagina(); y = 30; }
+        doc.addImage(plano.imgData, 'JPEG', px, y, pw, ph);
+        doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(px, y, pw, ph);
         marcas.forEach((m, idx) => {
-          const mx = px + (m.x / 100) * planoW;
-          const my = y + (m.y / 100) * planoH;
+          const mx = px + (m.x / 100) * pw, my = y + (m.y / 100) * ph;
           doc.setFillColor(226, 75, 74); doc.circle(mx, my, 1.9, 'F');
           doc.setTextColor(255, 255, 255); doc.setFontSize(5); doc.setFont('helvetica', 'bold');
           doc.text(String(idx + 1), mx, my + 0.7, { align: 'center' });
         });
-        y += planoH + 8;
+        y += ph + 10;
       }
 
-      // ═══ FICHAS POR INCIDENCIA ═══
-      nuevaPagina(); y = 34;
-      y = tituloSeccion('Detalle de incidencias', y);
-
+      // Fichas por incidencia (estilo tabla: col Nº gris + contenido)
       for (let idx = 0; idx < marcas.length; idx++) {
         const m = marcas[idx];
-        if (y > PH - 78) { nuevaPagina(); y = 34; }
-
-        // Encabezado de ficha: Nº + título
-        doc.setTextColor(...TINTA); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-        doc.text(`N${idx + 1}`, M, y);
-        doc.text(m.titulo || `Incidencia ${idx + 1}`, M + 12, y);
-        y += 2.5;
-        doc.setDrawColor(...LINEA); doc.setLineWidth(0.2); doc.line(M, y, PW - M, y);
-        y += 6;
-
-        // Descripción
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...TINTA);
-        const dl = doc.splitTextToSize(m.desc || '', CW);
-        doc.text(dl, M, y); y += dl.length * LH + 5;
-
-        // Foto sin borde, proporción real
+        // Medir contenido
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+        const dl = doc.splitTextToSize(m.desc || '', CW - wN - 6);
+        let fw = 0, fh = 0;
         if (m.foto) {
-          let fw = 85, fh = 64;
-          try {
-            const props = doc.getImageProperties(m.foto);
-            const fr = props.height / props.width;
-            fh = fw * fr;
-            if (fh > 78) { fh = 78; fw = fh / fr; }
-          } catch (e) {}
-          if (y + fh > PH - 18) { nuevaPagina(); y = 34; }
-          doc.addImage(m.foto, 'JPEG', M, y, fw, fh);
-          y += fh + 4;
+          fw = 78; fh = 58;
+          try { const pr = doc.getImageProperties(m.foto); const r = pr.height / pr.width; fh = fw * r; if (fh > 72) { fh = 72; fw = fh / r; } } catch (e) {}
         }
-        doc.setTextColor(...GRIS); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
-        doc.text(new Date(m.createdAt).toLocaleDateString('es-ES'), M, y);
-        y += 12;
+        const hTitulo = 8;
+        const hCont = 4 + dl.length * LH + (m.foto ? fh + 5 : 0) + 6;
+        const hTotal = hTitulo + hCont;
+
+        if (y + hTotal > PH - 18) { nuevaPagina(); y = 30; }
+
+        // Fila título: Nº gris + título gris
+        doc.setFillColor(...GRIS); doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
+        doc.rect(M, y, wN, hTitulo, 'F'); doc.rect(M + wN, y, CW - wN, hTitulo, 'F');
+        doc.rect(M, y, wN, hTitulo); doc.rect(M + wN, y, CW - wN, hTitulo);
+        doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
+        doc.text(`N${idx + 1}`, M + 4, y + 5.3);
+        doc.text((m.titulo || `Incidencia ${idx + 1}`).toUpperCase(), M + wN + 3, y + 5.3);
+        // Fila contenido: col Nº vacía + contenido
+        const yc = y + hTitulo;
+        doc.rect(M, yc, wN, hCont); doc.rect(M + wN, yc, CW - wN, hCont);
+        let cy = yc + 6;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...NEGRO);
+        doc.text(dl, M + wN + 3, cy); cy += dl.length * LH + 4;
+        if (m.foto) { doc.addImage(m.foto, 'JPEG', M + wN + 3, cy, fw, fh); cy += fh + 3; }
+        y += hTotal + 6;
       }
 
-      // Pie + numeración en todas las páginas
+      // Cabecera y pie en todas las páginas + numeración
       const total = doc.getNumberOfPages();
       for (let p = 1; p <= total; p++) {
         doc.setPage(p);
-        pie(p, total);
-        doc.setTextColor(...GRIS); doc.setFontSize(7);
-        doc.text(`${p} / ${total}`, PW - M, PH - 4, { align: 'right' });
+        pie();
       }
 
       const fname = new Date().toISOString().slice(0, 10);
@@ -759,15 +788,40 @@ function PlanoPunto({ punto, onUpdate, obra, nombreDisciplina, numActa, onActaGe
     inp.click();
   }
 
+  function coords(e) {
+    if (!imgRef.current) return null;
+    const rect = imgRef.current.getBoundingClientRect();
+    const cx = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY;
+    let x = (cx - rect.left) / rect.width * 100;
+    let y = (cy - rect.top) / rect.height * 100;
+    x = Math.max(0, Math.min(100, x));
+    y = Math.max(0, Math.min(100, y));
+    return { x: parseFloat(x.toFixed(1)), y: parseFloat(y.toFixed(1)) };
+  }
+
   function handleTapPlano(e) {
     if (marcando) return;
-    const rect = imgRef.current.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const x = parseFloat(((clientX - rect.left) / rect.width  * 100).toFixed(1));
-    const y = parseFloat(((clientY - rect.top)  / rect.height * 100).toFixed(1));
-    setMarcando({ x, y });
+    const c = coords(e);
+    if (!c) return;
+    setMarcando(c);
     setFormMarca({ titulo: '', desc: '', foto: null });
+  }
+
+  // Arrastrar el punto pendiente para ajustarlo con precisión
+  function iniciarArrastre(e) {
+    e.stopPropagation();
+    const mover = ev => { const c = coords(ev); if (c) setMarcando(c); };
+    const soltar = () => {
+      window.removeEventListener('mousemove', mover);
+      window.removeEventListener('mouseup', soltar);
+      window.removeEventListener('touchmove', mover);
+      window.removeEventListener('touchend', soltar);
+    };
+    window.addEventListener('mousemove', mover);
+    window.addEventListener('mouseup', soltar);
+    window.addEventListener('touchmove', mover, { passive: false });
+    window.addEventListener('touchend', soltar);
   }
 
   function guardarMarca() {
@@ -837,9 +891,15 @@ function PlanoPunto({ punto, onUpdate, obra, nombreDisciplina, numActa, onActaGe
             {idx + 1}
           </button>
         ))}
-        {/* Nueva marca (pendiente de guardar) */}
+        {/* Nueva marca (pendiente, arrastrable) */}
         {marcando && (
-          <div style={{ position: 'absolute', left: marcando.x + '%', top: marcando.y + '%', transform: 'translate(-50%,-50%)', width: 19, height: 19, borderRadius: '50%', background: '#1C1C1A', color: '#fff', border: '1.5px solid #fff', boxShadow: '0 1px 5px rgba(0,0,0,.35)', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 300, zIndex: 2, pointerEvents: 'none' }}>+</div>
+          <div
+            onMouseDown={iniciarArrastre}
+            onTouchStart={iniciarArrastre}
+            style={{ position: 'absolute', left: marcando.x + '%', top: marcando.y + '%', transform: 'translate(-50%,-50%)', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3, cursor: 'grab', touchAction: 'none' }}>
+            <span style={{ position: 'absolute', width: 40, height: 40, borderRadius: '50%', background: 'rgba(28,28,26,0.15)' }} />
+            <span style={{ position: 'relative', width: 22, height: 22, borderRadius: '50%', background: '#1C1C1A', color: '#fff', border: '2px solid #fff', boxShadow: '0 1px 6px rgba(0,0,0,.45)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 300 }}>+</span>
+          </div>
         )}
         {/* Hint sobre el plano */}
         {!marcando && marcas.length === 0 && (
@@ -853,7 +913,8 @@ function PlanoPunto({ punto, onUpdate, obra, nombreDisciplina, numActa, onActaGe
       {/* Formulario nueva marca */}
       {marcando && (
         <div className="fade" style={{ marginTop: 8, padding: '12px 14px', background: '#F9F8F5', borderRadius: 10, border: '1px solid #E8E7E1' }}>
-          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8, color: '#141412' }}>/ Nueva marca — ¿qué has visto?</div>
+          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#141412' }}>/ Nueva marca — ¿qué has visto?</div>
+          <div style={{ fontSize: 11, color: '#9B9B97', marginBottom: 8 }}>Arrastra el punto sobre el plano para ajustar su posición exacta.</div>
           <input placeholder="Título breve (ej. Anclajes pantallas)" value={formMarca.titulo} onChange={e => setFormMarca(f => ({ ...f, titulo: e.target.value }))} style={{ marginBottom: 8 }} />
           <textarea placeholder="Describe la incidencia observada..." value={formMarca.desc} onChange={e => setFormMarca(f => ({ ...f, desc: e.target.value }))} style={{ marginBottom: 8, minHeight: 64 }} />
           {formMarca.foto
@@ -887,13 +948,14 @@ function PlanoPunto({ punto, onUpdate, obra, nombreDisciplina, numActa, onActaGe
                   {m.foto && <img src={m.foto} style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 8, marginBottom: 8, marginTop: 6, display: 'block' }} />}
                   {m.titulo && <div style={{ fontSize: 13, fontWeight: 600, color: '#141412', marginBottom: 3 }}>{m.titulo}</div>}
                   <p style={{ fontSize: 13, color: '#18180F', lineHeight: 1.55, marginBottom: 10 }}>{m.desc}</p>
-                  <Btn sm danger onClick={() => deleteMarca(m.id)}>Eliminar marca</Btn>
+                  <Btn sm danger onClick={() => setConfirmacion({ titulo: 'Eliminar marca', texto: 'Vas a eliminar esta marca y su contenido. Esta acción no se puede deshacer.', onSi: () => { deleteMarca(m.id); setConfirmacion(null); } })}>Eliminar marca</Btn>
                 </div>
               )}
             </div>
           ))}
         </div>
       )}
+      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
   );
 }
@@ -906,6 +968,8 @@ function ModuloInspecciones({ obra, onSave }) {
   const [nombreDisciplina,    setNombreDisciplina]    = useState('');
   const [nombrePunto,         setNombrePunto]         = useState('');
   const [puntosExpandidos,    setPuntosExpandidos]    = useState(new Set());
+  const [confirmacion,        setConfirmacion]         = useState(null); // {titulo,texto,onSi}
+  const [menuDisciplina,      setMenuDisciplina]       = useState(false);
 
   function togglePunto(id) {
     setPuntosExpandidos(prev => {
@@ -1042,7 +1106,18 @@ function ModuloInspecciones({ obra, onSave }) {
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{disciplina.nombre}</div>
                 <div style={{ fontSize: 12, color: '#A5A5A0', marginTop: 1 }}>{disciplina.puntos.length} puntos de control</div>
               </div>
-              <Btn sm danger onClick={() => deleteDisciplina(disciplina.id)}>Eliminar disciplina</Btn>
+              <div style={{ position: 'relative' }}>
+                <button onClick={() => setMenuDisciplina(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 20, lineHeight: 1, padding: '0 4px' }}>⋮</button>
+                {menuDisciplina && (
+                  <>
+                    <div onClick={() => setMenuDisciplina(false)} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
+                    <div style={{ position: 'absolute', right: 0, top: '100%', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 9, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 5, zIndex: 21, minWidth: 160 }}>
+                      <div onClick={() => { setMenuDisciplina(false); setConfirmacion({ titulo: 'Eliminar disciplina', texto: `Vas a eliminar "${disciplina.nombre}" y todos sus puntos de control. Esta acción no se puede deshacer.`, onSi: () => { deleteDisciplina(disciplina.id); setConfirmacion(null); } }); }}
+                        style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#8A1F1F' }} className="hov-row">Eliminar disciplina</div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             {disciplina.puntos.length === 0 && (
@@ -1072,7 +1147,7 @@ function ModuloInspecciones({ obra, onSave }) {
                           style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 6, border: '1px solid #E0DFD9', background: expandido ? '#1C1C1A' : '#fff', color: expandido ? '#F2F1ED' : '#6B6B66', fontSize: 11, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                           / Plano{nMarcas > 0 ? ` (${nMarcas})` : ''}
                         </button>
-                        <button onClick={() => deletePunto(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                        <button onClick={() => setConfirmacion({ titulo: 'Eliminar punto de control', texto: `Vas a eliminar "${p.nombre}" y su plano. Esta acción no se puede deshacer.`, onSi: () => { deletePunto(p.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
                       </div>
                     </div>
                     {/* Plano expandido */}
@@ -1536,6 +1611,7 @@ function ModalRevision({ inc, onSinCambios, onConCambios, onClose }) {
           )}
         </div>
       </div>
+      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
   );
 }
@@ -2295,10 +2371,11 @@ function UnidadesNombradas({ ensayo, onUpdate, onPreview }) {
 
 // ── Modo B: criterio único (contador + actas, p.ej. probetas) ─────────────────
 function RegistrosLibres({ ensayo, onUpdate, onPreview }) {
-  const [show, setShow]           = useState(false);
-  const [resultado, setResultado] = useState('apto');
-  const [comentario, setComentario] = useState('');
-  const [adjuntos, setAdjuntos]   = useState([]);
+  const [show, setShow]               = useState(false);
+  const [resultado, setResultado]     = useState('apto');
+  const [comentario, setComentario]   = useState('');
+  const [adjuntos, setAdjuntos]       = useState([]);
+  const [confirmacion, setConfirmacion] = useState(null);
   const registros = ensayo.registros || [];
   const ejecutadas = ensayo.ejecutadas || 0;
   const cantidad = ensayo.cantidad || 0;
@@ -2354,7 +2431,7 @@ function RegistrosLibres({ ensayo, onUpdate, onPreview }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: r.comentario || r.adjuntos?.length ? 7 : 0 }}>
                   <span style={{ fontSize: 11, color: '#A5A5A0' }}>{fmtDate(r.fecha)}</span>
                   <Pill label={res.label} bg={res.bg} color={res.color} />
-                  <button onClick={() => borrar(r.id)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
+                  <button onClick={() => setConfirmacion({ titulo: 'Eliminar registro', texto: 'Vas a eliminar este registro de ensayo. Esta acción no se puede deshacer.', onSi: () => { borrar(r.id); setConfirmacion(null); } })} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
                 </div>
                 {r.comentario && <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: r.adjuntos?.length ? 8 : 0 }}>{r.comentario}</div>}
                 {r.adjuntos?.length > 0 && (
@@ -2401,6 +2478,7 @@ function RegistrosLibres({ ensayo, onUpdate, onPreview }) {
       ) : (
         <Btn onClick={() => setShow(true)} full>+ Adjuntar acta / registro</Btn>
       )}
+      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
   );
 }
