@@ -539,178 +539,193 @@ function PlanoPunto({ punto, onUpdate, obra, nombreDisciplina, numActa, onActaGe
       }
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const PW = 210, PH = 297, M = 18, CW = PW - M * 2;
+      const PW = 210, PH = 297, M = 20, CW = PW - M * 2;
       const num = String(numActa || 1).padStart(2, '0');
       const fechaCorta = new Date().toLocaleDateString('es-ES');
       const fechaLarga = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
-      const G = [20, 20, 18], GRIS = [107, 107, 102], LINEA = [200, 199, 193];
+      const TINTA = [26, 26, 24], GRIS = [120, 120, 114], LINEA = [214, 213, 207], FONDO = [244, 243, 239];
+      const LH = 4.6; // interlineado base
 
-      // — Cabecera y pie repetibles —
+      // — Cabecera y pie (en cada página) —
       function cabecera() {
-        doc.setTextColor(...G);
-        doc.setFontSize(8); doc.setFont('helvetica', 'bold');
-        doc.text(`PARTE DE INSPECCIÓN Nº: ${num}`, M, 13);
-        doc.text(`FECHA PARTE INSPECCIÓN: ${fechaCorta}`, M, 17);
-        doc.setFontSize(26); doc.setFont('helvetica', 'bold');
-        doc.text('Plaat.', PW - M, 16, { align: 'right' });
-        doc.setDrawColor(...LINEA); doc.setLineWidth(0.2);
-      }
-      function pie() {
         doc.setTextColor(...GRIS);
-        doc.setFontSize(7); doc.setFont('helvetica', 'normal');
-        doc.text('Plaat Arquitectura Técnica', M, PH - 10);
-        doc.text('Barcelona – Madrid', PW / 2, PH - 10, { align: 'center' });
-        doc.text('www.plaat.es', PW - M, PH - 10, { align: 'right' });
+        doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
+        doc.text(`Parte de inspección Nº ${num}`, M, 12);
+        doc.text(fechaCorta, M, 16);
+        doc.setTextColor(...TINTA);
+        doc.setFontSize(22); doc.setFont('helvetica', 'bold');
+        doc.text('Plaat.', PW - M, 15, { align: 'right' });
+        doc.setDrawColor(...LINEA); doc.setLineWidth(0.3);
+        doc.line(M, 20, PW - M, 20);
       }
-      function nuevaPagina() { doc.addPage(); cabecera(); pie(); }
+      function pie(p, total) {
+        doc.setDrawColor(...LINEA); doc.setLineWidth(0.3);
+        doc.line(M, PH - 14, PW - M, PH - 14);
+        doc.setTextColor(...GRIS); doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+        doc.text('Plaat Arquitectura Técnica', M, PH - 9);
+        doc.text('Barcelona — Madrid', PW / 2, PH - 9, { align: 'center' });
+        doc.text('www.plaat.es', PW - M, PH - 9, { align: 'right' });
+      }
+      function nuevaPagina() { doc.addPage(); cabecera(); }
 
-      // Tabla simple clave/valor estilo acta
-      function filaTabla(x, yy, wLabel, wValue, label, value, h) {
+      // Título de sección con filete fino debajo
+      function tituloSeccion(txt, yy) {
+        doc.setTextColor(...TINTA); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+        doc.text(txt, M, yy);
+        doc.setDrawColor(...TINTA); doc.setLineWidth(0.4);
+        doc.line(M, yy + 2, M + 14, yy + 2);
+        return yy + 9;
+      }
+
+      // Fila de tabla clave/valor (etiqueta con fondo suave)
+      function filaTabla(yy, label, value) {
+        const wL = 48;
+        const vlines = doc.splitTextToSize(value || '—', CW - wL - 6);
+        const h = Math.max(8, vlines.length * LH + 3.5);
+        doc.setFillColor(...FONDO);
+        doc.rect(M, yy, wL, h, 'F');
         doc.setDrawColor(...LINEA); doc.setLineWidth(0.2);
-        doc.rect(x, yy, wLabel, h);
-        doc.rect(x + wLabel, yy, wValue, h);
-        doc.setFillColor(238, 237, 231);
-        doc.rect(x, yy, wLabel, h, 'F');
-        doc.rect(x, yy, wLabel, h);
-        doc.setTextColor(...G); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
-        doc.text(label, x + 2.5, yy + h / 2 + 1.2);
-        doc.setFont('helvetica', 'bold');
-        const vlines = doc.splitTextToSize(value || '', wValue - 5);
-        doc.text(vlines, x + wLabel + 2.5, yy + h / 2 + 1.2);
+        doc.rect(M, yy, CW, h);
+        doc.line(M + wL, yy, M + wL, yy + h);
+        doc.setTextColor(...GRIS); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+        doc.text(label.toUpperCase(), M + 3, yy + h / 2 + 1);
+        doc.setTextColor(...TINTA); doc.setFontSize(9.5); doc.setFont('helvetica', 'normal');
+        doc.text(vlines, M + wL + 3.5, yy + h / 2 - (vlines.length - 1) * (LH / 2) + 1.2);
+        return yy + h;
       }
 
       // ═══ PÁGINA 1 — Portada ═══
-      cabecera(); pie();
-      let y = 26;
-      // Banda título
-      doc.setFillColor(238, 237, 231);
-      doc.rect(M, y, CW, 8, 'F'); doc.setDrawColor(...LINEA); doc.rect(M, y, CW, 8);
-      doc.setTextColor(...G); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-      doc.text('ACTA DE INSPECCIÓN DE OBRA', M + 3, y + 5.5);
-      doc.text(`NÚM.: ${num}`, PW - M - 3, y + 5.5, { align: 'right' });
-      y += 14;
+      cabecera();
+      let y = 34;
+      doc.setTextColor(...TINTA); doc.setFontSize(15); doc.setFont('helvetica', 'bold');
+      doc.text('Acta de inspección de obra', M, y);
+      doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRIS);
+      doc.text(`Núm. ${num}`, PW - M, y, { align: 'right' });
+      y += 4; doc.setDrawColor(...TINTA); doc.setLineWidth(0.5); doc.line(M, y, M + 16, y);
+      y += 12;
 
-      // Obra / Emplazamiento
-      filaTabla(M, y, 45, CW - 45, 'OBRA', (obra?.nombre || '').toUpperCase(), 9); y += 9;
-      filaTabla(M, y, 45, CW - 45, 'EMPLAZAMIENTO', (obra?.emplazamiento || obra?.direccion || '').toUpperCase(), 9); y += 16;
+      y = filaTabla(y, 'Obra', obra?.nombre || '');
+      y = filaTabla(y, 'Emplazamiento', obra?.emplazamiento || obra?.direccion || '');
+      y += 12;
 
-      // Datos de la obra
-      doc.setTextColor(...G); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-      doc.text('DATOS DE LA OBRA:', M, y); y += 6;
-      const datos = [
-        ['PROPIEDAD', obra?.propiedad || obra?.cliente || ''],
-        ['PROYECTISTA', obra?.proyectista || ''],
-        ['DO', obra?.direccionObra || ''],
-        ['DEO', 'PLAAT ARQUITECTURA TÉCNICA S.L.'],
-        ['CONSTRUCTORA', obra?.constructora || ''],
-      ];
-      datos.forEach(([k, v]) => { filaTabla(M, y, 45, CW - 45, k, v, 9); y += 9; });
-      y += 10;
+      y = tituloSeccion('Datos de la obra', y);
+      [
+        ['Propiedad', obra?.propiedad || obra?.cliente || ''],
+        ['Proyectista', obra?.proyectista || ''],
+        ['Dirección de obra', obra?.direccionObra || ''],
+        ['DEO', 'Plaat Arquitectura Técnica S.L.'],
+        ['Constructora', obra?.constructora || ''],
+      ].forEach(([k, v]) => { y = filaTabla(y, k, v); });
+      y += 16;
 
-      // Fecha firma + firmante
-      doc.setTextColor(...G); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-      doc.text('FECHA FIRMA:', M, y); y += 6;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      doc.setTextColor(...GRIS); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+      doc.text('FECHA Y FIRMA', M, y); y += 6;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...TINTA);
       doc.text(`Barcelona, ${fechaLarga}.`, M, y);
-      // Firmante abajo
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-      doc.text('DIRECTOR DE EJECUCIÓN DE OBRA', M, PH - 60);
-      doc.setFont('helvetica', 'normal');
-      doc.text(obra?.deoFirmante || obra?.responsable || '', M, PH - 55);
 
-      // ═══ PÁGINA 2 — Aspectos revisados ═══
-      nuevaPagina(); y = 28;
-      doc.setTextColor(...G); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-      doc.text('Aspecto revisado:', M, y); y += 7;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-      doc.text('Durante la visita realizada, se han revisado los siguientes aspectos:', M, y); y += 7;
+      // Firmante (parte inferior)
+      doc.setDrawColor(...LINEA); doc.setLineWidth(0.3);
+      doc.line(M, PH - 52, M + 70, PH - 52);
+      doc.setTextColor(...TINTA); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+      doc.text('Director de ejecución de obra', M, PH - 47);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRIS);
+      doc.text(obra?.deoFirmante || obra?.responsable || '', M, PH - 42);
 
-      // Tabla temas tratados
-      doc.setFillColor(238, 237, 231);
-      doc.rect(M, y, 18, 8, 'F'); doc.rect(M, y, 18, 8);
-      doc.rect(M + 18, y, CW - 18, 8);
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...G);
-      doc.text('N.º', M + 4, y + 5.3);
-      doc.text('TEMAS TRATADOS', M + 21, y + 5.3);
-      y += 8;
+      // ═══ PÁGINA 2 — Incidencias revisadas ═══
+      nuevaPagina(); y = 34;
+      y = tituloSeccion('Aspectos revisados', y);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...TINTA);
+      doc.text('Durante la visita se han revisado las siguientes incidencias:', M, y); y += 8;
+
+      // Tabla resumen de incidencias
+      const wNum = 16;
+      doc.setFillColor(...FONDO); doc.setDrawColor(...LINEA); doc.setLineWidth(0.2);
+      doc.rect(M, y, CW, 7.5, 'F'); doc.rect(M, y, CW, 7.5);
+      doc.line(M + wNum, y, M + wNum, y + 7.5);
+      doc.setTextColor(...GRIS); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+      doc.text('Nº', M + 4, y + 5);
+      doc.text('INCIDENCIAS', M + wNum + 3.5, y + 5);
+      y += 7.5;
       marcas.forEach((m, idx) => {
-        const titulo = (m.titulo || m.desc || '').toUpperCase();
-        const tl = doc.splitTextToSize(titulo, CW - 24);
-        const h = Math.max(9, tl.length * 4.5 + 4);
-        doc.rect(M, y, 18, h); doc.rect(M + 18, y, CW - 18, h);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+        const titulo = m.titulo || m.desc || '';
+        const tl = doc.splitTextToSize(titulo, CW - wNum - 7);
+        const h = Math.max(8, tl.length * LH + 3.5);
+        doc.setDrawColor(...LINEA); doc.setLineWidth(0.2);
+        doc.rect(M, y, CW, h); doc.line(M + wNum, y, M + wNum, y + h);
+        doc.setTextColor(...TINTA); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
         doc.text(`N${idx + 1}`, M + 4, y + h / 2 + 1);
-        doc.text(tl, M + 21, y + h / 2 - (tl.length - 1) * 2 + 1);
+        doc.setFont('helvetica', 'normal');
+        doc.text(tl, M + wNum + 3.5, y + h / 2 - (tl.length - 1) * (LH / 2) + 1.2);
         y += h;
       });
-      y += 8;
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-      doc.text('Incidencias detectadas:', M, y); y += 6;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-      const intro = doc.splitTextToSize('Las incidencias detectadas deberán subsanarse y dar respuesta a la DEO. Para ello deberán rellenar los datos solicitados en cada incidencia y enviar fotografías a la DEO con las rectificaciones.', CW);
-      doc.text(intro, M, y); y += intro.length * 4.5 + 6;
+      y += 12;
 
-      // Plano general con marcas (respetando proporción)
+      // Plano con marcas (proporción correcta, círculos pequeños)
       if (plano?.imgData) {
+        y = tituloSeccion('Localización en plano', y);
         const ratio = plano.h && plano.w ? plano.h / plano.w : 0.6;
         let planoW = CW, planoH = CW * ratio;
         if (planoH > 150) { planoH = 150; planoW = planoH / ratio; }
         const px = M + (CW - planoW) / 2;
-        if (y + planoH > PH - 20) { nuevaPagina(); y = 28; }
+        if (y + planoH > PH - 18) { nuevaPagina(); y = 34; }
         doc.addImage(plano.imgData, 'JPEG', px, y, planoW, planoH);
-        doc.setDrawColor(...LINEA); doc.rect(px, y, planoW, planoH);
+        doc.setDrawColor(...LINEA); doc.setLineWidth(0.2); doc.rect(px, y, planoW, planoH);
         marcas.forEach((m, idx) => {
           const mx = px + (m.x / 100) * planoW;
           const my = y + (m.y / 100) * planoH;
-          doc.setFillColor(226, 75, 74); doc.circle(mx, my, 3, 'F');
-          doc.setTextColor(255, 255, 255); doc.setFontSize(7); doc.setFont('helvetica', 'bold');
-          doc.text(String(idx + 1), mx, my + 1, { align: 'center' });
+          doc.setFillColor(226, 75, 74); doc.circle(mx, my, 1.9, 'F');
+          doc.setTextColor(255, 255, 255); doc.setFontSize(5); doc.setFont('helvetica', 'bold');
+          doc.text(String(idx + 1), mx, my + 0.7, { align: 'center' });
         });
         y += planoH + 8;
       }
 
       // ═══ FICHAS POR INCIDENCIA ═══
-      nuevaPagina(); y = 28;
-      doc.setTextColor(...G); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-      doc.text('1. ZONAS REVISADAS', M, y); y += 8;
+      nuevaPagina(); y = 34;
+      y = tituloSeccion('Detalle de incidencias', y);
 
       for (let idx = 0; idx < marcas.length; idx++) {
         const m = marcas[idx];
-        if (y > PH - 80) { nuevaPagina(); y = 28; }
+        if (y > PH - 78) { nuevaPagina(); y = 34; }
 
-        // Cabecera ficha
-        doc.setFillColor(248, 248, 246);
-        doc.rect(M, y, CW, 8, 'F'); doc.setDrawColor(...LINEA); doc.rect(M, y, CW, 8);
-        doc.setTextColor(...G); doc.setFontSize(9.5); doc.setFont('helvetica', 'bold');
-        doc.text(`N${idx + 1}`, M + 3, y + 5.3);
-        doc.text((m.titulo || `Incidencia ${idx + 1}`).toUpperCase(), M + 18, y + 5.3);
-        y += 12;
+        // Encabezado de ficha: Nº + título
+        doc.setTextColor(...TINTA); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+        doc.text(`N${idx + 1}`, M, y);
+        doc.text(m.titulo || `Incidencia ${idx + 1}`, M + 12, y);
+        y += 2.5;
+        doc.setDrawColor(...LINEA); doc.setLineWidth(0.2); doc.line(M, y, PW - M, y);
+        y += 6;
 
         // Descripción
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...G);
-        const dl = doc.splitTextToSize(m.desc || '', CW - 4);
-        doc.text(dl, M + 2, y); y += dl.length * 4.5 + 5;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...TINTA);
+        const dl = doc.splitTextToSize(m.desc || '', CW);
+        doc.text(dl, M, y); y += dl.length * LH + 5;
 
-        // Foto a tamaño normal (respetando proporción)
+        // Foto sin borde, proporción real
         if (m.foto) {
-          const fw = 80, fh = 60;
-          if (y + fh > PH - 20) { nuevaPagina(); y = 28; }
-          doc.addImage(m.foto, 'JPEG', M + 2, y, fw, fh);
-          doc.setDrawColor(226, 75, 74); doc.setLineWidth(0.5); doc.rect(M + 2, y, fw, fh);
-          doc.setLineWidth(0.2);
-          y += fh + 5;
+          let fw = 85, fh = 64;
+          try {
+            const props = doc.getImageProperties(m.foto);
+            const fr = props.height / props.width;
+            fh = fw * fr;
+            if (fh > 78) { fh = 78; fw = fh / fr; }
+          } catch (e) {}
+          if (y + fh > PH - 18) { nuevaPagina(); y = 34; }
+          doc.addImage(m.foto, 'JPEG', M, y, fw, fh);
+          y += fh + 4;
         }
-        doc.setTextColor(...GRIS); doc.setFontSize(8);
-        doc.text(`Fecha: ${new Date(m.createdAt).toLocaleDateString('es-ES')}`, M + 2, y);
-        y += 10;
+        doc.setTextColor(...GRIS); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+        doc.text(new Date(m.createdAt).toLocaleDateString('es-ES'), M, y);
+        y += 12;
       }
 
-      // Numeración de páginas
+      // Pie + numeración en todas las páginas
       const total = doc.getNumberOfPages();
       for (let p = 1; p <= total; p++) {
         doc.setPage(p);
+        pie(p, total);
         doc.setTextColor(...GRIS); doc.setFontSize(7);
-        doc.text(`Pág. ${p} / ${total}`, PW / 2, PH - 6, { align: 'center' });
+        doc.text(`${p} / ${total}`, PW - M, PH - 4, { align: 'right' });
       }
 
       const fname = new Date().toISOString().slice(0, 10);
@@ -818,13 +833,13 @@ function PlanoPunto({ punto, onUpdate, obra, nombreDisciplina, numActa, onActaGe
         {/* Marcas existentes */}
         {marcas.map((m, idx) => (
           <button key={m.id} onClick={e => { e.stopPropagation(); setMarcaOpen(marcaOpen === m.id ? null : m.id); }}
-            style={{ position: 'absolute', left: m.x + '%', top: m.y + '%', transform: 'translate(-50%,-50%)', width: 26, height: 26, borderRadius: '50%', background: '#E24B4A', color: '#fff', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(0,0,0,.35)', fontSize: 11, fontWeight: 700, cursor: 'pointer', zIndex: 2, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            style={{ position: 'absolute', left: m.x + '%', top: m.y + '%', transform: 'translate(-50%,-50%)', width: 19, height: 19, borderRadius: '50%', background: '#E24B4A', color: '#fff', border: '1.5px solid #fff', boxShadow: '0 1px 5px rgba(0,0,0,.35)', fontSize: 9.5, fontWeight: 700, cursor: 'pointer', zIndex: 2, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {idx + 1}
           </button>
         ))}
         {/* Nueva marca (pendiente de guardar) */}
         {marcando && (
-          <div style={{ position: 'absolute', left: marcando.x + '%', top: marcando.y + '%', transform: 'translate(-50%,-50%)', width: 26, height: 26, borderRadius: '50%', background: '#1C1C1A', color: '#fff', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(0,0,0,.35)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 300, zIndex: 2, pointerEvents: 'none' }}>+</div>
+          <div style={{ position: 'absolute', left: marcando.x + '%', top: marcando.y + '%', transform: 'translate(-50%,-50%)', width: 19, height: 19, borderRadius: '50%', background: '#1C1C1A', color: '#fff', border: '1.5px solid #fff', boxShadow: '0 1px 5px rgba(0,0,0,.35)', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 300, zIndex: 2, pointerEvents: 'none' }}>+</div>
         )}
         {/* Hint sobre el plano */}
         {!marcando && marcas.length === 0 && (
