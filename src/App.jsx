@@ -3058,9 +3058,29 @@ function ModuloActaVO({ obra, onSave }) {
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => {
       if (t.id !== temaId) return t;
       const entradas = t.entradas.map(e => e.id !== entId ? e : { ...e, [campo]: val });
-      const ult = entradas[entradas.length - 1];
-      const resuelto = ult.estado === 'R';
-      return { ...t, entradas, resuelto, resueltoEnActa: resuelto ? (t.resueltoEnActa || vo.num) : null };
+      // El tema solo está resuelto cuando TODOS sus comentarios están en R
+      const resuelto = entradas.length > 0 && entradas.every(e => e.estado === 'R');
+      // Si alguna entrada es nueva de este acta, se ve "N" ahora y "R" el siguiente → desaparece un acta después
+      const hayNueva = entradas.some(e => e.actaNum === vo.num);
+      const resueltoEnActa = resuelto ? (t.resueltoEnActa || (hayNueva ? vo.num + 1 : vo.num)) : null;
+      return { ...t, entradas, resuelto, resueltoEnActa };
+    }) }) });
+  }
+  function updTema(secId, temaId, campo, val) {
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id === temaId ? { ...t, [campo]: val } : t) }) });
+  }
+  function addFotoEntrada(secId, temaId, entId) {
+    pickFiles('image/*', f => guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: t.entradas.map(e => e.id !== entId ? e : { ...e, fotos: [...(e.fotos||[]), { id: uid(), data: f.data }] }) }) }) }));
+  }
+  function delFotoEntrada(secId, temaId, entId, fotoId) {
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: t.entradas.map(e => e.id !== entId ? e : { ...e, fotos: (e.fotos||[]).filter(ft => ft.id !== fotoId) }) }) }) });
+  }
+  function reabrirTema(secId, temaId) {
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => {
+      if (t.id !== temaId) return t;
+      // Vuelve a pendiente: última entrada pasa a P, se limpia resuelto
+      const entradas = t.entradas.map((e, i) => i === t.entradas.length - 1 ? { ...e, estado: 'P', fin: '' } : e);
+      return { ...t, entradas, resuelto: false, resueltoEnActa: null };
     }) }) });
   }
   function delTema(secId, temaId) {
@@ -3083,7 +3103,7 @@ function ModuloActaVO({ obra, onSave }) {
   }
 
   // Activos = no resueltos en acta anterior; resueltos = para histórico
-  const todosResueltos = vo.secciones.flatMap(s => (s.temas||[]).filter(t => t.resuelto));
+  const todosResueltos = vo.secciones.flatMap(s => (s.temas||[]).filter(t => t.resuelto).map(t => ({ ...t, _secId: s.id })));
   const activosPorSec = id => (vo.secciones.find(s => s.id === id)?.temas||[]).filter(t => !(t.resuelto && t.resueltoEnActa && t.resueltoEnActa < vo.num));
 
   return (
@@ -3092,7 +3112,11 @@ function ModuloActaVO({ obra, onSave }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Acta de Visita de Obra</div>
-          <div style={{ fontSize: 12, color: '#9B9B97' }}>Próxima exportación: Nº {String(vo.num).padStart(2,'0')}</div>
+          <div style={{ fontSize: 12, color: '#9B9B97', display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+            Nº de acta:
+            <input type="number" min="1" value={vo.num} onChange={e => guardarVO({ ...vo, num: Math.max(1, parseInt(e.target.value || '1', 10)) })}
+              style={{ width: 60, padding: '3px 7px', fontSize: 12, fontWeight: 600, textAlign: 'center' }} />
+          </div>
         </div>
         <Btn onClick={() => setShowHistorico(true)}>Resueltos ({todosResueltos.length})</Btn>
         <Btn primary disabled={generando} onClick={exportar}>{generando ? 'Generando...' : `↓ Exportar Acta Nº ${String(vo.num).padStart(2,'0')}`}</Btn>
@@ -3191,12 +3215,18 @@ function ModuloActaVO({ obra, onSave }) {
             </div>
             {/* Temas activos */}
             {activos.map(t => {
-              const ult = t.entradas[t.entradas.length - 1];
-              const est = ESTADOS_VO[ult.estado] || ESTADOS_VO.P;
+              // Estado agregado del tema: Resuelto solo si TODOS en R; si hay algún P → Pendiente; resto → Informativo
+              const allR = t.entradas.length > 0 && t.entradas.every(e => e.estado === 'R');
+              const anyP = t.entradas.some(e => e.estado === 'P');
+              const estKey = allR ? 'R' : anyP ? 'P' : 'I';
+              const est = ESTADOS_VO[estKey];
               return (
                 <TemaVO key={t.id} t={t} est={est} secId={sec.id} voNum={vo.num}
                   onUpdEntrada={(tId,eId,campo,val) => updEntrada(sec.id, tId, eId, campo, val)}
+                  onUpdTema={(tId,campo,val) => updTema(sec.id, tId, campo, val)}
                   onAddEntrada={(tId,txt) => addEntrada(sec.id, tId, txt)}
+                  onAddFoto={(tId,eId) => addFotoEntrada(sec.id, tId, eId)}
+                  onDelFoto={(tId,eId,fId) => delFotoEntrada(sec.id, tId, eId, fId)}
                   onDel={() => setBorrar({ tipo: 'tema', secId: sec.id, id: t.id, label: t.num })} />
               );
             })}
@@ -3215,6 +3245,7 @@ function ModuloActaVO({ obra, onSave }) {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 3 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#52524E' }}>{t.num}</span>
                   <Pill label="Resuelto" bg={ESTADOS_VO.R.bg} color={ESTADOS_VO.R.color} />
+                  <Btn sm onClick={() => { reabrirTema(t._secId, t.id); }}>Reabrir</Btn>
                   <span style={{ fontSize: 11, color: '#A5A5A0', marginLeft: 'auto' }}>Acta {String(t.resueltoEnActa||'—').padStart(2,'0')}</span>
                 </div>
                 <div style={{ fontSize: 13, color: '#18180F', lineHeight: 1.5 }}>{t.entradas[t.entradas.length-1].texto}</div>
@@ -3235,45 +3266,84 @@ function ModuloActaVO({ obra, onSave }) {
 }
 
 // Componente de un tema (para evitar closures stale en los selects)
-function TemaVO({ t, est, secId, voNum, onUpdEntrada, onAddEntrada, onDel }) {
+function TemaVO({ t, est, secId, voNum, onUpdEntrada, onUpdTema, onAddEntrada, onAddFoto, onDelFoto, onDel }) {
   const [abierto, setAbierto] = useState(false);
+  const [editNum, setEditNum] = useState(false);
+  const [editEnt, setEditEnt] = useState(null); // id entrada en edición
+  const [txtEdit, setTxtEdit] = useState('');
+  const [confirmFoto, setConfirmFoto] = useState(null);
   const ult = t.entradas[t.entradas.length - 1];
+  const ultEsNueva = ult.actaNum === voNum;
   return (
     <div style={{ border: `1px solid ${abierto ? '#C5C4BE' : '#E8E7E1'}`, borderRadius: 9, marginBottom: 6, overflow: 'hidden' }}>
       <div onClick={() => setAbierto(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', cursor: 'pointer', background: abierto ? '#FAFAF8' : '#fff' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: '#52524E', flexShrink: 0, minWidth: 34 }}>{t.num}</span>
         <span style={{ flex: 1, fontSize: 13, color: '#18180F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ult.texto}</span>
-        <Pill label={est.label} bg={est.bg} color={est.color} />
+        {ultEsNueva
+          ? <Pill label="N — Nueva" bg="#F2F1ED" color="#52524E" />
+          : <Pill label={est.label} bg={est.bg} color={est.color} />}
       </div>
       {abierto && (
         <div className="fade" style={{ padding: '4px 12px 12px', borderTop: '1px solid #F2F1ED' }}>
-          {t.entradas.map(en => (
-            <div key={en.id} style={{ padding: '8px 0', borderBottom: '1px solid #F5F4F0' }}>
-              <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
-                <span style={{ fontSize: 11, color: '#A5A5A0', whiteSpace: 'nowrap', paddingTop: 2, minWidth: 36 }}>{fmtShort(en.fecha)}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: '#18180F', lineHeight: 1.5, marginBottom: 5 }}>{en.texto}</div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {en.actaNum === voNum
-                      ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: '#F2F1ED', color: '#52524E', fontWeight: 600, border: '1px solid #E0DFD9' }}>N — Nueva</span>
-                      : <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
-                          style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: `1px solid ${ESTADOS_VO[en.estado].color}40`, background: ESTADOS_VO[en.estado].bg, color: ESTADOS_VO[en.estado].color, fontWeight: 500 }}>
-                          {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                        </select>}
-                    {en.estado === 'R' && en.actaNum !== voNum && <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)} style={{ width: 'auto', fontSize: 11 }} />}
-                    <select value={en.resp||''} onChange={ev => onUpdEntrada(t.id, en.id, 'resp', ev.target.value)}
-                      style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: '1px solid #E0DFD9' }}>
-                      {RESP_VO.map(r => <option key={r} value={r}>{r ? `${r}` : '— resp.'}</option>)}
-                    </select>
+          {/* Editar número de tema */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, paddingTop: 6 }}>
+            <span style={{ fontSize: 11, color: '#9B9B97' }}>Nº tema:</span>
+            {editNum
+              ? <input autoFocus value={t.num} onChange={e => onUpdTema(t.id, 'num', e.target.value)} onBlur={() => setEditNum(false)}
+                  style={{ width: 70, fontSize: 12, padding: '3px 6px' }} />
+              : <span onClick={() => setEditNum(true)} style={{ fontSize: 12, fontWeight: 600, color: '#141412', cursor: 'text', padding: '2px 6px', borderRadius: 5, border: '1px dashed #E0DFD9' }}>{t.num}</span>}
+          </div>
+
+          {t.entradas.map(en => {
+            const esNueva = en.actaNum === voNum;
+            return (
+              <div key={en.id} style={{ padding: '8px 0', borderBottom: '1px solid #F5F4F0' }}>
+                <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 11, color: '#A5A5A0', whiteSpace: 'nowrap', paddingTop: 2, minWidth: 36 }}>{fmtShort(en.fecha)}</span>
+                  <div style={{ flex: 1 }}>
+                    {/* Texto editable */}
+                    {editEnt === en.id
+                      ? <div style={{ marginBottom: 6 }}>
+                          <textarea autoFocus value={txtEdit} onChange={e => setTxtEdit(e.target.value)} style={{ minHeight: 54, marginBottom: 6 }} />
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <Btn sm primary onClick={() => { onUpdEntrada(t.id, en.id, 'texto', txtEdit.trim()); setEditEnt(null); }}>Guardar</Btn>
+                            <Btn sm onClick={() => setEditEnt(null)}>✕</Btn>
+                          </div>
+                        </div>
+                      : <div onClick={() => { setEditEnt(en.id); setTxtEdit(en.texto); }} style={{ fontSize: 13, color: '#18180F', lineHeight: 1.5, marginBottom: 5, cursor: 'text' }}>{en.texto}</div>}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {esNueva && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, background: '#F2F1ED', color: '#52524E', fontWeight: 700, border: '1px solid #E0DFD9' }}>N</span>}
+                      <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
+                        style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: `1px solid ${ESTADOS_VO[en.estado].color}40`, background: ESTADOS_VO[en.estado].bg, color: ESTADOS_VO[en.estado].color, fontWeight: 500 }}>
+                        {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                      </select>
+                      {en.estado === 'R' && <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)} style={{ width: 'auto', fontSize: 11 }} />}
+                      <select value={en.resp||''} onChange={ev => onUpdEntrada(t.id, en.id, 'resp', ev.target.value)}
+                        style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: '1px solid #E0DFD9' }}>
+                        {RESP_VO.map(r => <option key={r} value={r}>{r ? `${r}` : '— resp.'}</option>)}
+                      </select>
+                    </div>
+                    {esNueva && <div style={{ fontSize: 10.5, color: '#9B9B97', marginTop: 4 }}>En esta acta aparece como "N". En la siguiente mostrará el estado elegido.</div>}
+                    {/* Fotos del comentario */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                      {(en.fotos||[]).map(ft => (
+                        <div key={ft.id} style={{ position: 'relative', width: 64, height: 48 }}>
+                          <img src={ft.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                          <button onClick={() => setConfirmFoto({ eId: en.id, fId: ft.id })} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 16, height: 16, cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
+                        </div>
+                      ))}
+                      <button onClick={() => onAddFoto(t.id, en.id)} style={{ width: 64, height: 48, borderRadius: 6, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 11, color: '#9B9B97', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>+ foto</button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <NuevaEntrada onAdd={txt => onAddEntrada(t.id, txt)} />
           <div style={{ marginTop: 8, textAlign: 'right' }}><Btn sm danger onClick={onDel}>Eliminar tema</Btn></div>
         </div>
       )}
+      {confirmFoto && <ConfirmMini titulo="Eliminar foto" texto="Vas a eliminar esta foto del comentario." onSi={() => { onDelFoto(t.id, confirmFoto.eId, confirmFoto.fId); setConfirmFoto(null); }} onNo={() => setConfirmFoto(null)} />}
     </div>
   );
 }
@@ -3492,13 +3562,26 @@ async function generarActaVO(obra, vo) {
 
     // Cada tema = un bloque (sin líneas internas entre seguimientos)
     activos.forEach(t => {
+      const fW = (cD - 5) / 2; // dos fotos por fila en la columna descripción
       const ed = t.entradas.map(en => {
         const esNueva = en.actaNum === vo.num;
         const estado = esNueva ? 'N' : (en.estado||'P');
         const fill = esNueva ? null : (estado==='R' ? C_R : estado==='I' ? C_I : C_P);
         doc.setFontSize(8); const lines = doc.splitTextToSize(en.texto||'', cD-2.5);
-        const h = Math.max(7, lines.length*3.9 + 4);
-        return { en, esNueva, estado, fill, lines, h };
+        const textH = lines.length*3.9 + 4;
+        // Layout de fotos: 2 por fila, proporción real, altura máx 38mm
+        const fotos = en.fotos || [];
+        const fotoRows = [];
+        let fotosH = 0;
+        for (let i=0; i<fotos.length; i+=2) {
+          const pair = [fotos[i], fotos[i+1]].filter(Boolean);
+          const dims = pair.map(f => { try { const pr=doc.getImageProperties(f.data); const r=pr.height/pr.width; const h=Math.min(fW*r,38); return {w:h/r,h}; } catch(e){ return {w:fW,h:30}; } });
+          const rowH = Math.max(...dims.map(d=>d.h));
+          fotoRows.push({ pair, dims, rowH });
+          fotosH += rowH + 2;
+        }
+        const h = Math.max(7, textH + (fotosH>0 ? fotosH+2 : 0));
+        return { en, esNueva, estado, fill, lines, textH, fotoRows, h };
       });
       const temaH = ed.reduce((a,e)=>a+e.h,0);
       checkPage(temaH);
@@ -3514,15 +3597,27 @@ async function generarActaVO(obra, vo) {
       // Contenido por entrada
       ey = y;
       ed.forEach(e => {
-        txtCell(M+cN, ey, cD, e.h, e.en.texto||'', {size:8});
+        const bold = e.esNueva; // filas nuevas (N) en negrita
+        // Texto alineado arriba
+        doc.setFont('helvetica', bold ? 'bold':'normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+        let ty = ey + 3 + 8*0.352645;
+        e.lines.forEach(line => { doc.text(line, M+cN+1.8, ty); ty += 3.9; });
+        // Fotos debajo del texto
+        let fy = ey + e.textH;
+        e.fotoRows.forEach(row => {
+          row.pair.forEach((f, pi) => { doc.addImage(f.data, 'JPEG', M+cN+2 + pi*(fW+1), fy, row.dims[pi].w, row.dims[pi].h); });
+          fy += row.rowH + 2;
+        });
+        // Estado / fechas / resp alineados con el texto (no con las fotos)
+        const midY = ey + Math.min(e.h, e.textH)/2 + 1.2;
         doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-        doc.text(e.estado, M+cN+cD+cE/2, ey+e.h/2+1.2, {align:'center'});
+        doc.text(e.estado, M+cN+cD+cE/2, midY, {align:'center'});
         const isR = e.en.estado==='R' && !e.esNueva;
-        doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
-        doc.text(isR?'':fmtFechaCorta(e.en.fecha), M+cN+cD+cE+cIn/2, ey+e.h/2+1.2, {align:'center'});
-        doc.text(isR?fmtFechaCorta(e.en.fin||e.en.fecha):'', M+cN+cD+cE+cIn+cFi/2, ey+e.h/2+1.2, {align:'center'});
+        doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(7.5);
+        doc.text(isR?'':fmtFechaCorta(e.en.fecha), M+cN+cD+cE+cIn/2, midY, {align:'center'});
+        doc.text(isR?fmtFechaCorta(e.en.fin||e.en.fecha):'', M+cN+cD+cE+cIn+cFi/2, midY, {align:'center'});
         doc.setFont('helvetica','bold'); doc.setFontSize(8);
-        doc.text(e.en.resp||'', M+cN+cD+cE+cIn+cFi+cR/2, ey+e.h/2+1.2, {align:'center'});
+        doc.text(e.en.resp||'', M+cN+cD+cE+cIn+cFi+cR/2, midY, {align:'center'});
         ey += e.h;
       });
 
