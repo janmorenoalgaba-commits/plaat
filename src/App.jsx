@@ -3194,7 +3194,7 @@ function ModuloActaVO({ obra, onSave }) {
               const ult = t.entradas[t.entradas.length - 1];
               const est = ESTADOS_VO[ult.estado] || ESTADOS_VO.P;
               return (
-                <TemaVO key={t.id} t={t} est={est} secId={sec.id}
+                <TemaVO key={t.id} t={t} est={est} secId={sec.id} voNum={vo.num}
                   onUpdEntrada={(tId,eId,campo,val) => updEntrada(sec.id, tId, eId, campo, val)}
                   onAddEntrada={(tId,txt) => addEntrada(sec.id, tId, txt)}
                   onDel={() => setBorrar({ tipo: 'tema', secId: sec.id, id: t.id, label: t.num })} />
@@ -3235,7 +3235,7 @@ function ModuloActaVO({ obra, onSave }) {
 }
 
 // Componente de un tema (para evitar closures stale en los selects)
-function TemaVO({ t, est, secId, onUpdEntrada, onAddEntrada, onDel }) {
+function TemaVO({ t, est, secId, voNum, onUpdEntrada, onAddEntrada, onDel }) {
   const [abierto, setAbierto] = useState(false);
   const ult = t.entradas[t.entradas.length - 1];
   return (
@@ -3254,13 +3254,13 @@ function TemaVO({ t, est, secId, onUpdEntrada, onAddEntrada, onDel }) {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, color: '#18180F', lineHeight: 1.5, marginBottom: 5 }}>{en.texto}</div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {en.actaNum === vo.num
+                    {en.actaNum === voNum
                       ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: '#F2F1ED', color: '#52524E', fontWeight: 600, border: '1px solid #E0DFD9' }}>N — Nueva</span>
                       : <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
                           style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: `1px solid ${ESTADOS_VO[en.estado].color}40`, background: ESTADOS_VO[en.estado].bg, color: ESTADOS_VO[en.estado].color, fontWeight: 500 }}>
                           {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                         </select>}
-                    {en.estado === 'R' && en.actaNum !== vo.num && <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)} style={{ width: 'auto', fontSize: 11 }} />}
+                    {en.estado === 'R' && en.actaNum !== voNum && <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)} style={{ width: 'auto', fontSize: 11 }} />}
                     <select value={en.resp||''} onChange={ev => onUpdEntrada(t.id, en.id, 'resp', ev.target.value)}
                       style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: '1px solid #E0DFD9' }}>
                       {RESP_VO.map(r => <option key={r} value={r}>{r ? `${r}` : '— resp.'}</option>)}
@@ -3320,216 +3320,234 @@ async function generarActaVO(obra, vo) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PW = 210, PH = 297, M = 14, CW = PW - M * 2;
-  const NEGRO = [0,0,0], GRIS = [217,217,217], GRIS_H = [200,200,195];
-  const C_P = [255,235,200], C_R = [200,240,200], C_I = [210,228,255]; // colores estado
-  const FS = 8, LH = 4.2; // font size y line height mm
+  const NEGRO = [0,0,0], GRIS = [217,217,217], GRIS_H = [232,232,228];
+  const C_P = [255,235,200], C_R = [200,240,200], C_I = [210,228,255];
   const num = String(vo.num).padStart(2,'0');
   const fecha = new Date().toLocaleDateString('es-ES');
   let y = 0;
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  // Calcula nº líneas de texto en un ancho dado
-  function nLines(txt, w) {
-    return doc.splitTextToSize(String(txt||''), w - 3).length;
-  }
-  // Calcula altura de fila para el conjunto de textos/anchos de sus celdas
-  function calcH(pairs) { // pairs = [{txt, w}]
-    const n = Math.max(...pairs.map(({txt, w}) => nLines(txt, w)));
-    return Math.max(7, n * LH + 4);
-  }
-  // Dibuja una celda con fondo opcional y texto envuelto
-  function cell(x, yy, w, h, txt, bold, fill, center) {
-    if (fill) { doc.setFillColor(...fill); doc.rect(x, yy, w, h, 'F'); }
-    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(x, yy, w, h);
-    if (txt === null || txt === undefined || txt === '') return;
-    doc.setFont('helvetica', bold ? 'bold' : 'normal');
-    doc.setFontSize(FS); doc.setTextColor(0,0,0);
-    const ll = doc.splitTextToSize(String(txt), w - 3);
-    const topY = yy + 3;
-    if (center && ll.length === 1) {
-      doc.text(ll[0], x + w/2, yy + h/2 + FS*0.352645/2, { align: 'center' });
-    } else {
-      doc.text(ll, x + 2, topY + FS*0.352645);
-    }
-  }
-  // Checkbox manual (no depende de unicode)
-  function checkbox(x, yy, h, checked) {
-    const s = 4, cx = x + 4, cy = yy + h/2 - s/2;
-    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.3);
-    doc.rect(cx, cy, s, s);
-    if (checked) {
-      doc.setLineWidth(0.5);
-      doc.line(cx+0.7, cy+s/2, cx+s*0.4, cy+s*0.85);
-      doc.line(cx+s*0.4, cy+s*0.85, cx+s-0.5, cy+0.5);
-    }
-  }
-  function checkPage(h) {
-    if (y + h > PH - 18) { doc.addPage(); cabecera(); pie(); y = 20; }
-  }
-  function cabecera() {
-    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-    doc.text(`ACTA DE VISITA DE OBRA N.º ${num}`, M, 10);
-    doc.setFontSize(22); doc.text('Plaat.', PW-M, 12, { align:'right' });
-  }
+  // Nº de líneas que ocupa un texto en un ancho (con fuente/size activos)
+  function nLines(txt, w, size) { doc.setFontSize(size); return doc.splitTextToSize(String(txt||''), w-2.5).length; }
   function pie() {
     doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(0,0,0);
     doc.text('Plaat Arquitectura Técnica', M, PH-8);
     doc.text('Barcelona \u2013 Madrid', PW/2, PH-8, { align:'center' });
     doc.text('www.plaat.es', PW-M, PH-8, { align:'right' });
   }
+  function cabecera() {
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+    doc.text(`ACTA DE VISITA DE OBRA N.\u00ba ${num}`, M, 10);
+    doc.setFontSize(22); doc.text('Plaat.', PW-M, 12, { align:'right' });
+  }
+  function checkPage(h) { if (y + h > PH - 18) { doc.addPage(); cabecera(); pie(); y = 20; } }
+  // Texto envuelto dentro de celda (alineado arriba-izq o centrado)
+  function txtCell(x, yy, w, h, txt, opt={}) {
+    if (txt === '' || txt == null) return;
+    const size = opt.size || 8;
+    doc.setFont('helvetica', opt.bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.setTextColor(0,0,0);
+    const ll = doc.splitTextToSize(String(txt), w-2.5);
+    if (opt.center) {
+      const blockH = ll.length * (size*0.352645 + 0.6);
+      let ty = yy + h/2 - blockH/2 + size*0.352645;
+      ll.forEach(line => { doc.text(line, x + w/2, ty, { align:'center' }); ty += size*0.352645 + 0.6; });
+    } else {
+      let ty = yy + 3 + size*0.352645;
+      ll.forEach(line => { doc.text(line, x + 1.8, ty); ty += size*0.352645 + 0.6; });
+    }
+  }
+  function checkbox(x, yy, h, checked) {
+    const s = 4, cx = x - 2, cy = yy + h/2 - s/2;
+    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.3); doc.rect(cx, cy, s, s);
+    if (checked) { doc.setLineWidth(0.5); doc.line(cx+0.7, cy+s/2, cx+s*0.4, cy+s*0.85); doc.line(cx+s*0.4, cy+s*0.85, cx+s-0.5, cy+0.5); }
+  }
 
   cabecera(); pie(); y = 18;
 
-  // ── 1. Título + Fecha/Lugar/Fase ──────────────────────────────────────────
-  cell(M, y, CW, 9, `ACTA DE VISITA DE OBRA N.\u00ba ${num}`, true, GRIS);
-  doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text(`ACTA DE VISITA DE OBRA N.\u00ba ${num}`, M+3, y+6.2);
+  // ── Título ────────────────────────────────────────────────────────────────
+  doc.setFillColor(...GRIS); doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
+  doc.rect(M, y, CW, 9, 'F'); doc.rect(M, y, CW, 9);
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0,0,0);
+  doc.text(`ACTA DE VISITA DE OBRA N.\u00ba ${num}`, M+3, y+6);
   y += 9;
+  // Fecha / Lugar / Fase
   [['FECHA', fecha], ['LUGAR', vo.lugar||'Obra'], ['FASE', vo.fase||'']].forEach(([k,v]) => {
-    const h = calcH([{txt:k,w:42},{txt:v,w:CW-42}]);
-    checkPage(h); cell(M,y,42,h,k,true,GRIS); cell(M+42,y,CW-42,h,v,false,null); y += h;
+    const h = Math.max(7, nLines(v, CW-42, 9)*4.4 + 3);
+    checkPage(h);
+    doc.setFillColor(...GRIS); doc.rect(M,y,42,h,'F');
+    doc.setDrawColor(...NEGRO); doc.rect(M,y,42,h); doc.rect(M+42,y,CW-42,h);
+    txtCell(M, y, 42, h, k, {bold:true, size:9, center:false});
+    txtCell(M+42, y, CW-42, h, v, {size:9});
+    y += h;
   });
-  y += 4;
+  y += 5;
 
-  // ── 2. Equipo técnico ─────────────────────────────────────────────────────
-  checkPage(10);
-  cell(M, y, CW, 8, 'EQUIPO T\u00c9CNICO Y DATOS DE CONTACTO', true, GRIS); y += 8;
-  // Anchos: Rol 42 | Empresa 26 | Nombre 28 | Email 38 | Tel 22 | Asistido 26
-  const eW = [42, 26, 28, 38, 22, 26]; const eSum = eW.reduce((a,b)=>a+b,0);
-  // Ajuste proporcional si no cuadra
-  const scale = CW / eSum;
-  const ew = eW.map(w => Math.round(w*scale));
-  ew[ew.length-1] = CW - ew.slice(0,-1).reduce((a,b)=>a+b,0); // fix rounding
-  // Header columnas
-  checkPage(7);
-  let hx = M;
-  [['ROL',true], ['EMPRESA',true], ['NOMBRE',true], ['EMAIL',true], ['TEL.',true], ['ASISTIDO',true]].forEach(([t,b],i) => {
-    cell(hx, y, ew[i], 7, t, b, GRIS_H); hx += ew[i];
-  }); y += 7;
+  // ── Equipo técnico ────────────────────────────────────────────────────────
+  checkPage(12);
+  doc.setFillColor(...GRIS); doc.rect(M, y, CW, 8, 'F'); doc.setDrawColor(...NEGRO); doc.rect(M, y, CW, 8);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('EQUIPO T\u00c9CNICO Y DATOS DE CONTACTO', M+2, y+5.3); y += 8;
+  // Anchos equipo: Rol 36 | Empresa 28 | Nombre 30 | Email 42 | Tel 24 | Asist 22 = 182
+  const eW = [36, 28, 30, 42, 24, 22];
+  const ex = [M]; eW.forEach((w,i) => ex.push(ex[i]+w));
+  const ESZ = 7; // font size equipo
+  // Cabecera columnas
+  checkPage(6);
+  doc.setFillColor(...GRIS_H);
+  ['ROL','EMPRESA','NOMBRE','EMAIL','TEL.','ASISTIDO'].forEach((t,i) => {
+    doc.rect(ex[i], y, eW[i], 6, 'F'); doc.setDrawColor(...NEGRO); doc.rect(ex[i], y, eW[i], 6);
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+    doc.text(t, ex[i]+eW[i]/2, y+4, { align:'center' });
+  });
+  y += 6;
 
   (vo.equipo||[]).forEach(rol => {
-    const ps = (rol.personas||[{ empresa:'', nombre:'', email:'', tel:'', asistio:false }]);
-    if (!ps.length) return;
-    // Calcula altura de cada fila persona
-    const rowHs = ps.map(p => calcH([
-      {txt:'', w:ew[0]}, {txt:p.empresa||'', w:ew[1]}, {txt:p.nombre||'', w:ew[2]},
-      {txt:p.email||'', w:ew[3]}, {txt:p.tel||'', w:ew[4]}, {txt:'', w:ew[5]}
-    ]));
+    const ps = (rol.personas && rol.personas.length) ? rol.personas : [{ empresa:'', nombre:'', email:'', tel:'', asistio:false }];
+    // Altura de cada persona (según texto más alto entre nombre/email/tel)
+    const rowHs = ps.map(p => {
+      const n = Math.max(nLines(p.nombre,eW[2],ESZ), nLines(p.email,eW[3],ESZ), nLines(p.tel,eW[4],ESZ), 1);
+      return Math.max(7, n*3.4 + 3.5);
+    });
     const rolH = rowHs.reduce((a,b)=>a+b,0);
     checkPage(rolH);
-    // Celda Rol (span todas las personas)
-    cell(M, y, ew[0], rolH, rol.nombre||'', true, GRIS);
-    let py = y;
+
+    // Fondo y borde celda ROL (una sola, span)
+    doc.setFillColor(...GRIS); doc.rect(ex[0], y, eW[0], rolH, 'F');
+    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(ex[0], y, eW[0], rolH);
+    txtCell(ex[0], y, eW[0], rolH, rol.nombre||'', {bold:true, size:ESZ, center:true});
+
+    // EMPRESA: agrupa personas consecutivas con misma empresa (sin línea intermedia)
+    let py = y, gi = 0;
+    while (gi < ps.length) {
+      let gj = gi;
+      while (gj+1 < ps.length && (ps[gj+1].empresa||'') === (ps[gi].empresa||'')) gj++;
+      const gh = rowHs.slice(gi, gj+1).reduce((a,b)=>a+b,0);
+      doc.setDrawColor(...NEGRO); doc.rect(ex[1], py, eW[1], gh);
+      txtCell(ex[1], py, eW[1], gh, ps[gi].empresa||'', {size:ESZ, center:true});
+      py += gh; gi = gj+1;
+    }
+
+    // NOMBRE / EMAIL / TEL / ASISTIDO por persona (con líneas entre personas)
+    py = y;
     ps.forEach((p, pi) => {
       const rh = rowHs[pi];
-      // Empresa: solo primera persona del rol
-      cell(M+ew[0], py, ew[1], rh, pi===0 ? (p.empresa||'') : '', false, null);
-      cell(M+ew[0]+ew[1], py, ew[2], rh, p.nombre||'', false, null);
-      cell(M+ew[0]+ew[1]+ew[2], py, ew[3], rh, p.email||'', false, null);
-      cell(M+ew[0]+ew[1]+ew[2]+ew[3], py, ew[4], rh, p.tel||'', false, null);
-      // Celda asistido: checkbox dibujado
-      cell(M+ew[0]+ew[1]+ew[2]+ew[3]+ew[4], py, ew[5], rh, null, false, null);
-      checkbox(M+ew[0]+ew[1]+ew[2]+ew[3]+ew[4], py, rh, !!p.asistio);
+      doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
+      doc.rect(ex[2], py, eW[2], rh); txtCell(ex[2], py, eW[2], rh, p.nombre||'', {size:ESZ});
+      doc.rect(ex[3], py, eW[3], rh); txtCell(ex[3], py, eW[3], rh, p.email||'', {size:ESZ});
+      doc.rect(ex[4], py, eW[4], rh); txtCell(ex[4], py, eW[4], rh, p.tel||'', {size:ESZ});
+      doc.rect(ex[5], py, eW[5], rh); checkbox(ex[5]+eW[5]/2, py, rh, !!p.asistio);
       py += rh;
     });
     y += rolH;
   });
-  y += 5;
+  y += 6;
 
-  // ── 3. Estado de la obra ──────────────────────────────────────────────────
+  // ── Sección 0: Estado de la obra ──────────────────────────────────────────
   const eo = vo.estadoObra || {};
   if (eo.descripcion || (eo.fotos||[]).length > 0) {
-    checkPage(12);
-    cell(M, y, 16, 8, '0', true, GRIS, true);
-    cell(M+16, y, CW-16, 8, 'ESTADO DE LA OBRA (FOTOGRAF\u00cdAS)', true, GRIS);
+    checkPage(14);
+    doc.setFillColor(...GRIS); doc.rect(M,y,16,8,'F'); doc.rect(M+16,y,CW-16,8,'F');
+    doc.setDrawColor(...NEGRO); doc.rect(M,y,16,8); doc.rect(M+16,y,CW-16,8);
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text('0', M+8, y+5.3, {align:'center'}); doc.text('ESTADO DE LA OBRA (FOTOGRAF\u00cdAS)', M+19, y+5.3);
     y += 8;
     if (eo.descripcion) {
-      const dl = doc.splitTextToSize(eo.descripcion, CW-4);
-      const dh = Math.max(10, dl.length*LH + 5);
-      checkPage(dh);
-      cell(M, y, CW, dh, null, false, null);
-      doc.setFont('helvetica','normal'); doc.setFontSize(FS); doc.setTextColor(0,0,0);
-      doc.text(dl, M+2, y+4);
+      doc.setFontSize(8.5); const dl = doc.splitTextToSize(eo.descripcion, CW-4);
+      const dh = Math.max(10, dl.length*4.2 + 5); checkPage(dh);
+      doc.setDrawColor(...NEGRO); doc.rect(M, y, CW, dh);
+      doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0); doc.text(dl, M+2, y+5);
       y += dh + 2;
     }
-    const fotos = eo.fotos||[];
-    const fW = (CW - 4) / 2;
+    const fotos = eo.fotos||[], fW = (CW-4)/2;
     for (let fi=0; fi<fotos.length; fi+=2) {
       const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
-      let rowH = 0;
-      const dims = pair.map(f => {
-        try { const pr = doc.getImageProperties(f.data); const r=pr.height/pr.width; const h=Math.min(fW*r,72); return {w:h/r,h}; }
-        catch(e) { return {w:fW,h:56}; }
-      });
-      rowH = Math.max(...dims.map(d=>d.h));
-      checkPage(rowH+3);
-      pair.forEach((f,pi) => { doc.addImage(f.data,'JPEG', M+pi*(fW+4), y, dims[pi].w, dims[pi].h); });
+      const dims = pair.map(f => { try { const pr=doc.getImageProperties(f.data); const r=pr.height/pr.width; const h=Math.min(fW*r,72); return {w:h/r,h}; } catch(e){ return {w:fW,h:56}; } });
+      const rowH = Math.max(...dims.map(d=>d.h)); checkPage(rowH+4);
+      pair.forEach((f,pi) => doc.addImage(f.data,'JPEG', M+pi*(fW+4), y, dims[pi].w, dims[pi].h));
       y += rowH+4;
     }
     y += 4;
   }
 
-  // ── 4. Secciones ─────────────────────────────────────────────────────────
-  // Anchos: Núm 18 | Desc variable | Estado 14 | Inicio 20 | Fin 20 | Res 14
-  const cN=18, cE=14, cIn=20, cFi=20, cR=14, cD=CW-cN-cE-cIn-cFi-cR;
+  // ── Secciones de temas ────────────────────────────────────────────────────
+  const cN=16, cE=16, cIn=18, cFi=18, cR=14, cD=CW-cN-cE-cIn-cFi-cR;
+  const cx = [M, M+cN, M+cN+cD, M+cN+cD+cE, M+cN+cD+cE+cIn, M+cN+cD+cE+cIn+cFi, M+cN+cD+cE+cIn+cFi+cR];
 
   (vo.secciones||[]).forEach(sec => {
     const activos = (sec.temas||[]).filter(t => !(t.resuelto && t.resueltoEnActa && t.resueltoEnActa < vo.num));
     if (!activos.length) return;
-    checkPage(10);
-    // Cabecera sección
-    cell(M, y, cN, 8, sec.codigo, true, GRIS, true);
-    cell(M+cN, y, cD+cE+cIn+cFi+cR, 8, sec.titulo, true, GRIS);
+    checkPage(16);
+    // Cabecera sección (código + título)
+    doc.setFillColor(...GRIS); doc.rect(M,y,cN,8,'F'); doc.rect(M+cN,y,CW-cN,8,'F');
+    doc.setDrawColor(...NEGRO); doc.rect(M,y,cN,8); doc.rect(M+cN,y,CW-cN,8);
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text(sec.codigo, M+cN/2, y+5.3, {align:'center'}); doc.text(sec.titulo, M+cN+2, y+5.3);
+    y += 8;
     // Sub-cabecera columnas
-    const subY = y+8;
     doc.setFillColor(...GRIS_H);
-    [[cN,''],  [cD,'DESCRIPCI\u00d3N'], [cE,'ESTADO'], [cIn,'INICIO'], [cFi,'FIN'], [cR,'RES.']].reduce((x,[w,t])=>{
-      cell(M+x, subY, w, 6, t, true, GRIS_H, true); return x+w;
-    }, 0);
-    y += 14;
+    [['',cN],['DESCRIPCI\u00d3N',cD],['ESTADO',cE],['INICIO',cIn],['FIN',cFi],['RES.',cR]].forEach(([t,w],i) => {
+      doc.rect(cx[i], y, w, 6, 'F'); doc.setDrawColor(...NEGRO); doc.rect(cx[i], y, w, 6);
+      doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
+      doc.text(t, cx[i]+w/2, y+4, {align:'center'});
+    });
+    y += 6;
 
+    // Cada tema = un bloque (sin líneas internas entre seguimientos)
     activos.forEach(t => {
-      t.entradas.forEach((en, ei) => {
+      const ed = t.entradas.map(en => {
         const esNueva = en.actaNum === vo.num;
         const estado = esNueva ? 'N' : (en.estado||'P');
         const fill = esNueva ? null : (estado==='R' ? C_R : estado==='I' ? C_I : C_P);
-
-        const rowH = calcH([{txt:en.texto||'', w:cD}, {txt:estado, w:cE}]);
-        checkPage(rowH);
-
-        // Num (solo en primera entrada del tema, centrado)
-        cell(M, y, cN, rowH, ei===0 ? t.num : '', true, fill, true);
-        cell(M+cN, y, cD, rowH, en.texto||'', false, fill);
-        cell(M+cN+cD, y, cE, rowH, estado, true, fill, true);
-        // Fecha inicio/fin según estado
-        const isR = en.estado==='R' && !esNueva;
-        cell(M+cN+cD+cE, y, cIn, rowH, isR ? '' : fmtFechaCorta(en.fecha), false, fill, true);
-        cell(M+cN+cD+cE+cIn, y, cFi, rowH, isR ? fmtFechaCorta(en.fin||en.fecha) : '', false, fill, true);
-        cell(M+cN+cD+cE+cIn+cFi, y, cR, rowH, en.resp||'', true, fill, true);
-        y += rowH;
+        doc.setFontSize(8); const lines = doc.splitTextToSize(en.texto||'', cD-2.5);
+        const h = Math.max(7, lines.length*3.9 + 4);
+        return { en, esNueva, estado, fill, lines, h };
       });
+      const temaH = ed.reduce((a,e)=>a+e.h,0);
+      checkPage(temaH);
+
+      // Relleno por entrada (color de estado) en columnas desc..res
+      let ey = y;
+      ed.forEach(e => { if (e.fill) { doc.setFillColor(...e.fill); doc.rect(M+cN, ey, CW-cN, e.h, 'F'); } ey += e.h; });
+
+      // Num (centrado en el bloque)
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+      doc.text(t.num, M+cN/2, y + ed[0].h/2 + 1.2, {align:'center'});
+
+      // Contenido por entrada
+      ey = y;
+      ed.forEach(e => {
+        txtCell(M+cN, ey, cD, e.h, e.en.texto||'', {size:8});
+        doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+        doc.text(e.estado, M+cN+cD+cE/2, ey+e.h/2+1.2, {align:'center'});
+        const isR = e.en.estado==='R' && !e.esNueva;
+        doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+        doc.text(isR?'':fmtFechaCorta(e.en.fecha), M+cN+cD+cE+cIn/2, ey+e.h/2+1.2, {align:'center'});
+        doc.text(isR?fmtFechaCorta(e.en.fin||e.en.fecha):'', M+cN+cD+cE+cIn+cFi/2, ey+e.h/2+1.2, {align:'center'});
+        doc.setFont('helvetica','bold'); doc.setFontSize(8);
+        doc.text(e.en.resp||'', M+cN+cD+cE+cIn+cFi+cR/2, ey+e.h/2+1.2, {align:'center'});
+        ey += e.h;
+      });
+
+      // Bordes: verticales a toda altura + horizontal arriba/abajo (sin líneas internas)
+      doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
+      cx.forEach(x => doc.line(x, y, x, y+temaH));
+      doc.line(M, y, M+CW, y); doc.line(M, y+temaH, M+CW, y+temaH);
+      y += temaH;
     });
-    y += 4;
+    y += 5;
   });
 
-  // ── 5. NOTA + Firmas ──────────────────────────────────────────────────────
-  checkPage(32);
-  y += 4;
+  // ── NOTA + Firmas ─────────────────────────────────────────────────────────
+  checkPage(34); y += 4;
   doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
   const notaL = doc.splitTextToSize('NOTA: La presente acta se entender\u00e1 como conforme en caso de no manifestar comentarios en el plazo de 48 horas tras su difusi\u00f3n.', CW);
-  doc.text(notaL, M, y); y += notaL.length*LH + 4;
-  doc.setFont('helvetica','normal');
-  doc.text('Conforme, firma y fecha:', M, y); y += 8;
-
+  doc.text(notaL, M, y); y += notaL.length*4.2 + 4;
+  doc.setFont('helvetica','normal'); doc.text('Conforme, firma y fecha:', M, y); y += 8;
   const fw = CW/4;
   ['PROMOTOR','DIRECCI\u00d3N DE OBRA','DIRECCI\u00d3N DE EJECUCI\u00d3N\nCOORD. SEGURIDAD','CONTRATISTA'].forEach((f,i) => {
-    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
-    doc.rect(M+i*fw, y, fw, 26);
+    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(M+i*fw, y, fw, 26);
     doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
     doc.text(doc.splitTextToSize(f, fw-4), M+i*fw+2, y+4.5);
   });
 
-  // Numeración páginas
   const total = doc.getNumberOfPages();
   for (let p=1; p<=total; p++) { doc.setPage(p); pie(); }
   doc.save(`Acta_VO_${num}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`);
