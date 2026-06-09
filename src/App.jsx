@@ -2573,12 +2573,12 @@ function calcularLotificacion(tipo, volumen, superficie, conDOR) {
 }
 
 function ModuloCalidad({ obra, onSave }) {
-  const [sub, setSub] = useState('hormigon'); // hormigon | pcq | ensayos
+  const [sub, setSub] = useState('hormigon'); // hormigon | materiales | ensayos
 
   const subTabs = [
-    { id: 'hormigon', label: 'Control de hormigón' },
-    { id: 'pcq',      label: 'PCQ' },
-    { id: 'ensayos',  label: 'Ensayos' },
+    { id: 'hormigon',   label: 'Control de hormigón' },
+    { id: 'materiales', label: 'Materiales' },
+    { id: 'ensayos',    label: 'Ensayos' },
   ];
 
   return (
@@ -2592,9 +2592,112 @@ function ModuloCalidad({ obra, onSave }) {
         ))}
       </div>
 
-      {sub === 'hormigon' && <ControlHormigon obra={obra} onSave={onSave} />}
-      {sub === 'pcq'      && <ModuloProximamente icono="📋" titulo="Plan de Control de Calidad" descripcion="Generación automática del PCQ a partir de los procesos constructivos de la obra. Se integrará al desplegar la app con la biblioteca de documentos oficiales." />}
-      {sub === 'ensayos'  && <ModuloEnsayos obra={obra} onSave={onSave} />}
+      {sub === 'hormigon'   && <ControlHormigon obra={obra} onSave={onSave} />}
+      {sub === 'materiales' && <ModuloMateriales obra={obra} onSave={onSave} />}
+      {sub === 'ensayos'    && <ModuloEnsayos obra={obra} onSave={onSave} />}
+    </div>
+  );
+}
+
+// ─── Materiales sin documentación de CQ ───────────────────────────────────────
+function ModuloMateriales({ obra, onSave }) {
+  const materiales = obra.materiales || [];
+  const [nombre, setNombre]   = useState('');
+  const [filtro, setFiltro]   = useState('todos'); // todos | falta | pedido | recibido
+  const [confirmacion, setConfirmacion] = useState(null);
+
+  function guardar(lista) { onSave({ ...obra, materiales: lista }); }
+  function add() {
+    if (!nombre.trim()) return;
+    guardar([{ id: uid(), nombre: nombre.trim(), pedido: false, recibido: false, nota: '', creadaEn: now() }, ...materiales]);
+    setNombre('');
+  }
+  function toggle(id, campo) {
+    guardar(materiales.map(m => {
+      if (m.id !== id) return m;
+      const v = !m[campo];
+      // Si se marca recibido, también queda pedido
+      if (campo === 'recibido' && v) return { ...m, recibido: true, pedido: true };
+      // Si se desmarca pedido, también deja de estar recibido
+      if (campo === 'pedido' && !v) return { ...m, pedido: false, recibido: false };
+      return { ...m, [campo]: v };
+    }));
+  }
+  function updNota(id, nota) { guardar(materiales.map(m => m.id === id ? { ...m, nota } : m)); }
+  function eliminar(id) { guardar(materiales.filter(m => m.id !== id)); setConfirmacion(null); }
+
+  const filtrados = materiales.filter(m =>
+    filtro === 'todos'    ? true :
+    filtro === 'falta'    ? !m.pedido :
+    filtro === 'pedido'   ? (m.pedido && !m.recibido) :
+    filtro === 'recibido' ? m.recibido : true
+  );
+  const stats = {
+    total:    materiales.length,
+    falta:    materiales.filter(m => !m.pedido).length,
+    pedido:   materiales.filter(m => m.pedido && !m.recibido).length,
+    recibido: materiales.filter(m => m.recibido).length,
+  };
+
+  const Check = ({ on, onClick, label, color }) => (
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, border: `1.5px solid ${on ? color : '#E0DFD9'}`, background: on ? color + '18' : 'transparent', cursor: 'pointer', fontSize: 12, fontWeight: 500, color: on ? color : '#9B9B97' }}>
+      <span style={{ width: 16, height: 16, borderRadius: 5, border: `1.5px solid ${on ? color : '#C5C4BE'}`, background: on ? color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11 }}>{on ? '✓' : ''}</span>
+      {label}
+    </button>
+  );
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: '#6B6B66', lineHeight: 1.5, marginBottom: 12 }}>
+        Apunta los materiales que ves en obra y de los que falta documentación de control de calidad. Marca si se ha <strong>pedido</strong> y si se ha <strong>recibido</strong>.
+      </p>
+
+      {/* Añadir material */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <input placeholder="Ej. Acero corrugado B500S, mortero cola C2..." value={nombre} onChange={e => setNombre(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} style={{ flex: 1 }} />
+        <Btn primary disabled={!nombre.trim()} onClick={add}>+ Añadir</Btn>
+      </div>
+
+      {/* Resumen + filtros */}
+      {materiales.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+          {[['todos', `Todos (${stats.total})`], ['falta', `Sin pedir (${stats.falta})`], ['pedido', `Pedidos (${stats.pedido})`], ['recibido', `Recibidos (${stats.recibido})`]].map(([id, label]) => (
+            <button key={id} onClick={() => setFiltro(id)} style={{ padding: '4px 12px', borderRadius: 20, border: `1px solid ${filtro === id ? '#1C1C1A' : '#E0DFD9'}`, background: filtro === id ? '#1C1C1A' : 'transparent', color: filtro === id ? '#F2F1ED' : '#6B6B66', fontSize: 12, cursor: 'pointer', fontWeight: filtro === id ? 500 : 400 }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Lista */}
+      {materiales.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#A5A5A0' }}>
+          <div style={{ fontSize: 13 }}>Sin materiales apuntados todavía.</div>
+        </div>
+      ) : filtrados.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '30px', color: '#A5A5A0', fontSize: 13 }}>Ningún material con este filtro.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filtrados.map(m => {
+            const accent = m.recibido ? '#2D5E10' : m.pedido ? '#C47610' : '#8A1F1F';
+            return (
+              <div key={m.id} style={{ background: '#fff', border: '1px solid #E8E7E1', borderLeft: `3px solid ${accent}`, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+                  <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: '#18180F', lineHeight: 1.4 }}>{m.nombre}</div>
+                  <button onClick={() => setConfirmacion({ titulo: 'Eliminar material', texto: `Vas a eliminar "${m.nombre}".`, onSi: () => eliminar(m.id) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 17, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>×</button>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 9 }}>
+                  <Check on={m.pedido} onClick={() => toggle(m.id, 'pedido')} label="Pedido" color="#C47610" />
+                  <Check on={m.recibido} onClick={() => toggle(m.id, 'recibido')} label="Recibido" color="#2D5E10" />
+                </div>
+                <input placeholder="Nota (proveedor, fecha, referencia...)" value={m.nota || ''} onChange={e => updNota(m.id, e.target.value)} style={{ fontSize: 12 }} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
   );
 }
