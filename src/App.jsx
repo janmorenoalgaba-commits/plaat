@@ -3733,6 +3733,19 @@ function NuevoTema({ onAdd }) {
 }
 function NuevaEntrada({ onAdd }) {
   const [open, setOpen] = useState(false);
+  const [txt, setTxt] = useState('');
+  if (!open) return <button onClick={() => setOpen(true)} style={{ marginTop: 8, fontSize: 12, color: '#6B6B66', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Añadir seguimiento de esta visita</button>;
+  return (
+    <div className="fade" style={{ marginTop: 8 }}>
+      <textarea autoFocus value={txt} onChange={e => setTxt(e.target.value)} placeholder="Novedad de esta visita..." style={{ minHeight: 50, marginBottom: 6 }} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn sm primary disabled={!txt.trim()} onClick={() => { onAdd(txt); setTxt(''); setOpen(false); }}>Añadir</Btn>
+        <Btn sm onClick={() => { setTxt(''); setOpen(false); }}>✕</Btn>
+      </div>
+    </div>
+  );
+}
+
 // ── Generador PDF Acta VO ────────────────────────────────────────────────────
 const TEXTOS_VO = {
   ca: {
@@ -4013,18 +4026,6 @@ async function generarActaVO(obra, vo, idioma = 'ca') {
   doc.save(`Acta_VO_${num}_${lang}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`);
 }
 
-  doc.setFont('helvetica','normal'); doc.text('Conforme, firma y fecha:', M, y); y += 8;
-  const fw = CW/4;
-  ['PROMOTOR','DIRECCI\u00d3N DE OBRA','DIRECCI\u00d3N DE EJECUCI\u00d3N\nCOORD. SEGURIDAD','CONTRATISTA'].forEach((f,i) => {
-    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(M+i*fw, y, fw, 26);
-    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
-    doc.text(doc.splitTextToSize(f, fw-4), M+i*fw+2, y+4.5);
-  });
-
-  const total = doc.getNumberOfPages();
-  for (let p=1; p<=total; p++) { doc.setPage(p); pie(); }
-  doc.save(`Acta_VO_${num}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`);
-}
 
 function fmtFechaCorta(iso) {
   if (!iso) return '';
