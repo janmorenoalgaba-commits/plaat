@@ -2650,8 +2650,30 @@ function ModuloCalidad({ obra, onSave }) {
   );
 }
 
-// ─── Materiales sin documentación de CQ ───────────────────────────────────────
+// ─── Materiales: contenedor con dos sub-apartados ─────────────────────────────
 function ModuloMateriales({ obra, onSave }) {
+  const [sub, setSub] = useState('pendientes'); // pendientes | seguimiento
+  const subTabs = [
+    { id: 'pendientes',  label: 'Materiales pendientes' },
+    { id: 'seguimiento', label: 'Seguimiento CQ' },
+  ];
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 14, borderBottom: '1px solid #E8E7E1' }}>
+        {subTabs.map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)} style={{ padding: '7px 14px', border: 'none', borderBottom: `2px solid ${sub === t.id ? '#1C1C1A' : 'transparent'}`, background: 'transparent', color: sub === t.id ? '#141412' : '#9B9B97', fontSize: 13, cursor: 'pointer', fontWeight: sub === t.id ? 600 : 400, marginBottom: -1 }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {sub === 'pendientes'  && <MaterialesPendientes obra={obra} onSave={onSave} />}
+      {sub === 'seguimiento' && <SeguimientoCQ obra={obra} onSave={onSave} />}
+    </div>
+  );
+}
+
+// ─── Materiales pendientes (sin documentación de CQ) ──────────────────────────
+function MaterialesPendientes({ obra, onSave }) {
   const materiales = obra.materiales || [];
   const [nombre, setNombre]   = useState('');
   const [filtro, setFiltro]   = useState('todos'); // todos | falta | pedido | recibido
@@ -2747,6 +2769,186 @@ function ModuloMateriales({ obra, onSave }) {
           })}
         </div>
       )}
+
+      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
+    </div>
+  );
+}
+
+// ─── Seguimiento de paquetes de documentación de CQ ───────────────────────────
+const ESTADOS_CQ = {
+  pendiente: { label: 'Pendiente', bg: '#FDECEC', color: '#8A1F1F', dot: '#E24B4A' },
+  parcial:   { label: 'Parcial',   bg: '#FEF3DB', color: '#7C4A00', dot: '#D48A0C' },
+  completo:  { label: 'Completo',  bg: '#E8F5E0', color: '#2D5E10', dot: '#52A124' },
+};
+
+function getDefaultSeguimientoCQ() {
+  const it = (codigo, nombre) => ({ id: uid(), codigo, nombre, estado: 'pendiente', nota: '' });
+  const cap = (codigo, titulo, items) => ({ id: uid(), codigo, titulo, items });
+  return [
+    cap('04', 'CIMENTACIÓN Y CONTENCIÓN', [ it('', 'Cimentación y contención') ]),
+    cap('05', 'SISTEMA ESTRUCTURAL', [ it('05.01', 'Estructura de hormigón'), it('05.02', 'Estructura metálica') ]),
+    cap('06', 'FACHADAS Y CERRAMIENTOS', [ it('06.02', 'Acabados y revestimientos'), it('06.03', 'Carpintería de aluminio') ]),
+    cap('08', 'IMPERMEABILIZACIONES', [ it('08.02', 'Impermeabilizaciones bajo rasante'), it('08.03', 'Impermeabilizaciones sobre rasante') ]),
+    cap('09', 'ALBAÑILERÍA Y OBRA SECA', [ it('09.01', 'Albañilería'), it('09.02', 'Obra seca') ]),
+    cap('12', 'FALSOS TECHOS', [ it('12', 'Falsos techos (12.06 a 12.11)') ]),
+    cap('13', 'PAVIMENTOS Y REVESTIMIENTOS', [ it('13', 'Pavimentos y revestimientos (13.02 y 13.03)') ]),
+    cap('14', 'CARPINTERÍA INTERIOR / MADERA', [ it('14.01', 'Puertas de madera y registros'), it('14.02', 'Mostradores'), it('14.03', 'Panelados') ]),
+    cap('15', 'CERRAJERÍA Y PUERTAS METÁLICAS', [ it('15', 'Cerrajería y puertas metálicas (15.15 a 15.18)') ]),
+    cap('16', 'METALISTERÍA, VIDRIOS Y VARIOS', [ it('16.02', 'Barandillas'), it('16.03', 'Sombreretes cubierta y registros'), it('16.04', 'Rejas y divisorias'), it('16.05', 'Mamparas y divisorias') ]),
+    cap('17', 'APARATOS SANITARIOS Y GRIFERÍA', [ it('17', 'Aparatos sanitarios y grifería (17.11 a 17.14)') ]),
+    cap('18', 'SEÑALIZACIÓN Y EQUIPAMIENTO', [ it('18.01', 'Señalización de incendios y pictogramas'), it('18.02', 'Equipamientos') ]),
+    cap('21', 'JARDINERÍA Y CUBIERTAS VERDES', [ it('21', 'Jardinería y cubiertas verdes (21.07 a 21.11)') ]),
+    cap('22', 'PROVISIONALES', [ it('22.01', 'Provisionales de obra') ]),
+    cap('23', 'CONTROL DE CALIDAD', [ it('23.01', 'Control de calidad') ]),
+    cap('24', 'SEGURIDAD E HIGIENE', [ it('24.01', 'Seguridad e higiene') ]),
+    cap('25', 'ACOMETIDAS', [ it('25.01', 'Acometidas de fontanería y contraincendios'), it('25.02', 'Acometida de red de fecales'), it('25.03', 'Acometida de red de pluviales') ]),
+  ];
+}
+
+function SeguimientoCQ({ obra, onSave }) {
+  const capitulos = (obra.seguimientoCQ && obra.seguimientoCQ.length) ? obra.seguimientoCQ : null;
+  const [abierto, setAbierto] = useState({});
+  const [confirmacion, setConfirmacion] = useState(null);
+  const [editItem, setEditItem] = useState(null);  // id item en edición
+  const [editCap, setEditCap]   = useState(null);  // id capítulo en edición
+
+  function guardar(caps) { onSave({ ...obra, seguimientoCQ: caps }); }
+  function inicializar() { guardar(getDefaultSeguimientoCQ()); }
+
+  if (!capitulos) {
+    return (
+      <div style={{ textAlign: 'center', padding: '36px 20px' }}>
+        <p style={{ fontSize: 13, color: '#6B6B66', lineHeight: 1.5, marginBottom: 16, maxWidth: 420, margin: '0 auto 16px' }}>
+          Seguimiento general de los paquetes de documentación de control de calidad de la obra. Carga la estructura de paquetes por defecto y ve marcando el estado de cada uno.
+        </p>
+        <Btn primary onClick={inicializar}>Cargar paquetes de documentación</Btn>
+      </div>
+    );
+  }
+
+  // Stats globales
+  const allItems = capitulos.flatMap(c => c.items);
+  const total = allItems.length;
+  const completos = allItems.filter(i => i.estado === 'completo').length;
+  const parciales = allItems.filter(i => i.estado === 'parcial').length;
+  const pct = total ? Math.round(completos / total * 100) : 0;
+
+  function setEstado(capId, itemId, estado) {
+    guardar(capitulos.map(c => c.id !== capId ? c : { ...c, items: c.items.map(i => i.id === itemId ? { ...i, estado } : i) }));
+  }
+  function setNota(capId, itemId, nota) {
+    guardar(capitulos.map(c => c.id !== capId ? c : { ...c, items: c.items.map(i => i.id === itemId ? { ...i, nota } : i) }));
+  }
+  function setNombre(capId, itemId, nombre) {
+    guardar(capitulos.map(c => c.id !== capId ? c : { ...c, items: c.items.map(i => i.id === itemId ? { ...i, nombre } : i) }));
+  }
+  function setTitulo(capId, titulo) {
+    guardar(capitulos.map(c => c.id === capId ? { ...c, titulo } : c));
+  }
+  function addItem(capId) {
+    guardar(capitulos.map(c => c.id !== capId ? c : { ...c, items: [...c.items, { id: uid(), codigo: '', nombre: 'Nuevo elemento', estado: 'pendiente', nota: '' }] }));
+  }
+  function delItem(capId, itemId) {
+    guardar(capitulos.map(c => c.id !== capId ? c : { ...c, items: c.items.filter(i => i.id !== itemId) }));
+    setConfirmacion(null);
+  }
+  function addCap() {
+    const nuevo = { id: uid(), codigo: '', titulo: 'NUEVO CAPÍTULO', items: [{ id: uid(), codigo: '', nombre: 'Nuevo elemento', estado: 'pendiente', nota: '' }] };
+    guardar([...capitulos, nuevo]);
+    setAbierto(a => ({ ...a, [nuevo.id]: true }));
+    setEditCap(nuevo.id);
+  }
+  function delCap(capId) {
+    guardar(capitulos.filter(c => c.id !== capId));
+    setConfirmacion(null);
+  }
+
+  // Estado agregado del capítulo
+  function estadoCap(c) {
+    if (!c.items.length) return 'pendiente';
+    if (c.items.every(i => i.estado === 'completo')) return 'completo';
+    if (c.items.some(i => i.estado !== 'pendiente')) return 'parcial';
+    return 'pendiente';
+  }
+
+  const Seg = ({ estado, onChange }) => (
+    <div style={{ display: 'flex', gap: 0, border: '1px solid #E0DFD9', borderRadius: 7, overflow: 'hidden', flexShrink: 0 }}>
+      {Object.entries(ESTADOS_CQ).map(([k, v]) => (
+        <button key={k} onClick={() => onChange(k)} style={{ padding: '4px 9px', border: 'none', borderRight: k !== 'completo' ? '1px solid #E0DFD9' : 'none', background: estado === k ? v.dot : 'transparent', color: estado === k ? '#fff' : '#9B9B97', fontSize: 11, cursor: 'pointer', fontWeight: estado === k ? 600 : 400, whiteSpace: 'nowrap' }}>
+          {v.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Resumen global */}
+      <div style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#141412', flex: 1 }}>Estado general de la documentación</span>
+          <span style={{ fontSize: 20, fontWeight: 700, color: pct === 100 ? '#2D5E10' : '#141412' }}>{pct}%</span>
+        </div>
+        <div style={{ height: 6, background: '#ECEAE4', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+          <div className="bar-fill" style={{ width: pct + '%', height: 6, background: '#52A124', borderRadius: 3 }} />
+        </div>
+        <div style={{ display: 'flex', gap: 14, fontSize: 12, color: '#6B6B66' }}>
+          <span><strong style={{ color: '#2D5E10' }}>{completos}</strong> completos</span>
+          <span><strong style={{ color: '#7C4A00' }}>{parciales}</strong> parciales</span>
+          <span><strong style={{ color: '#8A1F1F' }}>{total - completos - parciales}</strong> pendientes</span>
+        </div>
+      </div>
+
+      {/* Capítulos */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {capitulos.map(c => {
+          const est = ESTADOS_CQ[estadoCap(c)];
+          const open = abierto[c.id];
+          const doneItems = c.items.filter(i => i.estado === 'completo').length;
+          return (
+            <div key={c.id} style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 10, overflow: 'hidden' }}>
+              {/* Cabecera capítulo */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px' }}>
+                <span onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))} style={{ width: 9, height: 9, borderRadius: '50%', background: est.dot, flexShrink: 0, cursor: 'pointer' }} />
+                {c.codigo && <span style={{ fontSize: 11, fontWeight: 700, color: '#A5A5A0', flexShrink: 0 }}>{c.codigo}</span>}
+                {editCap === c.id
+                  ? <input autoFocus value={c.titulo} onChange={e => setTitulo(c.id, e.target.value)} onBlur={() => setEditCap(null)}
+                      style={{ flex: 1, fontSize: 13, fontWeight: 600, padding: '3px 7px' }} />
+                  : <span onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))} style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#141412', cursor: 'pointer' }}>{c.titulo}</span>}
+                <span style={{ fontSize: 11, color: '#A5A5A0' }}>{doneItems}/{c.items.length}</span>
+                <button onClick={e => { e.stopPropagation(); setEditCap(c.id); }} title="Editar nombre" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C5C4BE', fontSize: 12, lineHeight: 1, padding: '0 2px' }}>✎</button>
+                <button onClick={e => { e.stopPropagation(); setConfirmacion({ titulo: 'Eliminar capítulo', texto: `Vas a eliminar "${c.titulo}" y todos sus elementos.`, onSi: () => delCap(c.id) }); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, lineHeight: 1, padding: '0 2px' }}>×</button>
+                <span onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))} style={{ fontSize: 11, color: '#C5C4BE', cursor: 'pointer' }}>{open ? '▲' : '▼'}</span>
+              </div>
+
+              {open && (
+                <div className="fade" style={{ padding: '0 14px 12px', borderTop: '1px solid #F2F1ED' }}>
+                  {c.items.map(i => (
+                    <div key={i.id} style={{ padding: '10px 0', borderBottom: '1px solid #F5F4F0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                        {i.codigo && <span style={{ fontSize: 11, fontWeight: 600, color: '#A5A5A0', flexShrink: 0 }}>{i.codigo}</span>}
+                        {editItem === i.id
+                          ? <input autoFocus value={i.nombre} onChange={e => setNombre(c.id, i.id, e.target.value)} onBlur={() => setEditItem(null)} style={{ flex: 1, fontSize: 13, padding: '3px 7px' }} />
+                          : <span onClick={() => setEditItem(i.id)} style={{ flex: 1, fontSize: 13, color: '#18180F', cursor: 'text' }}>{i.nombre}</span>}
+                        <button onClick={() => setConfirmacion({ titulo: 'Eliminar elemento', texto: `Vas a eliminar "${i.nombre}".`, onSi: () => delItem(c.id, i.id) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, flexShrink: 0 }}>×</button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <Seg estado={i.estado} onChange={e => setEstado(c.id, i.id, e)} />
+                        <input placeholder="Nota (qué falta, referencia...)" value={i.nota || ''} onChange={e => setNota(c.id, i.id, e.target.value)} style={{ flex: 1, minWidth: 140, fontSize: 12 }} />
+                      </div>
+                    </div>
+                  ))}
+                  <button onClick={() => addItem(c.id)} style={{ width: '100%', padding: '6px', marginTop: 8, borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97' }}>+ Añadir elemento</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Añadir capítulo */}
+      <button onClick={addCap} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginTop: 8 }}>+ Añadir capítulo</button>
 
       {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
@@ -3249,9 +3451,12 @@ function ModuloActaVO({ obra, onSave }) {
   }
   function delFotoEstado(id) { guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: (vo.estadoObra.fotos||[]).filter(f => f.id !== id) } }); }
 
-  async function exportar() {
+  const [showIdioma, setShowIdioma] = useState(false);
+
+  async function exportar(idioma) {
+    setShowIdioma(false);
     setGenerando(true);
-    try { await generarActaVO(obra, vo); guardarVO({ ...vo, num: vo.num + 1 }); }
+    try { await generarActaVO(obra, vo, idioma); guardarVO({ ...vo, num: vo.num + 1 }); }
     catch (e) { alert('Error al exportar: ' + e.message); }
     setGenerando(false);
   }
@@ -3273,8 +3478,18 @@ function ModuloActaVO({ obra, onSave }) {
           </div>
         </div>
         <Btn onClick={() => setShowHistorico(true)}>Resueltos ({todosResueltos.length})</Btn>
-        <Btn primary disabled={generando} onClick={exportar}>{generando ? 'Generando...' : `↓ Exportar Acta Nº ${String(vo.num).padStart(2,'0')}`}</Btn>
+        <Btn primary disabled={generando} onClick={() => setShowIdioma(true)}>{generando ? 'Generando...' : `↓ Exportar Acta Nº ${String(vo.num).padStart(2,'0')}`}</Btn>
       </div>
+
+      {showIdioma && (
+        <Modal title="Idioma del acta" onClose={() => setShowIdioma(false)} footer={<Btn onClick={() => setShowIdioma(false)}>Cancelar</Btn>}>
+          <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16 }}>Elige el idioma en el que quieres exportar el Acta Nº {String(vo.num).padStart(2,'0')}.</p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn full onClick={() => exportar('ca')}>🇪🇸 Català</Btn>
+            <Btn primary full onClick={() => exportar('es')}>🇪🇸 Castellano</Btn>
+          </div>
+        </Modal>
+      )}
 
       {/* Fase + lugar */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
@@ -3518,21 +3733,39 @@ function NuevoTema({ onAdd }) {
 }
 function NuevaEntrada({ onAdd }) {
   const [open, setOpen] = useState(false);
-  const [txt, setTxt] = useState('');
-  if (!open) return <button onClick={() => setOpen(true)} style={{ marginTop: 8, fontSize: 12, color: '#6B6B66', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Añadir seguimiento de esta visita</button>;
-  return (
-    <div className="fade" style={{ marginTop: 8 }}>
-      <textarea autoFocus value={txt} onChange={e => setTxt(e.target.value)} placeholder="Novedad de esta visita..." style={{ minHeight: 50, marginBottom: 6 }} />
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Btn sm primary disabled={!txt.trim()} onClick={() => { onAdd(txt); setTxt(''); setOpen(false); }}>Añadir</Btn>
-        <Btn sm onClick={() => { setTxt(''); setOpen(false); }}>✕</Btn>
-      </div>
-    </div>
-  );
-}
-
 // ── Generador PDF Acta VO ────────────────────────────────────────────────────
-async function generarActaVO(obra, vo) {
+const TEXTOS_VO = {
+  ca: {
+    titulo:    n => `ACTA DE VISITA D'OBRA N.\u00ba ${n}`,
+    fecha:     'DATA',
+    lugar:     'LLOC',
+    fase:      'FASE',
+    equipo:    'EQUIP T\u00c8CNIC I DADES DE CONTACTE',
+    colRol:    'ROL', colEmp: 'EMPRESA', colNom: 'NOM', colEmail: 'EMAIL', colTel: 'TEL.', colAsis: 'ASSISTIT',
+    sec0:      'ESTAT DE L\'OBRA (FOTOGRAFIES)',
+    colDesc:   'DESCRIPCI\u00d3', colEst: 'Estat', colIni: 'Inici', colFi: 'Fi', colRes: 'Res.',
+    nota:      'NOTA: La present acta s\'entendr\u00e0 com a conforme en cas de no manifestar comentaris en el termini de 48 hores despr\u00e9s de la seva difusi\u00f3.',
+    conforme:  'Conforme, signatura i data:',
+    firmas:    ['PROMOTOR', 'DIRECCI\u00d3 D\'OBRA', 'DIRECCI\u00d3 D\'EXECUCI\u00d3\nCOORD. SEGURETAT', 'CONTRACTISTA'],
+    pie:       ['Plaat Arquitectura T\u00e8cnica', 'Barcelona \u2013 Madrid', 'www.plaat.es'],
+  },
+  es: {
+    titulo:    n => `ACTA DE VISITA DE OBRA N.\u00ba ${n}`,
+    fecha:     'FECHA',
+    lugar:     'LUGAR',
+    fase:      'FASE',
+    equipo:    'EQUIPO T\u00c9CNICO Y DATOS DE CONTACTO',
+    colRol:    'ROL', colEmp: 'EMPRESA', colNom: 'NOMBRE', colEmail: 'EMAIL', colTel: 'TEL.', colAsis: 'ASISTIDO',
+    sec0:      'ESTADO DE LA OBRA (FOTOGRAF\u00cdAS)',
+    colDesc:   'DESCRIPCI\u00d3N', colEst: 'Estado', colIni: 'Inicio', colFi: 'Fin', colRes: 'Res.',
+    nota:      'NOTA: La presente acta se entender\u00e1 como conforme en caso de no manifestar comentarios en el plazo de 48 horas tras su difusi\u00f3n.',
+    conforme:  'Conforme, firma y fecha:',
+    firmas:    ['PROMOTOR', 'DIRECCI\u00d3N DE OBRA', 'DIRECCI\u00d3N DE EJECUCI\u00d3N\nCOORD. SEGURIDAD', 'CONTRATISTA'],
+    pie:       ['Plaat Arquitectura T\u00e9cnica', 'Barcelona \u2013 Madrid', 'www.plaat.es'],
+  },
+};
+
+async function generarActaVO(obra, vo, idioma = 'ca') {
   if (!window.jspdf) {
     await new Promise((res, rej) => {
       const s = document.createElement('script');
@@ -3542,253 +3775,244 @@ async function generarActaVO(obra, vo) {
     });
   }
   const { jsPDF } = window.jspdf;
+  const T = TEXTOS_VO[idioma] || TEXTOS_VO.ca;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PW = 210, PH = 297, M = 14, CW = PW - M * 2;
+  const LW = 0.25; // line width uniforme para todos los bordes
   const NEGRO = [0,0,0], GRIS = [217,217,217], GRIS_H = [232,232,228];
   const C_P = [255,235,200], C_R = [200,240,200], C_I = [210,228,255];
   const num = String(vo.num).padStart(2,'0');
   const fecha = new Date().toLocaleDateString('es-ES');
   let y = 0;
 
-  // Nº de líneas que ocupa un texto en un ancho (con fuente/size activos)
-  function nLines(txt, w, size) { doc.setFontSize(size); return doc.splitTextToSize(String(txt||''), w-2.5).length; }
-  function pie() {
-    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(0,0,0);
-    doc.text('Plaat Arquitectura Técnica', M, PH-8);
-    doc.text('Barcelona \u2013 Madrid', PW/2, PH-8, { align:'center' });
-    doc.text('www.plaat.es', PW-M, PH-8, { align:'right' });
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  function setLW() { doc.setLineWidth(LW); doc.setDrawColor(...NEGRO); }
+  function rectF(x,yy,w,h,fill) { if(fill){ doc.setFillColor(...fill); doc.rect(x,yy,w,h,'F'); } setLW(); doc.rect(x,yy,w,h); }
+  // Texto envuelto con padding y alineación
+  function wText(x, yy, w, h, txt, opts={}) {
+    if (txt===null || txt===undefined || txt==='') return;
+    const sz = opts.size||8; const bold = opts.bold||false; const center = opts.center||false;
+    doc.setFont('helvetica', bold ? 'bold':'normal'); doc.setFontSize(sz); doc.setTextColor(0,0,0);
+    const ll = doc.splitTextToSize(String(txt), w - 3.5);
+    if (center) {
+      const bh = ll.length*(sz*0.352645+0.5);
+      let ty = yy + h/2 - bh/2 + sz*0.352645;
+      ll.forEach(l => { doc.text(l, x+w/2, ty, {align:'center'}); ty += sz*0.352645+0.5; });
+    } else {
+      let ty = yy + 3 + sz*0.352645;
+      ll.forEach(l => { doc.text(l, x+2, ty); ty += sz*0.352645+0.5; });
+    }
   }
+  // Calcula altura necesaria para un texto en ancho w (fuente activa)
+  function calcH(txt, w, sz) {
+    if (!txt) return 0;
+    doc.setFontSize(sz||8);
+    return doc.splitTextToSize(String(txt), w-3.5).length * ((sz||8)*0.352645+0.5);
+  }
+  function rowH(pairs, minH=7) { // pairs = [{txt,w,sz}]
+    return Math.max(minH, Math.max(...pairs.map(p=>calcH(p.txt,p.w,p.sz||8)))+4);
+  }
+  function checkbox(cx, yy, h, checked) {
+    const s=4, x=cx-s/2, y2=yy+h/2-s/2;
+    setLW(); doc.rect(x,y2,s,s);
+    if (checked) { doc.setLineWidth(0.5); doc.line(x+0.7,y2+s/2,x+s*0.4,y2+s*0.85); doc.line(x+s*0.4,y2+s*0.85,x+s-0.5,y2+0.5); setLW(); }
+  }
+  function checkPage(h) { if (y+h > PH-18) { doc.addPage(); cabecera(); pie(); y=20; } }
   function cabecera() {
     doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-    doc.text(`ACTA DE VISITA DE OBRA N.\u00ba ${num}`, M, 10);
-    doc.setFontSize(22); doc.text('Plaat.', PW-M, 12, { align:'right' });
+    doc.text(T.titulo(num), M, 10);
+    doc.setFontSize(22); doc.text('Plaat.', PW-M, 12, {align:'right'});
   }
-  function checkPage(h) { if (y + h > PH - 18) { doc.addPage(); cabecera(); pie(); y = 20; } }
-  // Texto envuelto dentro de celda (alineado arriba-izq o centrado)
-  function txtCell(x, yy, w, h, txt, opt={}) {
-    if (txt === '' || txt == null) return;
-    const size = opt.size || 8;
-    doc.setFont('helvetica', opt.bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.setTextColor(0,0,0);
-    const ll = doc.splitTextToSize(String(txt), w-2.5);
-    if (opt.center) {
-      const blockH = ll.length * (size*0.352645 + 0.6);
-      let ty = yy + h/2 - blockH/2 + size*0.352645;
-      ll.forEach(line => { doc.text(line, x + w/2, ty, { align:'center' }); ty += size*0.352645 + 0.6; });
-    } else {
-      let ty = yy + 3 + size*0.352645;
-      ll.forEach(line => { doc.text(line, x + 1.8, ty); ty += size*0.352645 + 0.6; });
-    }
-  }
-  function checkbox(x, yy, h, checked) {
-    const s = 4, cx = x - 2, cy = yy + h/2 - s/2;
-    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.3); doc.rect(cx, cy, s, s);
-    if (checked) { doc.setLineWidth(0.5); doc.line(cx+0.7, cy+s/2, cx+s*0.4, cy+s*0.85); doc.line(cx+s*0.4, cy+s*0.85, cx+s-0.5, cy+0.5); }
+  function pie() {
+    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+    doc.text(T.pie[0], M, PH-8); doc.text(T.pie[1], PW/2, PH-8, {align:'center'}); doc.text(T.pie[2], PW-M, PH-8, {align:'right'});
   }
 
-  cabecera(); pie(); y = 18;
+  cabecera(); pie(); y=18;
 
-  // ── Título ────────────────────────────────────────────────────────────────
-  doc.setFillColor(...GRIS); doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
-  doc.rect(M, y, CW, 9, 'F'); doc.rect(M, y, CW, 9);
+  // ── 1. Título ────────────────────────────────────────────────────────────
+  rectF(M, y, CW, 9, GRIS);
   doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0,0,0);
-  doc.text(`ACTA DE VISITA DE OBRA N.\u00ba ${num}`, M+3, y+6);
+  doc.text(T.titulo(num), M+3, y+6.2);
   y += 9;
+
   // Fecha / Lugar / Fase
-  [['FECHA', fecha], ['LUGAR', vo.lugar||'Obra'], ['FASE', vo.fase||'']].forEach(([k,v]) => {
-    const h = Math.max(7, nLines(v, CW-42, 9)*4.4 + 3);
-    checkPage(h);
-    doc.setFillColor(...GRIS); doc.rect(M,y,42,h,'F');
-    doc.setDrawColor(...NEGRO); doc.rect(M,y,42,h); doc.rect(M+42,y,CW-42,h);
-    txtCell(M, y, 42, h, k, {bold:true, size:9, center:false});
-    txtCell(M+42, y, CW-42, h, v, {size:9});
-    y += h;
+  [[ T.fecha, fecha], [T.lugar, vo.lugar||'Obra'], [T.fase, vo.fase||'']].forEach(([k,v]) => {
+    const h = Math.max(8, calcH(v, CW-42)+4);
+    checkPage(h); rectF(M,y,42,h,GRIS); rectF(M+42,y,CW-42,h,null);
+    wText(M,y,42,h,k,{bold:true,size:9}); wText(M+42,y,CW-42,h,v,{size:9});
+    y+=h;
   });
-  y += 5;
+  y+=5;
 
-  // ── Equipo técnico ────────────────────────────────────────────────────────
-  checkPage(12);
-  doc.setFillColor(...GRIS); doc.rect(M, y, CW, 8, 'F'); doc.setDrawColor(...NEGRO); doc.rect(M, y, CW, 8);
-  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('EQUIPO T\u00c9CNICO Y DATOS DE CONTACTO', M+2, y+5.3); y += 8;
-  // Anchos equipo: Rol 36 | Empresa 28 | Nombre 30 | Email 42 | Tel 24 | Asist 22 = 182
-  const eW = [36, 28, 30, 42, 24, 22];
-  const ex = [M]; eW.forEach((w,i) => ex.push(ex[i]+w));
-  const ESZ = 7; // font size equipo
-  // Cabecera columnas
+  // ── 2. Equipo técnico ────────────────────────────────────────────────────
+  // Cabecera equipo (sin fila extra de columnas negras — solo título)
+  checkPage(10);
+  rectF(M,y,CW,8,GRIS);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+  doc.text(T.equipo, M+2, y+5.3); y+=8;
+
+  // Anchos: Rol 38 | Empresa 26 | Nombre 28 | Email 44 | Tel 24 | Asist 22 = 182
+  const eW=[38,26,28,44,24,22]; const ex=[M]; eW.forEach((w,i)=>ex.push(ex[i]+w));
+  // Cabecera columnas (fila con fondo gris claro)
   checkPage(6);
-  doc.setFillColor(...GRIS_H);
-  ['ROL','EMPRESA','NOMBRE','EMAIL','TEL.','ASISTIDO'].forEach((t,i) => {
-    doc.rect(ex[i], y, eW[i], 6, 'F'); doc.setDrawColor(...NEGRO); doc.rect(ex[i], y, eW[i], 6);
-    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
-    doc.text(t, ex[i]+eW[i]/2, y+4, { align:'center' });
-  });
-  y += 6;
+  [T.colRol,T.colEmp,T.colNom,T.colEmail,T.colTel,T.colAsis].forEach((t,i)=>{
+    rectF(ex[i],y,eW[i],6,GRIS_H);
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(80,80,75);
+    doc.text(t, ex[i]+eW[i]/2, y+4, {align:'center'});
+  }); y+=6;
 
-  (vo.equipo||[]).forEach(rol => {
-    const ps = (rol.personas && rol.personas.length) ? rol.personas : [{ empresa:'', nombre:'', email:'', tel:'', asistio:false }];
-    // Altura de cada persona (según texto más alto entre nombre/email/tel)
-    const rowHs = ps.map(p => {
-      const n = Math.max(nLines(p.nombre,eW[2],ESZ), nLines(p.email,eW[3],ESZ), nLines(p.tel,eW[4],ESZ), 1);
-      return Math.max(7, n*3.4 + 3.5);
-    });
-    const rolH = rowHs.reduce((a,b)=>a+b,0);
+  (vo.equipo||[]).forEach(rol=>{
+    const ps=(rol.personas&&rol.personas.length)?rol.personas:[{empresa:'',nombre:'',email:'',tel:'',asistio:false}];
+    const rowHs=ps.map(p=>rowH([{txt:p.nombre,w:eW[2]},{txt:p.email,w:eW[3]},{txt:p.tel,w:eW[4]}],7));
+    const rolH=rowHs.reduce((a,b)=>a+b,0);
     checkPage(rolH);
-
-    // Fondo y borde celda ROL (una sola, span)
-    doc.setFillColor(...GRIS); doc.rect(ex[0], y, eW[0], rolH, 'F');
-    doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(ex[0], y, eW[0], rolH);
-    txtCell(ex[0], y, eW[0], rolH, rol.nombre||'', {bold:true, size:ESZ, center:true});
-
-    // EMPRESA: agrupa personas consecutivas con misma empresa (sin línea intermedia)
-    let py = y, gi = 0;
-    while (gi < ps.length) {
-      let gj = gi;
-      while (gj+1 < ps.length && (ps[gj+1].empresa||'') === (ps[gi].empresa||'')) gj++;
-      const gh = rowHs.slice(gi, gj+1).reduce((a,b)=>a+b,0);
-      doc.setDrawColor(...NEGRO); doc.rect(ex[1], py, eW[1], gh);
-      txtCell(ex[1], py, eW[1], gh, ps[gi].empresa||'', {size:ESZ, center:true});
-      py += gh; gi = gj+1;
+    rectF(ex[0],y,eW[0],rolH,GRIS); wText(ex[0],y,eW[0],rolH,rol.nombre||'',{bold:true,size:7.5,center:true});
+    // Empresa: span hasta que cambie
+    let py=y, gi=0;
+    while(gi<ps.length){
+      let gj=gi;
+      while(gj+1<ps.length&&(ps[gj+1].empresa||'')===(ps[gi].empresa||''))gj++;
+      const gh=rowHs.slice(gi,gj+1).reduce((a,b)=>a+b,0);
+      rectF(ex[1],py,eW[1],gh,null); wText(ex[1],py,eW[1],gh,ps[gi].empresa||'',{size:7.5,center:true});
+      py+=gh; gi=gj+1;
     }
-
-    // NOMBRE / EMAIL / TEL / ASISTIDO por persona (con líneas entre personas)
-    py = y;
-    ps.forEach((p, pi) => {
-      const rh = rowHs[pi];
-      doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
-      doc.rect(ex[2], py, eW[2], rh); txtCell(ex[2], py, eW[2], rh, p.nombre||'', {size:ESZ});
-      doc.rect(ex[3], py, eW[3], rh); txtCell(ex[3], py, eW[3], rh, p.email||'', {size:ESZ});
-      doc.rect(ex[4], py, eW[4], rh); txtCell(ex[4], py, eW[4], rh, p.tel||'', {size:ESZ});
-      doc.rect(ex[5], py, eW[5], rh); checkbox(ex[5]+eW[5]/2, py, rh, !!p.asistio);
-      py += rh;
+    py=y;
+    ps.forEach((p,pi)=>{
+      const rh=rowHs[pi];
+      rectF(ex[2],py,eW[2],rh,null); wText(ex[2],py,eW[2],rh,p.nombre||'',{size:7.5});
+      rectF(ex[3],py,eW[3],rh,null); wText(ex[3],py,eW[3],rh,p.email||'',{size:7.5});
+      rectF(ex[4],py,eW[4],rh,null); wText(ex[4],py,eW[4],rh,p.tel||'',{size:7.5});
+      rectF(ex[5],py,eW[5],rh,null); checkbox(ex[5]+eW[5]/2,py,rh,!!p.asistio);
+      py+=rh;
     });
-    y += rolH;
-  });
-  y += 6;
+    y+=rolH;
+  }); y+=6;
 
-  // ── Sección 0: Estado de la obra ──────────────────────────────────────────
-  const eo = vo.estadoObra || {};
-  if (eo.descripcion || (eo.fotos||[]).length > 0) {
+  // ── 3. Sección 0: Estado de la obra ────────────────────────────────────
+  const eo=vo.estadoObra||{};
+  if(eo.descripcion||(eo.fotos||[]).length>0){
     checkPage(14);
-    doc.setFillColor(...GRIS); doc.rect(M,y,16,8,'F'); doc.rect(M+16,y,CW-16,8,'F');
-    doc.setDrawColor(...NEGRO); doc.rect(M,y,16,8); doc.rect(M+16,y,CW-16,8);
+    rectF(M,y,16,8,GRIS); rectF(M+16,y,CW-16,8,GRIS);
     doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
-    doc.text('0', M+8, y+5.3, {align:'center'}); doc.text('ESTADO DE LA OBRA (FOTOGRAF\u00cdAS)', M+19, y+5.3);
-    y += 8;
-    if (eo.descripcion) {
-      doc.setFontSize(8.5); const dl = doc.splitTextToSize(eo.descripcion, CW-4);
-      const dh = Math.max(10, dl.length*4.2 + 5); checkPage(dh);
-      doc.setDrawColor(...NEGRO); doc.rect(M, y, CW, dh);
-      doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0); doc.text(dl, M+2, y+5);
-      y += dh + 2;
+    doc.text('0',M+8,y+5.3,{align:'center'}); doc.text(T.sec0,M+19,y+5.3);
+    y+=8;
+    if(eo.descripcion){
+      doc.setFontSize(8.5); const dl=doc.splitTextToSize(eo.descripcion,CW-4);
+      const dh=Math.max(10,dl.length*4.2+5); checkPage(dh);
+      rectF(M,y,CW,dh,null);
+      doc.setFont('helvetica','normal'); doc.text(dl,M+2,y+5); y+=dh+2;
     }
-    const fotos = eo.fotos||[], fW = (CW-4)/2;
-    for (let fi=0; fi<fotos.length; fi+=2) {
-      const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
-      const dims = pair.map(f => { try { const pr=doc.getImageProperties(f.data); const r=pr.height/pr.width; const h=Math.min(fW*r,72); return {w:h/r,h}; } catch(e){ return {w:fW,h:56}; } });
-      const rowH = Math.max(...dims.map(d=>d.h)); checkPage(rowH+4);
-      pair.forEach((f,pi) => doc.addImage(f.data,'JPEG', M+pi*(fW+4), y, dims[pi].w, dims[pi].h));
-      y += rowH+4;
-    }
-    y += 4;
+    const fotos=eo.fotos||[], fW=(CW-4)/2;
+    for(let fi=0;fi<fotos.length;fi+=2){
+      const pair=[fotos[fi],fotos[fi+1]].filter(Boolean);
+      const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.data);const r=pr.height/pr.width;const h=Math.min(fW*r,72);return{w:h/r,h};}catch(e){return{w:fW,h:56};}});
+      const rh=Math.max(...dims.map(d=>d.h)); checkPage(rh+4);
+      pair.forEach((f,pi)=>doc.addImage(f.data,'JPEG',M+pi*(fW+4),y,dims[pi].w,dims[pi].h));
+      y+=rh+4;
+    } y+=4;
   }
 
-  // ── Secciones de temas ────────────────────────────────────────────────────
+  // ── 4. Secciones de temas ────────────────────────────────────────────────
+  // Anchos: Núm 16 | Desc variable | Estado 16 | Inicio 18 | Fin 18 | Res 14
   const cN=16, cE=16, cIn=18, cFi=18, cR=14, cD=CW-cN-cE-cIn-cFi-cR;
-  const cx = [M, M+cN, M+cN+cD, M+cN+cD+cE, M+cN+cD+cE+cIn, M+cN+cD+cE+cIn+cFi, M+cN+cD+cE+cIn+cFi+cR];
+  const cx=[M,M+cN,M+cN+cD,M+cN+cD+cE,M+cN+cD+cE+cIn,M+cN+cD+cE+cIn+cFi];
 
-  (vo.secciones||[]).forEach(sec => {
-    const activos = (sec.temas||[]).filter(t => !(t.resuelto && t.resueltoEnActa && t.resueltoEnActa < vo.num));
-    if (!activos.length) return;
-    checkPage(16);
-    // Cabecera sección (código + título)
-    doc.setFillColor(...GRIS); doc.rect(M,y,cN,8,'F'); doc.rect(M+cN,y,CW-cN,8,'F');
-    doc.setDrawColor(...NEGRO); doc.rect(M,y,cN,8); doc.rect(M+cN,y,CW-cN,8);
+  (vo.secciones||[]).forEach(sec=>{
+    const activos=(sec.temas||[]).filter(t=>!(t.resuelto&&t.resueltoEnActa&&t.resueltoEnActa<vo.num));
+    if(!activos.length) return;
+    checkPage(18);
+    // Fila cabecera sección: Núm | Título (span todo ancho restante)
+    rectF(M,y,cN,8,GRIS); rectF(M+cN,y,CW-cN,8,GRIS);
     doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
-    doc.text(sec.codigo, M+cN/2, y+5.3, {align:'center'}); doc.text(sec.titulo, M+cN+2, y+5.3);
-    y += 8;
-    // Sub-cabecera columnas
-    doc.setFillColor(...GRIS_H);
-    [['',cN],['DESCRIPCI\u00d3N',cD],['ESTADO',cE],['INICIO',cIn],['FIN',cFi],['RES.',cR]].forEach(([t,w],i) => {
-      doc.rect(cx[i], y, w, 6, 'F'); doc.setDrawColor(...NEGRO); doc.rect(cx[i], y, w, 6);
-      doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
-      doc.text(t, cx[i]+w/2, y+4, {align:'center'});
-    });
-    y += 6;
+    doc.text(sec.codigo,M+cN/2,y+5.3,{align:'center'}); doc.text(sec.titulo,M+cN+2,y+5.3);
+    y+=8;
+    // Sub-cabecera: celdas individuales para cada columna
+    const subH=6;
+    rectF(M,y,cN,subH,GRIS_H);
+    rectF(M+cN,y,cD,subH,GRIS_H);   doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0); doc.text(T.colDesc,M+cN+cD/2,y+4,{align:'center'});
+    rectF(M+cN+cD,y,cE,subH,GRIS_H);   doc.text(T.colEst, M+cN+cD+cE/2, y+4,{align:'center'});
+    rectF(M+cN+cD+cE,y,cIn,subH,GRIS_H); doc.text(T.colIni, M+cN+cD+cE+cIn/2,y+4,{align:'center'});
+    rectF(M+cN+cD+cE+cIn,y,cFi,subH,GRIS_H); doc.text(T.colFi, M+cN+cD+cE+cIn+cFi/2,y+4,{align:'center'});
+    rectF(M+cN+cD+cE+cIn+cFi,y,cR,subH,GRIS_H); doc.text(T.colRes,M+cN+cD+cE+cIn+cFi+cR/2,y+4,{align:'center'});
+    y+=subH;
 
-    // Cada tema = un bloque (sin líneas internas entre seguimientos)
-    activos.forEach(t => {
-      const fW = (cD - 5) / 2; // dos fotos por fila en la columna descripción
-      const ed = t.entradas.map(en => {
-        const esNueva = en.actaNum === vo.num;
-        const estado = esNueva ? 'N' : (en.estado||'P');
-        const fill = esNueva ? null : (estado==='R' ? C_R : estado==='I' ? C_I : C_P);
-        doc.setFontSize(8); const lines = doc.splitTextToSize(en.texto||'', cD-2.5);
-        const textH = lines.length*3.9 + 4;
-        // Layout de fotos: 2 por fila, proporción real, altura máx 38mm
-        const fotos = en.fotos || [];
-        const fotoRows = [];
-        let fotosH = 0;
-        for (let i=0; i<fotos.length; i+=2) {
-          const pair = [fotos[i], fotos[i+1]].filter(Boolean);
-          const dims = pair.map(f => { try { const pr=doc.getImageProperties(f.data); const r=pr.height/pr.width; const h=Math.min(fW*r,38); return {w:h/r,h}; } catch(e){ return {w:fW,h:30}; } });
-          const rowH = Math.max(...dims.map(d=>d.h));
-          fotoRows.push({ pair, dims, rowH });
-          fotosH += rowH + 2;
+    activos.forEach(t=>{
+      const fW2=(cD-5)/2;
+      const ed=t.entradas.map(en=>{
+        const esNueva=en.actaNum===vo.num;
+        const estado=esNueva?'N':(en.estado||'P');
+        const fill=esNueva?null:(estado==='R'?C_R:estado==='I'?C_I:C_P);
+        doc.setFontSize(8); const lines=doc.splitTextToSize(en.texto||'',cD-3.5);
+        const textH=lines.length*(8*0.352645+0.5)+4;
+        const fotos=en.fotos||[]; const fotoRows=[]; let fotosH=0;
+        for(let i=0;i<fotos.length;i+=2){
+          const pair=[fotos[i],fotos[i+1]].filter(Boolean);
+          const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.data);const r=pr.height/pr.width;const h=Math.min(fW2*r,38);return{w:h/r,h};}catch(e){return{w:fW2,h:30};}});
+          const rh=Math.max(...dims.map(d=>d.h));
+          fotoRows.push({pair,dims,rh}); fotosH+=rh+2;
         }
-        const h = Math.max(7, textH + (fotosH>0 ? fotosH+2 : 0));
-        return { en, esNueva, estado, fill, lines, textH, fotoRows, h };
+        const h=Math.max(7,textH+(fotosH>0?fotosH+2:0));
+        return{en,esNueva,estado,fill,lines,textH,fotoRows,h};
       });
-      const temaH = ed.reduce((a,e)=>a+e.h,0);
+      const temaH=ed.reduce((a,e)=>a+e.h,0);
       checkPage(temaH);
 
-      // Relleno por entrada (color de estado) en columnas desc..res
-      let ey = y;
-      ed.forEach(e => { if (e.fill) { doc.setFillColor(...e.fill); doc.rect(M+cN, ey, CW-cN, e.h, 'F'); } ey += e.h; });
+      // Fondo color por entrada
+      let ey=y;
+      ed.forEach(e=>{if(e.fill){doc.setFillColor(...e.fill);doc.rect(M+cN,ey,CW-cN,e.h,'F');}ey+=e.h;});
 
-      // Num (centrado en el bloque)
+      // Num centrado en el bloque del tema
       doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-      doc.text(t.num, M+cN/2, y + ed[0].h/2 + 1.2, {align:'center'});
+      doc.text(t.num,M+cN/2,y+ed[0].h/2+1.2,{align:'center'});
 
-      // Contenido por entrada
-      ey = y;
-      ed.forEach(e => {
-        const bold = e.esNueva; // filas nuevas (N) en negrita
-        // Texto alineado arriba
-        doc.setFont('helvetica', bold ? 'bold':'normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-        let ty = ey + 3 + 8*0.352645;
-        e.lines.forEach(line => { doc.text(line, M+cN+1.8, ty); ty += 3.9; });
-        // Fotos debajo del texto
-        let fy = ey + e.textH;
-        e.fotoRows.forEach(row => {
-          row.pair.forEach((f, pi) => { doc.addImage(f.data, 'JPEG', M+cN+2 + pi*(fW+1), fy, row.dims[pi].w, row.dims[pi].h); });
-          fy += row.rowH + 2;
-        });
-        // Estado / fechas / resp alineados con el texto (no con las fotos)
-        const midY = ey + Math.min(e.h, e.textH)/2 + 1.2;
-        doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-        doc.text(e.estado, M+cN+cD+cE/2, midY, {align:'center'});
-        const isR = e.en.estado==='R' && !e.esNueva;
-        doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(7.5);
-        doc.text(isR?'':fmtFechaCorta(e.en.fecha), M+cN+cD+cE+cIn/2, midY, {align:'center'});
-        doc.text(isR?fmtFechaCorta(e.en.fin||e.en.fecha):'', M+cN+cD+cE+cIn+cFi/2, midY, {align:'center'});
+      ey=y;
+      ed.forEach(e=>{
+        const bold=e.esNueva;
+        doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+        let ty=ey+3+8*0.352645;
+        e.lines.forEach(l=>{doc.text(l,M+cN+2,ty);ty+=8*0.352645+0.5;});
+        let fy=ey+e.textH;
+        e.fotoRows.forEach(row=>{row.pair.forEach((f,pi)=>doc.addImage(f.data,'JPEG',M+cN+2+pi*(fW2+1),fy,row.dims[pi].w,row.dims[pi].h));fy+=row.rh+2;});
+        const midY=ey+Math.min(e.h,e.textH)/2+1.2;
         doc.setFont('helvetica','bold'); doc.setFontSize(8);
-        doc.text(e.en.resp||'', M+cN+cD+cE+cIn+cFi+cR/2, midY, {align:'center'});
-        ey += e.h;
+        doc.text(e.estado,M+cN+cD+cE/2,midY,{align:'center'});
+        const isR=e.en.estado==='R'&&!e.esNueva;
+        doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(7.5);
+        doc.text(isR?'':fmtFechaCorta(e.en.fecha),M+cN+cD+cE+cIn/2,midY,{align:'center'});
+        doc.text(isR?fmtFechaCorta(e.en.fin||e.en.fecha):'',M+cN+cD+cE+cIn+cFi/2,midY,{align:'center'});
+        doc.setFont('helvetica','bold'); doc.setFontSize(8);
+        doc.text(e.en.resp||'',M+cN+cD+cE+cIn+cFi+cR/2,midY,{align:'center'});
+        ey+=e.h;
       });
 
-      // Bordes: verticales a toda altura + horizontal arriba/abajo (sin líneas internas)
-      doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
-      cx.forEach(x => doc.line(x, y, x, y+temaH));
-      doc.line(M, y, M+CW, y); doc.line(M, y+temaH, M+CW, y+temaH);
-      y += temaH;
-    });
-    y += 5;
+      // Bordes del tema: solo exteriores + líneas verticales de columnas (sin horizontales intermedias)
+      setLW();
+      cx.forEach(x=>doc.line(x,y,x,y+temaH));
+      doc.line(M+CW,y,M+CW,y+temaH);
+      doc.line(M,y,M+CW,y); doc.line(M,y+temaH,M+CW,y+temaH);
+      y+=temaH;
+    }); y+=5;
   });
 
-  // ── NOTA + Firmas ─────────────────────────────────────────────────────────
-  checkPage(34); y += 4;
+  // ── 5. NOTA + Firmas ──────────────────────────────────────────────────────
+  checkPage(36); y+=4;
   doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-  const notaL = doc.splitTextToSize('NOTA: La presente acta se entender\u00e1 como conforme en caso de no manifestar comentarios en el plazo de 48 horas tras su difusi\u00f3n.', CW);
-  doc.text(notaL, M, y); y += notaL.length*4.2 + 4;
+  const notaL=doc.splitTextToSize(T.nota,CW); doc.text(notaL,M,y); y+=notaL.length*4.2+4;
+  doc.setFont('helvetica','normal'); doc.text(T.conforme,M,y); y+=8;
+  const fw=CW/4;
+  T.firmas.forEach((f,i)=>{
+    setLW(); doc.rect(M+i*fw,y,fw,26);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+    doc.text(doc.splitTextToSize(f,fw-4),M+i*fw+2,y+4.5);
+  });
+
+  const total=doc.getNumberOfPages();
+  for(let p=1;p<=total;p++){doc.setPage(p);pie();}
+  const lang=idioma==='ca'?'Cat':'Cast';
+  doc.save(`Acta_VO_${num}_${lang}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`);
+}
+
   doc.setFont('helvetica','normal'); doc.text('Conforme, firma y fecha:', M, y); y += 8;
   const fw = CW/4;
   ['PROMOTOR','DIRECCI\u00d3N DE OBRA','DIRECCI\u00d3N DE EJECUCI\u00d3N\nCOORD. SEGURIDAD','CONTRATISTA'].forEach((f,i) => {
