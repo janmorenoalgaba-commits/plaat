@@ -1868,6 +1868,16 @@ function ModuloApuntes({ obra, onSave }) {
   function eliminar(id) {
     onSave({ ...obra, apuntes: apuntes.filter(a => a.id !== id) });
   }
+  function editarTexto(id, texto) {
+    onSave({ ...obra, apuntes: apuntes.map(a => a.id === id ? { ...a, texto } : a) });
+  }
+  function addComentario(id, texto) {
+    if (!texto.trim()) return;
+    onSave({ ...obra, apuntes: apuntes.map(a => a.id === id ? { ...a, comentarios: [...(a.comentarios || []), { id: uid(), texto: texto.trim(), creadaEn: now() }] } : a) });
+  }
+  function delComentario(id, comId) {
+    onSave({ ...obra, apuntes: apuntes.map(a => a.id === id ? { ...a, comentarios: (a.comentarios || []).filter(c => c.id !== comId) } : a) });
+  }
 
   const tareasPend  = apuntes.filter(a => a.tipo === 'tarea' && !a.hecha);
   const tareasHecha = apuntes.filter(a => a.tipo === 'tarea' && a.hecha);
@@ -1969,49 +1979,90 @@ function ModuloApuntes({ obra, onSave }) {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {mostrados.map(item => {
-            const vencida = isVencida(item);
-            return (
-              <div key={item.id} style={{ background: '#fff', border: `1px solid ${vencida ? '#F4ABAB' : '#E8E7E1'}`, borderLeft: vencida ? '3px solid #E24B4A' : '1px solid #E8E7E1', borderRadius: 10, padding: '10px 13px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-
-                {/* Checkbox (solo tareas) */}
-                {item.tipo === 'tarea' && (
-                  <button onClick={() => toggleHecha(item.id)} style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${item.hecha ? '#52A124' : '#D4D3CE'}`, background: item.hecha ? '#52A124' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, fontSize: 11, color: '#fff', transition: 'all .15s' }}>
-                    {item.hecha ? '✓' : ''}
-                  </button>
-                )}
-
-                {/* Icono nota */}
-                {item.tipo === 'nota' && (
-                  <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>📝</span>
-                )}
-
-                {/* Contenido */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: item.hecha ? '#A5A5A0' : '#18180F', textDecoration: item.hecha ? 'line-through' : 'none', lineHeight: 1.4, marginBottom: 5 }}>
-                    {item.texto}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 20, background: '#F0EFEA', color: '#6B6B66' }}>{item.categoria}</span>
-                    {item.tipo === 'tarea' && item.fechaLimite && (
-                      <span style={{ fontSize: 11, color: vencida ? '#8A1F1F' : '#A5A5A0', fontWeight: vencida ? 500 : 400 }}>
-                        {vencida ? '⚠ Vencida · ' : '📅 '}{fmtDate(item.fechaLimite)}
-                      </span>
-                    )}
-                    {item.tipo === 'nota' && (
-                      <span style={{ fontSize: 11, color: '#A5A5A0' }}>{fmtShort(item.creadaEn)}</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Eliminar */}
-                <button onClick={() => setConfirmacion({ titulo: 'Eliminar', texto: 'Vas a eliminar este elemento. Esta acción no se puede deshacer.', onSi: () => { eliminar(item.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
-              </div>
-            );
-          })}
+          {mostrados.map(item => (
+            <ApunteItem key={item.id} item={item} vencida={isVencida(item)}
+              onToggleHecha={() => toggleHecha(item.id)}
+              onEditarTexto={txt => editarTexto(item.id, txt)}
+              onAddComentario={txt => addComentario(item.id, txt)}
+              onConfirmar={setConfirmacion}
+              onDelComentario={comId => delComentario(item.id, comId)}
+              onEliminar={() => eliminar(item.id)} />
+          ))}
         </div>
       )}
       {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
+    </div>
+  );
+}
+
+// Tarjeta de tarea/nota con edición de texto y comentarios de seguimiento
+function ApunteItem({ item, vencida, onToggleHecha, onEditarTexto, onAddComentario, onConfirmar, onDelComentario, onEliminar }) {
+  const [abierto, setAbierto] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [txt, setTxt] = useState(item.texto);
+  const [coment, setComent] = useState('');
+  const comentarios = item.comentarios || [];
+
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${vencida ? '#F4ABAB' : '#E8E7E1'}`, borderLeft: vencida ? '3px solid #E24B4A' : '1px solid #E8E7E1', borderRadius: 10, padding: '10px 13px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        {/* Checkbox (solo tareas) */}
+        {item.tipo === 'tarea' && (
+          <button onClick={onToggleHecha} style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${item.hecha ? '#52A124' : '#D4D3CE'}`, background: item.hecha ? '#52A124' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, fontSize: 11, color: '#fff', transition: 'all .15s' }}>
+            {item.hecha ? '✓' : ''}
+          </button>
+        )}
+        {item.tipo === 'nota' && <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>📝</span>}
+
+        {/* Contenido */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {editando ? (
+            <div style={{ marginBottom: 6 }}>
+              <textarea autoFocus value={txt} onChange={e => setTxt(e.target.value)} style={{ minHeight: 60, marginBottom: 6 }} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Btn sm primary disabled={!txt.trim()} onClick={() => { onEditarTexto(txt.trim()); setEditando(false); }}>Guardar</Btn>
+                <Btn sm onClick={() => { setTxt(item.texto); setEditando(false); }}>✕</Btn>
+              </div>
+            </div>
+          ) : (
+            <div onClick={() => setEditando(true)} style={{ fontSize: 13, color: item.hecha ? '#A5A5A0' : '#18180F', textDecoration: item.hecha ? 'line-through' : 'none', lineHeight: 1.4, marginBottom: 5, cursor: 'text' }}>
+              {item.texto}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 20, background: '#F0EFEA', color: '#6B6B66' }}>{item.categoria}</span>
+            {item.tipo === 'tarea' && item.fechaLimite && (
+              <span style={{ fontSize: 11, color: vencida ? '#8A1F1F' : '#A5A5A0', fontWeight: vencida ? 500 : 400 }}>
+                {vencida ? '⚠ Vencida · ' : '📅 '}{fmtDate(item.fechaLimite)}
+              </span>
+            )}
+            {item.tipo === 'nota' && <span style={{ fontSize: 11, color: '#A5A5A0' }}>{fmtShort(item.creadaEn)}</span>}
+            <button onClick={() => setAbierto(v => !v)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#6B6B66', display: 'flex', alignItems: 'center', gap: 3 }}>
+              💬 {comentarios.length > 0 ? comentarios.length : ''} {abierto ? '▲' : '▼'}
+            </button>
+          </div>
+        </div>
+
+        {/* Eliminar */}
+        <button onClick={() => onConfirmar({ titulo: item.tipo === 'tarea' ? 'Eliminar tarea' : 'Eliminar nota', texto: 'Esta acción no se puede deshacer.', onSi: () => { onEliminar(); onConfirmar(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
+      </div>
+
+      {/* Comentarios de seguimiento */}
+      {abierto && (
+        <div className="fade" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #F2F1ED' }}>
+          {comentarios.map(c => (
+            <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid #F5F4F0' }}>
+              <span style={{ fontSize: 11, color: '#A5A5A0', whiteSpace: 'nowrap', paddingTop: 1, minWidth: 40 }}>{fmtShort(c.creadaEn)}</span>
+              <span style={{ flex: 1, fontSize: 13, color: '#18180F', lineHeight: 1.45 }}>{c.texto}</span>
+              <button onClick={() => onConfirmar({ titulo: 'Eliminar comentario', texto: 'Vas a eliminar este comentario de seguimiento.', onSi: () => { onDelComentario(c.id); onConfirmar(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 14, lineHeight: 1 }}>×</button>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <input placeholder="Añadir seguimiento..." value={coment} onChange={e => setComent(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && coment.trim()) { onAddComentario(coment); setComent(''); } }} style={{ flex: 1, fontSize: 12 }} />
+            <Btn sm primary disabled={!coment.trim()} onClick={() => { onAddComentario(coment); setComent(''); }}>Añadir</Btn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
