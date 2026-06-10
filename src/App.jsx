@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, memo } from "react";
 import * as XLSX from "xlsx";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -36,22 +36,24 @@ const now      = () => new Date().toISOString();
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'DM Sans', -apple-system, sans-serif; background: #F2F1ED; color: #141412; font-size: 14px; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { -webkit-text-size-adjust: 100%; }
+body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; background: #F7F6F3; color: #16160F; font-size: 14px; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 button, input, select, textarea { font-family: inherit; }
 input, select, textarea {
-  display: block; width: 100%; padding: 8px 11px;
-  border: 1px solid #E0DFD9; border-radius: 8px;
-  font-size: 13px; color: #141412; background: #fff;
-  outline: none; transition: border-color .15s, box-shadow .15s;
+  display: block; width: 100%; padding: 10px 13px;
+  border: 1px solid #E6E4DD; border-radius: 11px;
+  font-size: 14px; color: #16160F; background: #fff;
+  outline: none; transition: border-color .18s ease, box-shadow .18s ease;
 }
+input::placeholder, textarea::placeholder { color: #B5B4AE; }
 input:focus, select:focus, textarea:focus {
-  border-color: #141412; box-shadow: 0 0 0 3px rgba(20,20,18,.07);
+  border-color: #16160F; box-shadow: 0 0 0 3.5px rgba(20,20,15,.06);
 }
 textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
-::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #D0CFC9; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: #D8D6CF; border-radius: 3px; }
 /* ── Animaciones sutiles ─────────────────────────────── */
 @keyframes fi    { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 @keyframes pop   { from { opacity: 0; transform: scale(.97);     } to { opacity: 1; transform: none; } }
@@ -92,7 +94,9 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
   .fade, .list-in > *, .modal-in, .sheet-in, .modal-overlay { animation: none !important; }
   .obra-card:active, .tap:active { transform: none !important; }
   .auro, .login-card, .login-logo, .login-row, .stat-card, .shimmer-btn::after,
-  .arch-grid, .arch-shape, .arch-dash, .scan, .splash-logo, .splash-sub, .splash-bar { animation: none !important; }
+  .arch-grid, .arch-shape, .arch-dash, .scan, .splash-logo, .splash-sub, .splash-bar,
+  .spl-ring, .spl-blueprint, .spl-draw, .spl-beam, .spl-flash, .spl-particle,
+  .dash-banner .arch-grid, .dash-banner-ring, .dash-beam, .dash-title { animation: none !important; }
 }
 
 /* ── Movimiento "notable pero profesional" ───────────────── */
@@ -185,21 +189,70 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
   animation: gridPan 9s linear infinite;
 }
 /* Formas geométricas (planos/contornos) flotando */
-.arch-shape { position: absolute; pointer-events: none; will-change: transform; }
+.arch-shape { position: absolute; pointer-events: none; will-change: transform; transform: translateZ(0); }
 .arch-line  { stroke: rgba(255,255,255,0.10); fill: none; }
-.arch-line-accent { stroke: rgba(143,212,92,0.30); fill: none; }
+.arch-line-accent { stroke: rgba(138,168,138,0.32); fill: none; }
 .arch-dash {
   stroke-dasharray: 8 10; animation: dashFlow 24s linear infinite;
 }
 /* Línea de escaneo tipo plano */
-.scan { position:absolute; left:0; right:0; height:1px; background:linear-gradient(90deg, transparent, rgba(143,212,92,0.5), transparent); animation: scanLine 7s linear infinite; }
+.scan { position:absolute; left:0; right:0; height:1px; background:linear-gradient(90deg, transparent, rgba(138,168,138,0.5), transparent); animation: scanLine 7s linear infinite; }
 
 /* Splash de bienvenida */
 .splash-wrap { position: fixed; inset: 0; z-index: 99998; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 35%, #232320 0%, #1A1A18 60%, #141412 100%); overflow: hidden; }
-.splash-wrap.out { animation: splashOut .6s ease .05s forwards; }
-.splash-logo { font-size: 44px; font-weight: 700; color: #F2F1ED; animation: splashLogo 1.1s cubic-bezier(.2,.8,.2,1) both; display:flex; align-items:baseline; gap:10px; }
-.splash-sub  { font-size: 12px; letter-spacing: .26em; color: rgba(255,255,255,0.55); margin-top: 16px; animation: splashSub .7s ease .7s both; }
-.splash-bar  { height: 3px; background: linear-gradient(90deg, #52A124, #8FD45C); border-radius: 2px; margin-top: 22px; animation: barGrow 1.4s cubic-bezier(.2,.8,.2,1) .4s both; }
+.splash-wrap.out { animation: splashOut .7s cubic-bezier(.4,0,.2,1) .05s forwards; }
+.splash-logo { font-size: 56px; font-weight: 700; color: #F2F1ED; animation: splashLogo 1.1s cubic-bezier(.2,.8,.2,1) both; display:flex; align-items:baseline; justify-content:center; gap:12px; text-shadow: 0 4px 40px rgba(138,168,138,0.30); }
+.splash-sub  { font-size: 12px; letter-spacing: .26em; color: rgba(255,255,255,0.6); margin-top: 18px; animation: splashSub .7s ease .9s both; }
+.splash-bar  { height: 3px; background: linear-gradient(90deg, transparent, #5A7D5A, #8AA88A, #5A7D5A, transparent); border-radius: 2px; margin-top: 24px; animation: barGrow 1.4s cubic-bezier(.2,.8,.2,1) .4s both, barPulse 2s ease-in-out 1.6s infinite; }
+
+/* ── Splash espectacular ─────────────────────────────────── */
+@keyframes barPulse { 0%,100%{box-shadow:0 0 8px rgba(138,168,138,0.45);} 50%{box-shadow:0 0 22px rgba(138,168,138,0.95);} }
+@keyframes ringExpand { 0%{transform:scale(0);opacity:0;} 30%{opacity:.8;} 100%{transform:scale(3);opacity:0;} }
+@keyframes drawStroke { from{stroke-dashoffset:var(--len);} to{stroke-dashoffset:0;} }
+@keyframes particleRise { 0%{transform:translateY(0) scale(1);opacity:0;} 10%{opacity:1;} 90%{opacity:1;} 100%{transform:translateY(-110vh) scale(.4);opacity:0;} }
+@keyframes flashOut { 0%{opacity:0;} 92%{opacity:0;} 96%{opacity:.7;} 100%{opacity:0;} }
+@keyframes sweepBeam { 0%{transform:translateX(-60vw) rotate(12deg);opacity:0;} 20%{opacity:.5;} 80%{opacity:.5;} 100%{transform:translateX(60vw) rotate(12deg);opacity:0;} }
+@keyframes blueprintRotate { 0%{transform:rotate(0) scale(1);} 100%{transform:rotate(360deg) scale(1);} }
+@keyframes textGlitch { 0%,100%{opacity:1;} 50%{opacity:.85;} }
+@keyframes sp-pop { 0%{opacity:0;transform:scale(.5);} 60%{opacity:1;transform:scale(1.1);} 100%{opacity:1;transform:scale(1);} }
+
+/* Anillos que se expanden detrás del logo */
+.spl-ring { position:absolute; border:1.5px solid rgba(138,168,138,0.45); border-radius:50%; width:120px; height:120px; left:50%; top:50%; margin:-60px 0 0 -60px; }
+.spl-ring.r1 { animation: ringExpand 3s ease-out infinite; }
+.spl-ring.r2 { animation: ringExpand 3s ease-out .8s infinite; }
+.spl-ring.r3 { animation: ringExpand 3s ease-out 1.6s infinite; border-color: rgba(255,255,255,0.15); }
+
+/* Plano que se "dibuja" progresivamente */
+.spl-blueprint { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:520px; height:520px; opacity:.5; animation: blueprintRotate 80s linear infinite; }
+.spl-draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: drawStroke 2s cubic-bezier(.4,0,.2,1) forwards; }
+.spl-draw.d1 { --len: 1600; animation-delay:.2s; }
+.spl-draw.d2 { --len: 1200; animation-delay:.5s; }
+.spl-draw.d3 { --len: 900;  animation-delay:.8s; }
+.spl-draw.d4 { --len: 600;  animation-delay:1.1s; }
+
+/* Haz de luz que barre */
+.spl-beam { position:absolute; top:0; bottom:0; width:120px; background:linear-gradient(90deg, transparent, rgba(138,168,138,0.14), transparent); animation: sweepBeam 3.5s ease-in-out infinite; }
+
+/* Destello final antes de salir */
+.spl-flash { position:absolute; inset:0; background:radial-gradient(circle at 50% 45%, rgba(138,168,138,0.5), transparent 60%); animation: flashOut 2.6s ease forwards; pointer-events:none; }
+
+/* Partículas ascendentes */
+.spl-particle { position:absolute; width:3px; height:3px; border-radius:50%; background:rgba(138,168,138,0.7); bottom:-10px; will-change:transform; }
+
+/* ── Banner del tablero (sutil) ───────────────────────────── */
+.dash-banner { position: relative; overflow: hidden; background: linear-gradient(120deg, #1A1A17 0%, #232320 100%); }
+.dash-banner .arch-grid { inset: -40px; background-size: 44px 44px; opacity: .55; will-change: transform; transform: translateZ(0); }
+.dash-banner-ring { position:absolute; border:1px solid rgba(138,168,138,0.22); border-radius:50%; pointer-events:none; will-change: transform; transform: translateZ(0); }
+.db-r1 { width:160px; height:160px; right:-40px; top:-70px; animation: floatY 9s ease-in-out infinite; }
+.db-r2 { width:90px;  height:90px;  right:40px;  bottom:-50px; animation: floatY 7s ease-in-out infinite reverse; }
+.dash-beam { position:absolute; top:0; bottom:0; width:80px; background:linear-gradient(90deg, transparent, rgba(138,168,138,0.10), transparent); animation: sweepBeam 6s ease-in-out infinite; will-change: transform; }
+.dash-title { animation: riseIn .5s cubic-bezier(.2,.8,.2,1) both; }
+
+/* En móvil: banner estático (sin animación permanente) para evitar lag */
+@media (max-width: 760px) {
+  .dash-banner .arch-grid, .dash-banner-ring, .dash-beam { animation: none !important; }
+}
+
 
 
 .hov-nav:hover { background: #ECEAE4 !important; }
@@ -238,15 +291,16 @@ function Pill({ label, bg, color }) {
 function Btn({ children, onClick, primary, sm, danger, ghost, disabled, full }) {
   const base = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-    padding: sm ? '5px 11px' : '7px 14px', borderRadius: 8, border: '1.5px solid',
-    cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500,
-    transition: 'opacity .15s', opacity: disabled ? 0.45 : 1, width: full ? '100%' : 'auto',
+    padding: sm ? '6px 13px' : '9px 17px', borderRadius: 11, border: '1.5px solid',
+    cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600,
+    transition: 'opacity .15s, transform .12s ease', opacity: disabled ? 0.45 : 1, width: full ? '100%' : 'auto',
+    letterSpacing: '0.01em',
   };
-  const style = primary ? { ...base, background: '#18180F', color: '#fff', borderColor: '#18180F' }
+  const style = primary ? { ...base, background: '#16160F', color: '#fff', borderColor: '#16160F' }
     : danger  ? { ...base, background: '#FDECEC', color: '#8A1F1F', borderColor: '#F9CACA' }
     : ghost   ? { ...base, background: 'transparent', color: '#6B6B66', borderColor: 'transparent' }
-    : { ...base, background: 'transparent', color: '#18180F', borderColor: '#E0DFD9' };
-  return <button style={style} onClick={disabled ? undefined : onClick}>{children}</button>;
+    : { ...base, background: 'transparent', color: '#16160F', borderColor: '#E6E4DD' };
+  return <button className="tap" style={style} onClick={disabled ? undefined : onClick}>{children}</button>;
 }
 
 function ConfirmMini({ titulo, texto, onSi, onNo }) {
@@ -480,7 +534,7 @@ function ObraCard({ obra, onClick, onEditar, onEliminar }) {
 
   return (
     <div className="obra-card" onClick={onClick}
-      style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 5px 18px rgba(0,0,0,0.05)', overflow: 'hidden', borderLeft: `3px solid ${accentColor}`, position: 'relative' }}>
+      style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.045)', overflow: 'hidden', borderLeft: `3px solid ${accentColor}`, position: 'relative' }}>
 
       {/* Parte superior */}
       <div style={{ display: 'flex', gap: 13, padding: '15px 16px 13px' }}>
@@ -3374,10 +3428,18 @@ function VistaAlertas({ obras, onIrObra, isMobile }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Topbar */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #ECEAE4', padding: isMobile ? '13px 16px' : '13px 22px', paddingTop: isMobile ? 'calc(13px + env(safe-area-inset-top))' : '13px', flexShrink: 0 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Alertas</div>
-        <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 1 }}>{total > 0 ? `${total} aviso${total !== 1 ? 's' : ''} requieren tu atención` : 'Sin avisos pendientes'}</div>
+      {/* Banner con fondo arquitectónico animado */}
+      <div className="dash-banner" style={{ borderBottom: '1px solid #ECEAE4', padding: isMobile ? '18px 16px' : '22px 22px', paddingTop: isMobile ? 'calc(18px + env(safe-area-inset-top))' : '22px', flexShrink: 0 }}>
+        <div className="arch-grid" />
+        <div className="dash-banner-ring db-r1" />
+        <div className="dash-banner-ring db-r2" />
+        <div className="dash-beam" />
+        <div className="dash-title" style={{ position: 'relative', zIndex: 2 }}>
+          <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, color: '#F2F1ED', letterSpacing: '0.01em', display: 'flex', alignItems: 'baseline', gap: 7 }}>
+            Alertas <span style={{ fontSize: 13, color: '#8AA88A' }}>.</span>
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>{total > 0 ? `${total} aviso${total !== 1 ? 's' : ''} requieren tu atención` : 'Sin avisos pendientes'}</div>
+        </div>
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', padding: pad, display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -4195,10 +4257,13 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* Header oscuro — mismo estilo que el sidebar */}
-      <div style={{ background: '#1C1C1A', flexShrink: 0, paddingTop: isMobile ? 'env(safe-area-inset-top)' : 0 }}>
+      <div className="dash-banner" style={{ background: '#1C1C1A', flexShrink: 0, paddingTop: isMobile ? 'env(safe-area-inset-top)' : 0 }}>
+        <div className="arch-grid" style={{ opacity: 0.4 }} />
+        <div className="dash-banner-ring db-r1" style={{ opacity: 0.6 }} />
+        <div className="dash-beam" />
 
         {/* Breadcrumb + nombre + estado */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '12px 14px' : '14px 22px 12px', borderBottom: isMobile ? 'none' : '1px solid rgba(255,255,255,0.07)' }}>
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '12px 14px' : '14px 22px 12px', borderBottom: isMobile ? 'none' : '1px solid rgba(255,255,255,0.07)' }}>
           <button onClick={onBack} style={{ fontSize: isMobile ? 14 : 12, color: 'rgba(255,255,255,0.55)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             ←{isMobile ? '' : ' Mis obras'}
           </button>
@@ -4229,7 +4294,7 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
 
         {/* Tabs arriba — solo escritorio */}
         {!isMobile && (
-          <div className="no-scrollbar" style={{ display: 'flex', padding: '0 22px', overflowX: 'auto' }}>
+          <div className="no-scrollbar" style={{ position: 'relative', zIndex: 2, display: 'flex', padding: '0 22px', overflowX: 'auto' }}>
             {tabs.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)} style={{
                 padding: '11px 16px', background: 'none', border: 'none',
@@ -4277,7 +4342,7 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
 // ─── Pantalla de login ────────────────────────────────────────────────────────
 
 // ─── Fondo arquitectónico animado (login + splash) ──────────────────────────
-function FondoArquitectonico() {
+const FondoArquitectonico = memo(function FondoArquitectonico() {
   return (
     <>
       {/* Auroras de color */}
@@ -4329,20 +4394,56 @@ function FondoArquitectonico() {
       </svg>
     </>
   );
-}
+});
 
 // ─── Pantalla de bienvenida (splash al abrir) ───────────────────────────────
 function SplashScreen({ saliendo }) {
+  // Partículas ascendentes con posiciones/tiempos variados
+  const particulas = Array.from({ length: 14 }, (_, i) => ({
+    left: (i * 7 + (i % 3) * 4) % 100,
+    delay: (i % 7) * 0.4,
+    dur: 4 + (i % 5),
+    size: 2 + (i % 3),
+  }));
+
   return (
     <div className={`splash-wrap${saliendo ? ' out' : ''}`}>
       <FondoArquitectonico />
-      <div style={{ position: 'relative', textAlign: 'center', zIndex: 2 }}>
+
+      {/* Haz de luz que barre */}
+      <div className="spl-beam" />
+
+      {/* Partículas ascendentes */}
+      {particulas.map((p, i) => (
+        <div key={i} className="spl-particle" style={{ left: p.left + '%', width: p.size, height: p.size, animation: `particleRise ${p.dur}s linear ${p.delay}s infinite` }} />
+      ))}
+
+      {/* Plano técnico dibujándose y rotando */}
+      <svg className="spl-blueprint" viewBox="0 0 200 200" fill="none">
+        <circle className="spl-draw d1 arch-line" cx="100" cy="100" r="80" strokeWidth="0.5" />
+        <rect className="spl-draw d2 arch-line-accent" x="55" y="55" width="90" height="90" strokeWidth="0.6" />
+        <polygon className="spl-draw d3 arch-line" points="100,30 165,140 35,140" strokeWidth="0.5" />
+        <circle className="spl-draw d4 arch-line-accent" cx="100" cy="100" r="45" strokeWidth="0.6" />
+        <line className="arch-line arch-dash" x1="20" y1="100" x2="180" y2="100" strokeWidth="0.4" />
+        <line className="arch-line arch-dash" x1="100" y1="20" x2="100" y2="180" strokeWidth="0.4" />
+      </svg>
+
+      {/* Anillos expandiéndose detrás del logo */}
+      <div className="spl-ring r1" />
+      <div className="spl-ring r2" />
+      <div className="spl-ring r3" />
+
+      {/* Logo central */}
+      <div style={{ position: 'relative', textAlign: 'center', zIndex: 3 }}>
         <div className="splash-logo">
-          PLAAT<span style={{ fontSize: 24, color: '#8FD45C' }}>.</span>
+          PLAAT<span style={{ fontSize: 32, color: '#8AA88A', animation: 'sp-pop .6s ease .8s both' }}>.</span>
         </div>
-        <div className="splash-bar" />
-        <div className="splash-sub">BIENVENIDO · DEO</div>
+        <div className="splash-bar" style={{ width: 160, margin: '24px auto 0' }} />
+        <div className="splash-sub">BIENVENIDO · DEO · ARQUITECTURA TÉCNICA</div>
       </div>
+
+      {/* Destello final */}
+      <div className="spl-flash" />
     </div>
   );
 }
@@ -4375,9 +4476,9 @@ function LoginScreen() {
       <div className="login-card" style={{ position: 'relative', zIndex: 2, background: 'rgba(255,255,255,0.97)', borderRadius: 18, padding: '38px 32px', width: 380, maxWidth: '100%', boxShadow: '0 30px 80px rgba(0,0,0,0.45), 0 2px 0 rgba(255,255,255,0.05) inset', backdropFilter: 'blur(8px)' }}>
         <div className="login-logo" style={{ fontSize: 28, fontWeight: 700, letterSpacing: '0.1em', color: '#141412', display: 'flex', alignItems: 'baseline', gap: 8 }}>
           PLAAT
-          <span style={{ fontSize: 14, fontWeight: 400, color: '#52A124' }}>.</span>
+          <span style={{ fontSize: 14, fontWeight: 400, color: '#5A7D5A' }}>.</span>
         </div>
-        <div className="login-underline" style={{ height: 3, background: 'linear-gradient(90deg, #52A124, #8FD45C)', borderRadius: 2, margin: '8px 0 6px' }} />
+        <div className="login-underline" style={{ height: 3, background: 'linear-gradient(90deg, #5A7D5A, #8AA88A)', borderRadius: 2, margin: '8px 0 6px' }} />
         <div style={{ fontSize: 11.5, letterSpacing: '0.18em', color: '#9B9B97', marginBottom: 28, fontWeight: 400 }}>DEO · ARQUITECTURA TÉCNICA</div>
 
         <div className="login-row r1" style={{ marginBottom: 12 }}>
@@ -4421,10 +4522,10 @@ export default function App() {
   const [splash,       setSplash]       = useState(true);   // pantalla de bienvenida
   const [splashOut,    setSplashOut]    = useState(false);  // fase de desvanecido
 
-  // Splash de bienvenida: visible ~2.2s, luego se desvanece
+  // Splash de bienvenida: visible ~3s, luego se desvanece
   useEffect(() => {
-    const t1 = setTimeout(() => setSplashOut(true), 2000);
-    const t2 = setTimeout(() => setSplash(false), 2650);
+    const t1 = setTimeout(() => setSplashOut(true), 2900);
+    const t2 = setTimeout(() => setSplash(false), 3600);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
   const [importando,   setImportando]   = useState(false);
@@ -4737,13 +4838,23 @@ export default function App() {
           {nav === 'alertas'   && <VistaAlertas obras={obras} onIrObra={o => setObraActiva(o)} isMobile={isMobile} />}
           {nav === 'tablero'   && (
             <>
-              {/* Topbar */}
-              <div style={{ background: '#fff', borderBottom: '1px solid #ECEAE4', padding: isMobile ? '13px 16px' : '13px 22px', paddingTop: isMobile ? 'calc(13px + env(safe-area-inset-top))' : '13px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Mis obras</div>
-                  {obras.length > 0 && <div style={{ fontSize: 12, color: '#9B9B97', marginTop: 1 }}>{obras.filter(o => o.estado === 'en_curso').length} en curso · {obras.length} en total</div>}
+              {/* Banner con fondo arquitectónico animado */}
+              <div className="dash-banner" style={{ borderBottom: '1px solid #ECEAE4', padding: isMobile ? '18px 16px' : '22px 22px', paddingTop: isMobile ? 'calc(18px + env(safe-area-inset-top))' : '22px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                <div className="arch-grid" />
+                <div className="dash-banner-ring db-r1" />
+                <div className="dash-banner-ring db-r2" />
+                <div className="dash-beam" />
+                <div className="dash-title" style={{ flex: 1, position: 'relative', zIndex: 2 }}>
+                  <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, color: '#F2F1ED', letterSpacing: '0.01em', display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                    Mis obras <span style={{ fontSize: 13, color: '#8AA88A' }}>.</span>
+                  </div>
+                  {obras.length > 0 && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>{obras.filter(o => o.estado === 'en_curso').length} en curso · {obras.length} en total</div>}
                 </div>
-                <Btn primary onClick={() => setShowNueva(true)}>+ Nueva obra</Btn>
+                <div style={{ position: 'relative', zIndex: 2 }}>
+                  <button onClick={() => setShowNueva(true)} className="shimmer-btn tap" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 16px', borderRadius: 8, border: '1.5px solid #7A9D7A', background: '#5A7D5A', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    + Nueva obra
+                  </button>
+                </div>
               </div>
 
               <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
@@ -4768,9 +4879,9 @@ export default function App() {
                         { n: obras.filter(o => o.estado === 'acabada').length, l: 'Acabadas', c: '#2D5E10', s: 's3' },
                         { n: stats.alertas, l: 'Con alertas', c: '#8A1F1F', s: 's4' },
                       ].map(st => (
-                        <div key={st.l} className={`stat-card ${st.s}`} style={{ background: '#fff', border: '1px solid #ECEAE4', borderRadius: 14, padding: isMobile ? '12px 14px' : '16px 18px' }}>
-                          <div style={{ fontSize: isMobile ? 26 : 30, fontWeight: 700, color: st.c, lineHeight: 1, letterSpacing: '-0.02em' }}>{st.n}</div>
-                          <div style={{ fontSize: 11.5, color: '#9B9B97', marginTop: 6, fontWeight: 500, letterSpacing: '0.02em' }}>{st.l}</div>
+                        <div key={st.l} className={`stat-card ${st.s}`} style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 3px 12px rgba(0,0,0,0.04)', padding: isMobile ? '14px 16px' : '18px 20px' }}>
+                          <div style={{ fontSize: isMobile ? 26 : 32, fontWeight: 700, color: st.c, lineHeight: 1, letterSpacing: '-0.03em' }}>{st.n}</div>
+                          <div style={{ fontSize: 11.5, color: '#9B9B97', marginTop: 7, fontWeight: 500, letterSpacing: '0.02em' }}>{st.l}</div>
                         </div>
                       ))}
                     </div>
