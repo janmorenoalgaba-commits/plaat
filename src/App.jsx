@@ -219,7 +219,41 @@ function Modal({ title, onClose, children, footer, wide }) {
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function Sidebar({ nav, setNav, stats, user }) {
+// ─── Menú de perfil (⋯ junto al usuario) ────────────────────────────────────
+function MenuPerfil({ onBackup, onSalir }) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button onClick={() => setOpen(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.35)', fontSize: 16, padding: '4px 2px', lineHeight: 1, letterSpacing: '0.1em', display: 'flex', alignItems: 'center' }}
+        title="Opciones">
+        ···
+      </button>
+      {open && (
+        <div className="fade" style={{ position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, background: '#2A2A27', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', minWidth: 180, zIndex: 200, overflow: 'hidden' }}>
+          <button onClick={() => { setOpen(false); onBackup(); }}
+            style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'rgba(255,255,255,0.75)', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 9 }}>
+            <span>💾</span> Copia de seguridad
+          </button>
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0 10px' }} />
+          <button onClick={() => { setOpen(false); onSalir(); }}
+            style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'rgba(255,100,100,0.8)', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 9 }}>
+            <span>→</span> Cerrar sesión
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Sidebar({ nav, setNav, stats, user, onBackup }) {
   const navItems = [
     { id: 'alertas',    label: 'Alertas',     badge: stats.alertas, alert: stats.alertas > 0 },
     { id: 'tablero',    label: 'Tablero',     badge: stats.total, alert: false },
@@ -257,22 +291,20 @@ function Sidebar({ nav, setNav, stats, user }) {
             )}
           </div>
         ))}
+
+        {/* Fin nav items */}
       </nav>
 
       {/* Usuario */}
       <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: email ? 8 : 0 }}>
           <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#F2F1ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 500, flexShrink: 0, letterSpacing: '0.02em' }}>{iniciales}</div>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 500, color: '#F2F1ED', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email || 'PLAAT'}</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Arquitectura Técnica</div>
           </div>
+          <MenuPerfil onBackup={onBackup} onSalir={salir} />
         </div>
-        {email && (
-          <button onClick={salir} style={{ width: '100%', padding: '7px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer', letterSpacing: '0.02em' }}>
-            Cerrar sesión
-          </button>
-        )}
       </div>
     </div>
   );
@@ -4189,7 +4221,7 @@ function LoginScreen() {
 
 export default function App() {
   const isMobile = useIsMobile();
-  const [user,       setUser]       = useState(undefined); // undefined=cargando, null=sin login, obj=dentro
+  const [user,       setUser]       = useState(undefined);
   const [obras,      setObras]      = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [nav,        setNav]        = useState('alertas');
@@ -4197,6 +4229,143 @@ export default function App() {
   const [showNueva,  setShowNueva]  = useState(false);
   const [obraEditar,   setObraEditar]   = useState(null);
   const [obraEliminar, setObraEliminar] = useState(null);
+  const [showBackup,   setShowBackup]   = useState(false);
+  const [importando,   setImportando]   = useState(false);
+  const [backupMsg,    setBackupMsg]    = useState('');
+  const [driveToken,   setDriveToken]   = useState(null);
+  const [backupAuto,   setBackupAuto]   = useState(false); // true mientras hace backup automático
+
+  const GDRIVE_CLIENT_ID = '517770541554-rbp3cnlas227d38svonvc5cpt608cr2p.apps.googleusercontent.com';
+  const GDRIVE_SCOPE     = 'https://www.googleapis.com/auth/drive.file';
+  const BACKUP_KEY       = 'plaat_last_backup'; // localStorage para recordar fecha
+
+  // ── Lógica Google Drive ───────────────────────────────────────────────────
+  function cargarGoogleAPI() {
+    return new Promise((res, rej) => {
+      if (window.google?.accounts?.oauth2) { res(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.onload = () => res(); s.onerror = () => rej(new Error('No se pudo cargar Google API'));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function obtenerToken() {
+    if (driveToken) return driveToken;
+    await cargarGoogleAPI();
+    return new Promise((res, rej) => {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GDRIVE_CLIENT_ID,
+        scope: GDRIVE_SCOPE,
+        callback: (resp) => {
+          if (resp.error) { rej(new Error(resp.error)); return; }
+          setDriveToken(resp.access_token);
+          res(resp.access_token);
+        },
+      });
+      client.requestAccessToken();
+    });
+  }
+
+  async function subirADrive(token, nombreArchivo, contenidoJson) {
+    // 1. Busca o crea carpeta "PLAAT DEO Backups"
+    const buscarCarpeta = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name%3D'PLAAT+DEO+Backups'+and+mimeType%3D'application%2Fvnd.google-apps.folder'+and+trashed%3Dfalse&fields=files(id,name)`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const resCarpeta = await buscarCarpeta.json();
+    let carpetaId;
+    if (resCarpeta.files && resCarpeta.files.length > 0) {
+      carpetaId = resCarpeta.files[0].id;
+    } else {
+      const crearCarpeta = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'PLAAT DEO Backups', mimeType: 'application/vnd.google-apps.folder' }),
+      });
+      const nuevaCarpeta = await crearCarpeta.json();
+      carpetaId = nuevaCarpeta.id;
+    }
+
+    // 2. Sube el archivo JSON
+    const metadata = { name: nombreArchivo, mimeType: 'application/json', parents: [carpetaId] };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', new Blob([contenidoJson], { type: 'application/json' }));
+    const subir = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!subir.ok) throw new Error(`Error al subir: ${subir.status}`);
+    return await subir.json();
+  }
+
+  async function exportarBackup(auto = false) {
+    try {
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const json = JSON.stringify({ version: 2, fecha: new Date().toISOString(), obras }, null, 2);
+      const nombreArchivo = `PLAAT_DEO_backup_${timestamp}.json`;
+
+      // Siempre descarga local también
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = nombreArchivo;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+
+      // Sube a Google Drive
+      const token = await obtenerToken();
+      await subirADrive(token, nombreArchivo, json);
+
+      // Guarda fecha del último backup
+      localStorage.setItem(BACKUP_KEY, new Date().toISOString());
+
+      const kb = Math.round(json.length / 1024);
+      setBackupMsg(`✓ Backup guardado en Google Drive y descargado localmente. ${obras.length} obras, ${kb} KB`);
+    } catch (e) {
+      if (e.message === 'popup_closed_by_user' || e.message?.includes('popup')) {
+        setBackupMsg('Cancelado — ventana de Google cerrada.');
+      } else {
+        // Si falla Drive, al menos la descarga local ya se hizo
+        setBackupMsg(`✓ Descargado localmente (Google Drive falló: ${e.message})`);
+      }
+    }
+    setBackupAuto(false);
+  }
+
+  // Backup automático semanal al abrir la app
+  useEffect(() => {
+    if (!obras.length) return;
+    const ultima = localStorage.getItem(BACKUP_KEY);
+    if (!ultima) return; // primera vez: no forzar, que el usuario lo lance manual
+    const diasDesde = (Date.now() - new Date(ultima).getTime()) / (1000 * 60 * 60 * 24);
+    if (diasDesde >= 7) {
+      setBackupAuto(true);
+      setShowBackup(true);
+      setBackupMsg('⏰ Han pasado más de 7 días desde el último backup. Pulsa "Hacer backup ahora" para guardarlo en Drive.');
+    }
+  }, [obras.length > 0]);
+
+  async function importarBackup(file) {
+    setImportando(true); setBackupMsg('');
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const lista = data.obras || (Array.isArray(data) ? data : []);
+      if (!lista.length) { setBackupMsg('El archivo no contiene obras válidas.'); setImportando(false); return; }
+      const T = ms => new Promise((_,r) => setTimeout(() => r(new Error('timeout')), ms));
+      await Promise.all(lista.map(o =>
+        Promise.race([window.storage?.set(SK_OBR(o.id), JSON.stringify(o), true), T(10000)]).catch(()=>null)
+      ));
+      await Promise.race([window.storage?.set(SK_IDX, JSON.stringify(lista.map(o=>o.id)), true), T(10000)]).catch(()=>null);
+      setObras(lista);
+      localStorage.setItem(BACKUP_KEY, new Date().toISOString());
+      setBackupMsg(`✓ Restauradas ${lista.length} obras correctamente.`);
+    } catch(e) { setBackupMsg('Error al importar: ' + e.message); }
+    setImportando(false);
+  }
 
   // Sesión: si no hay sistema de auth (p.ej. dentro de Claude), entra directo
   useEffect(() => {
@@ -4342,7 +4511,7 @@ export default function App() {
       <>
         <style>{CSS}</style>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', overflow: 'hidden' }}>
-          {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} />}
+          {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} onBackup={() => { setShowBackup(true); setBackupMsg(""); }} />}
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <DetalleObra obra={fresh} onBack={() => setObraActiva(null)} onSave={actualizarObra} isMobile={isMobile} />
           </div>
@@ -4355,7 +4524,7 @@ export default function App() {
     <>
       <style>{CSS}</style>
       <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', overflow: 'hidden' }}>
-        {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} />}
+        {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} onBackup={() => { setShowBackup(true); setBackupMsg(""); }} />}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
           {nav === 'alertas'   && <VistaAlertas obras={obras} onIrObra={o => setObraActiva(o)} isMobile={isMobile} />}
@@ -4414,6 +4583,50 @@ export default function App() {
         </div>
       )}
 
+      {/* Modal Backup */}
+      {showBackup && (
+        <Modal title="Copia de seguridad" onClose={() => { setShowBackup(false); setBackupMsg(''); }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F0F6FF', border: '1px solid #C8DEFF', borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
+            <span style={{ fontSize: 20 }}>🔗</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#0C447C' }}>Google Drive conectado</div>
+              <div style={{ fontSize: 11, color: '#4A7AB5' }}>Los backups se guardan en "PLAAT DEO Backups" en tu Drive</div>
+            </div>
+          </div>
+
+          <div style={{ background: '#F5F4F0', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#52524E', marginBottom: 6 }}>↑ Hacer backup ahora</div>
+            <div style={{ fontSize: 12, color: '#6B6B66', marginBottom: 10, lineHeight: 1.5 }}>
+              Sube <strong>{obras.length} obras</strong> a Google Drive y descarga una copia local simultáneamente. La primera vez pedirá permiso a Google.
+            </div>
+            <Btn primary full onClick={() => exportarBackup(false)}>
+              {backupAuto ? '⏰ Hacer backup ahora (recomendado)' : '☁️ Guardar en Google Drive'}
+            </Btn>
+          </div>
+
+          <div style={{ background: '#F5F4F0', borderRadius: 10, padding: '14px 16px', marginBottom: backupMsg ? 12 : 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#52524E', marginBottom: 6 }}>↓ Restaurar backup</div>
+            <p style={{ fontSize: 12, color: '#8A1F1F', background: '#FDECEC', border: '1px solid #F9CACA', borderRadius: 8, padding: '8px 12px', marginBottom: 10, lineHeight: 1.5 }}>
+              ⚠️ Esto <strong>reemplaza todos los datos actuales</strong> con los del archivo. Haz un backup primero si tienes datos nuevos.
+            </p>
+            <label style={{ display: 'block', width: '100%', padding: '9px 14px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, color: '#6B6B66', textAlign: 'center' }}>
+              {importando ? 'Restaurando...' : '📂 Seleccionar archivo .json de backup'}
+              <input type="file" accept=".json" style={{ display: 'none' }} disabled={importando}
+                onChange={e => { if (e.target.files[0]) importarBackup(e.target.files[0]); }} />
+            </label>
+          </div>
+
+          {backupMsg && (
+            <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 9, background: backupMsg.startsWith('✓') ? '#E8F5E0' : backupMsg.startsWith('⏰') ? '#FEF3DB' : '#FDECEC', color: backupMsg.startsWith('✓') ? '#2D5E10' : backupMsg.startsWith('⏰') ? '#7C4A00' : '#8A1F1F', fontSize: 13, fontWeight: 500, lineHeight: 1.5 }}>
+              {backupMsg}
+            </div>
+          )}
+
+          <div style={{ marginTop: 14, padding: '10px 14px', borderRadius: 9, background: '#F9F8F5', fontSize: 11, color: '#A5A5A0', lineHeight: 1.6 }}>
+            <strong>Backup automático:</strong> la app te avisará cuando lleven más de 7 días sin backup y te pedirá hacerlo al abrir la app.
+          </div>
+        </Modal>
+      )}
     </>
   );
 }
