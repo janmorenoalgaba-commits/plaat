@@ -91,7 +91,116 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) {
   .fade, .list-in > *, .modal-in, .sheet-in, .modal-overlay { animation: none !important; }
   .obra-card:active, .tap:active { transform: none !important; }
+  .auro, .login-card, .login-logo, .login-row, .stat-card, .shimmer-btn::after,
+  .arch-grid, .arch-shape, .arch-dash, .scan, .splash-logo, .splash-sub, .splash-bar { animation: none !important; }
 }
+
+/* ── Movimiento "notable pero profesional" ───────────────── */
+@keyframes auroraMove {
+  0%   { transform: translate(-8%, -6%) scale(1); }
+  50%  { transform: translate(8%, 6%) scale(1.15); }
+  100% { transform: translate(-8%, -6%) scale(1); }
+}
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes logoIn {
+  from { opacity: 0; transform: translateY(10px); letter-spacing: 0.32em; }
+  to   { opacity: 1; transform: none; letter-spacing: 0.1em; }
+}
+@keyframes underlineGrow {
+  from { width: 0; }
+  to   { width: 38px; }
+}
+@keyframes shimmer {
+  0%   { transform: translateX(-120%); }
+  60%  { transform: translateX(120%); }
+  100% { transform: translateX(120%); }
+}
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Aurora de fondo en login */
+.login-bg { position: relative; overflow: hidden; }
+.auro {
+  position: absolute; border-radius: 50%; filter: blur(70px);
+  pointer-events: none; will-change: transform;
+}
+.auro-1 { width: 460px; height: 460px; background: rgba(82,161,36,0.16);  top: -120px; left: -100px; animation: auroraMove 16s ease-in-out infinite; }
+.auro-2 { width: 380px; height: 380px; background: rgba(120,120,255,0.10); bottom: -140px; right: -80px; animation: auroraMove 20s ease-in-out infinite reverse; }
+.auro-3 { width: 300px; height: 300px; background: rgba(255,255,255,0.05); top: 40%; left: 55%; animation: auroraMove 24s ease-in-out infinite; }
+
+.login-card  { animation: riseIn .5s cubic-bezier(.2,.8,.2,1) both; }
+.login-logo  { animation: logoIn .7s cubic-bezier(.2,.8,.2,1) both; }
+.login-underline { animation: underlineGrow .6s cubic-bezier(.2,.8,.2,1) .35s both; }
+.login-row   { animation: riseIn .5s ease both; }
+.login-row.r1 { animation-delay: .12s; }
+.login-row.r2 { animation-delay: .20s; }
+.login-row.r3 { animation-delay: .28s; }
+.login-row.r4 { animation-delay: .36s; }
+
+/* Botón con barrido de brillo al hover */
+.shimmer-btn { position: relative; overflow: hidden; }
+.shimmer-btn::after {
+  content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%);
+  transform: translateX(-120%);
+}
+.shimmer-btn:hover::after { animation: shimmer 1.1s ease; }
+
+/* Tarjetas de estadística (tablero) con entrada y elevación */
+.stat-card { animation: countUp .5s cubic-bezier(.2,.8,.2,1) both; transition: transform .18s ease, box-shadow .2s; }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 22px rgba(0,0,0,0.08); }
+.stat-card.s1 { animation-delay: .04s; }
+.stat-card.s2 { animation-delay: .10s; }
+.stat-card.s3 { animation-delay: .16s; }
+.stat-card.s4 { animation-delay: .22s; }
+
+/* ── Movimiento arquitectónico (login + splash) ──────────── */
+@keyframes drift1 { 0%{transform:translate(0,0) rotate(0deg);} 50%{transform:translate(40px,-30px) rotate(8deg);} 100%{transform:translate(0,0) rotate(0deg);} }
+@keyframes drift2 { 0%{transform:translate(0,0) rotate(0deg);} 50%{transform:translate(-50px,40px) rotate(-10deg);} 100%{transform:translate(0,0) rotate(0deg);} }
+@keyframes drift3 { 0%{transform:translate(0,0) scale(1);} 50%{transform:translate(30px,30px) scale(1.1);} 100%{transform:translate(0,0) scale(1);} }
+@keyframes dashFlow { to { stroke-dashoffset: -1000; } }
+@keyframes rotateSlow { to { transform: rotate(360deg); } }
+@keyframes rotateSlowRev { to { transform: rotate(-360deg); } }
+@keyframes floatY { 0%{transform:translateY(0);} 50%{transform:translateY(-22px);} 100%{transform:translateY(0);} }
+@keyframes gridPan { 0%{transform:translate(0,0);} 100%{transform:translate(56px,56px);} }
+@keyframes pulseGlow { 0%,100%{opacity:.4;} 50%{opacity:.9;} }
+@keyframes scanLine { 0%{transform:translateY(-100%);} 100%{transform:translateY(2000%);} }
+@keyframes splashLogo { 0%{opacity:0;transform:scale(.8) translateY(20px);letter-spacing:.5em;} 55%{opacity:1;letter-spacing:.1em;} 100%{opacity:1;transform:scale(1) translateY(0);letter-spacing:.12em;} }
+@keyframes splashSub  { 0%{opacity:0;transform:translateY(14px);} 100%{opacity:.85;transform:none;} }
+@keyframes splashOut  { 0%{opacity:1;} 100%{opacity:0;visibility:hidden;} }
+@keyframes barGrow { from{width:0;} to{width:120px;} }
+@keyframes blueprintIn { from{opacity:0;stroke-dashoffset:1200;} to{opacity:1;stroke-dashoffset:0;} }
+
+/* Malla técnica de fondo que se desplaza */
+.arch-grid {
+  position: absolute; inset: -60px; pointer-events: none;
+  background-image: linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  animation: gridPan 9s linear infinite;
+}
+/* Formas geométricas (planos/contornos) flotando */
+.arch-shape { position: absolute; pointer-events: none; will-change: transform; }
+.arch-line  { stroke: rgba(255,255,255,0.10); fill: none; }
+.arch-line-accent { stroke: rgba(143,212,92,0.30); fill: none; }
+.arch-dash {
+  stroke-dasharray: 8 10; animation: dashFlow 24s linear infinite;
+}
+/* Línea de escaneo tipo plano */
+.scan { position:absolute; left:0; right:0; height:1px; background:linear-gradient(90deg, transparent, rgba(143,212,92,0.5), transparent); animation: scanLine 7s linear infinite; }
+
+/* Splash de bienvenida */
+.splash-wrap { position: fixed; inset: 0; z-index: 99998; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 35%, #232320 0%, #1A1A18 60%, #141412 100%); overflow: hidden; }
+.splash-wrap.out { animation: splashOut .6s ease .05s forwards; }
+.splash-logo { font-size: 44px; font-weight: 700; color: #F2F1ED; animation: splashLogo 1.1s cubic-bezier(.2,.8,.2,1) both; display:flex; align-items:baseline; gap:10px; }
+.splash-sub  { font-size: 12px; letter-spacing: .26em; color: rgba(255,255,255,0.55); margin-top: 16px; animation: splashSub .7s ease .7s both; }
+.splash-bar  { height: 3px; background: linear-gradient(90deg, #52A124, #8FD45C); border-radius: 2px; margin-top: 22px; animation: barGrow 1.4s cubic-bezier(.2,.8,.2,1) .4s both; }
+
 
 .hov-nav:hover { background: #ECEAE4 !important; }
 .hov-row:hover   { background: #F9F8F5 !important; }
@@ -4167,6 +4276,77 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
 
 // ─── Pantalla de login ────────────────────────────────────────────────────────
 
+// ─── Fondo arquitectónico animado (login + splash) ──────────────────────────
+function FondoArquitectonico() {
+  return (
+    <>
+      {/* Auroras de color */}
+      <div className="auro auro-1" />
+      <div className="auro auro-2" />
+      <div className="auro auro-3" />
+      {/* Malla técnica desplazándose */}
+      <div className="arch-grid" />
+      {/* Línea de escaneo */}
+      <div className="scan" style={{ top: 0 }} />
+
+      {/* Plano técnico grande girando lento (arriba derecha) */}
+      <svg className="arch-shape" style={{ top: '-80px', right: '-80px', width: 380, height: 380, animation: 'rotateSlow 60s linear infinite' }} viewBox="0 0 200 200">
+        <circle className="arch-line arch-dash" cx="100" cy="100" r="90" strokeWidth="0.6" />
+        <circle className="arch-line" cx="100" cy="100" r="62" strokeWidth="0.5" />
+        <circle className="arch-line-accent" cx="100" cy="100" r="34" strokeWidth="0.7" />
+        <line className="arch-line" x1="10" y1="100" x2="190" y2="100" strokeWidth="0.4" />
+        <line className="arch-line" x1="100" y1="10" x2="100" y2="190" strokeWidth="0.4" />
+      </svg>
+
+      {/* Estructura de planos (abajo izquierda) flotando */}
+      <svg className="arch-shape" style={{ bottom: '-40px', left: '-30px', width: 320, height: 320, animation: 'floatY 11s ease-in-out infinite' }} viewBox="0 0 200 200">
+        <rect className="arch-line" x="30" y="30" width="120" height="120" strokeWidth="0.6" />
+        <rect className="arch-line" x="50" y="50" width="120" height="120" strokeWidth="0.5" />
+        <rect className="arch-line-accent" x="40" y="40" width="120" height="120" strokeWidth="0.6" />
+        <line className="arch-line arch-dash" x1="30" y1="30" x2="170" y2="170" strokeWidth="0.4" />
+      </svg>
+
+      {/* Compás / triángulo girando (centro) */}
+      <svg className="arch-shape" style={{ top: '38%', left: '18%', width: 200, height: 200, animation: 'rotateSlowRev 48s linear infinite', opacity: 0.7 }} viewBox="0 0 200 200">
+        <polygon className="arch-line" points="100,20 180,170 20,170" strokeWidth="0.5" />
+        <polygon className="arch-line-accent arch-dash" points="100,55 150,150 50,150" strokeWidth="0.6" />
+        <circle className="arch-line" cx="100" cy="20" r="5" strokeWidth="0.6" />
+      </svg>
+
+      {/* Acotaciones flotando (derecha) */}
+      <svg className="arch-shape" style={{ top: '20%', right: '12%', width: 160, height: 240, animation: 'drift1 14s ease-in-out infinite' }} viewBox="0 0 100 160">
+        <line className="arch-line" x1="20" y1="10" x2="20" y2="150" strokeWidth="0.5" />
+        <line className="arch-line" x1="15" y1="10" x2="25" y2="10" strokeWidth="0.5" />
+        <line className="arch-line" x1="15" y1="150" x2="25" y2="150" strokeWidth="0.5" />
+        <line className="arch-line-accent" x1="20" y1="80" x2="80" y2="80" strokeWidth="0.5" />
+        <circle className="arch-line-accent" cx="80" cy="80" r="3" strokeWidth="0.6" />
+      </svg>
+
+      {/* Hexágono lento (abajo derecha) */}
+      <svg className="arch-shape" style={{ bottom: '8%', right: '20%', width: 140, height: 140, animation: 'drift2 18s ease-in-out infinite' }} viewBox="0 0 100 100">
+        <polygon className="arch-line" points="50,8 88,29 88,71 50,92 12,71 12,29" strokeWidth="0.6" />
+        <polygon className="arch-line-accent arch-dash" points="50,22 76,36 76,64 50,78 24,64 24,36" strokeWidth="0.5" />
+      </svg>
+    </>
+  );
+}
+
+// ─── Pantalla de bienvenida (splash al abrir) ───────────────────────────────
+function SplashScreen({ saliendo }) {
+  return (
+    <div className={`splash-wrap${saliendo ? ' out' : ''}`}>
+      <FondoArquitectonico />
+      <div style={{ position: 'relative', textAlign: 'center', zIndex: 2 }}>
+        <div className="splash-logo">
+          PLAAT<span style={{ fontSize: 24, color: '#8FD45C' }}>.</span>
+        </div>
+        <div className="splash-bar" />
+        <div className="splash-sub">BIENVENIDO · DEO</div>
+      </div>
+    </div>
+  );
+}
+
 function LoginScreen() {
   const [email, setEmail]     = useState('');
   const [pass,  setPass]      = useState('');
@@ -4188,27 +4368,36 @@ function LoginScreen() {
   const onKey = e => { if (e.key === 'Enter') entrar(); };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1C1C1A', padding: 20 }}>
-      <div className="fade" style={{ background: '#fff', borderRadius: 16, padding: '34px 30px', width: 370, maxWidth: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }}>
-        <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '0.1em', color: '#141412' }}>PLAAT</div>
-        <div style={{ fontSize: 12, letterSpacing: '0.18em', color: '#9B9B97', marginTop: 6, marginBottom: 26, fontWeight: 400 }}>/ DEO · ARQUITECTURA TÉCNICA</div>
+    <div className="login-bg" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle at 30% 20%, #232320 0%, #1C1C1A 55%, #161614 100%)', padding: 20 }}>
+      <style>{CSS}</style>
+      <FondoArquitectonico />
 
-        <div style={{ marginBottom: 12 }}>
+      <div className="login-card" style={{ position: 'relative', zIndex: 2, background: 'rgba(255,255,255,0.97)', borderRadius: 18, padding: '38px 32px', width: 380, maxWidth: '100%', boxShadow: '0 30px 80px rgba(0,0,0,0.45), 0 2px 0 rgba(255,255,255,0.05) inset', backdropFilter: 'blur(8px)' }}>
+        <div className="login-logo" style={{ fontSize: 28, fontWeight: 700, letterSpacing: '0.1em', color: '#141412', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          PLAAT
+          <span style={{ fontSize: 14, fontWeight: 400, color: '#52A124' }}>.</span>
+        </div>
+        <div className="login-underline" style={{ height: 3, background: 'linear-gradient(90deg, #52A124, #8FD45C)', borderRadius: 2, margin: '8px 0 6px' }} />
+        <div style={{ fontSize: 11.5, letterSpacing: '0.18em', color: '#9B9B97', marginBottom: 28, fontWeight: 400 }}>DEO · ARQUITECTURA TÉCNICA</div>
+
+        <div className="login-row r1" style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 5 }}>Correo</label>
           <input type="email" autoFocus value={email} onChange={e => setEmail(e.target.value)} onKeyDown={onKey} placeholder="tu@correo.com" />
         </div>
-        <div style={{ marginBottom: 18 }}>
+        <div className="login-row r2" style={{ marginBottom: 18 }}>
           <label style={{ fontSize: 12, fontWeight: 500, color: '#52524E', display: 'block', marginBottom: 5 }}>Contraseña</label>
           <input type="password" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={onKey} placeholder="••••••••" />
         </div>
 
-        {error && <div style={{ fontSize: 12, color: '#8A1F1F', background: '#FDECEC', borderRadius: 8, padding: '8px 11px', marginBottom: 14 }}>{error}</div>}
+        {error && <div className="fade" style={{ fontSize: 12, color: '#8A1F1F', background: '#FDECEC', borderRadius: 8, padding: '8px 11px', marginBottom: 14 }}>{error}</div>}
 
-        <Btn primary full onClick={entrar} disabled={loading || !email.trim() || !pass}>
-          {loading ? 'Entrando…' : 'Entrar'}
-        </Btn>
+        <div className="login-row r3 shimmer-btn" style={{ borderRadius: 8 }}>
+          <Btn primary full onClick={entrar} disabled={loading || !email.trim() || !pass}>
+            {loading ? 'Entrando…' : 'Entrar'}
+          </Btn>
+        </div>
 
-        <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 16, textAlign: 'center', lineHeight: 1.5 }}>
+        <div className="login-row r4" style={{ fontSize: 11, color: '#A5A5A0', marginTop: 18, textAlign: 'center', lineHeight: 1.5 }}>
           Acceso restringido al equipo de PLAAT.<br />Si no tienes cuenta, pídela al administrador.
         </div>
       </div>
@@ -4229,6 +4418,15 @@ export default function App() {
   const [obraEditar,   setObraEditar]   = useState(null);
   const [obraEliminar, setObraEliminar] = useState(null);
   const [showBackup,   setShowBackup]   = useState(false);
+  const [splash,       setSplash]       = useState(true);   // pantalla de bienvenida
+  const [splashOut,    setSplashOut]    = useState(false);  // fase de desvanecido
+
+  // Splash de bienvenida: visible ~2.2s, luego se desvanece
+  useEffect(() => {
+    const t1 = setTimeout(() => setSplashOut(true), 2000);
+    const t2 = setTimeout(() => setSplash(false), 2650);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
   const [importando,   setImportando]   = useState(false);
   const [backupMsg,    setBackupMsg]    = useState('');
   const [driveToken,   setDriveToken]   = useState(null);
@@ -4486,6 +4684,16 @@ export default function App() {
   };
 
   // ── Portón de acceso ──
+  // Pantalla de bienvenida al abrir la app
+  if (splash) {
+    return (
+      <>
+        <style>{CSS}</style>
+        <SplashScreen saliendo={splashOut} />
+      </>
+    );
+  }
+
   if (user === undefined) {
     return (
       <>
@@ -4551,9 +4759,25 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="list-in" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {obras.map(o => <ObraCard key={o.id} obra={o} onClick={() => setObraActiva(o)} onEditar={setObraEditar} onEliminar={setObraEliminar} />)}
-                  </div>
+                  <>
+                    {/* Resumen con tarjetas animadas */}
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
+                      {[
+                        { n: obras.length, l: 'Obras totales', c: '#141412', s: 's1' },
+                        { n: obras.filter(o => o.estado === 'en_curso').length, l: 'En curso', c: '#C47610', s: 's2' },
+                        { n: obras.filter(o => o.estado === 'acabada').length, l: 'Acabadas', c: '#2D5E10', s: 's3' },
+                        { n: stats.alertas, l: 'Con alertas', c: '#8A1F1F', s: 's4' },
+                      ].map(st => (
+                        <div key={st.l} className={`stat-card ${st.s}`} style={{ background: '#fff', border: '1px solid #ECEAE4', borderRadius: 14, padding: isMobile ? '12px 14px' : '16px 18px' }}>
+                          <div style={{ fontSize: isMobile ? 26 : 30, fontWeight: 700, color: st.c, lineHeight: 1, letterSpacing: '-0.02em' }}>{st.n}</div>
+                          <div style={{ fontSize: 11.5, color: '#9B9B97', marginTop: 6, fontWeight: 500, letterSpacing: '0.02em' }}>{st.l}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="list-in" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {obras.map(o => <ObraCard key={o.id} obra={o} onClick={() => setObraActiva(o)} onEditar={setObraEditar} onEliminar={setObraEliminar} />)}
+                    </div>
+                  </>
                 )}
               </div>
             </>
