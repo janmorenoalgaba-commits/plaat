@@ -222,7 +222,7 @@ function Modal({ title, onClose, children, footer, wide }) {
 // ─── Menú de perfil (⋯ junto al usuario) ────────────────────────────────────
 function MenuPerfil({ onBackup, onSalir }) {
   const [open, setOpen] = useState(false);
-  const ref = React.useRef(null);
+  const ref = useRef(null);
 
   useEffect(() => {
     function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
