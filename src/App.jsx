@@ -102,21 +102,19 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
 
 // Detecta móvil: pantalla estrecha Y en vertical. En horizontal usa la interfaz de ordenador.
 function useIsMobile() {
-  const calc = () => {
-    if (typeof window === 'undefined') return false;
-    const portrait = window.matchMedia
-      ? window.matchMedia('(orientation: portrait)').matches
-      : window.innerHeight >= window.innerWidth;
-    return window.innerWidth < 760 && portrait;
-  };
+  const calc = () => typeof window !== 'undefined' && window.innerWidth < 760;
   const [m, setM] = useState(calc);
   useEffect(() => {
-    const onR = () => setM(calc());
-    window.addEventListener('resize', onR);
-    window.addEventListener('orientationchange', onR);
+    // resize: respuesta inmediata
+    const onResize = () => setM(calc());
+    // orientationchange en iOS dispara antes de que cambien las dimensiones
+    // esperamos 300ms para leer el ancho real
+    const onOrient = () => setTimeout(() => setM(calc()), 300);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onOrient);
     return () => {
-      window.removeEventListener('resize', onR);
-      window.removeEventListener('orientationchange', onR);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onOrient);
     };
   }, []);
   return m;
@@ -144,7 +142,7 @@ function Btn({ children, onClick, primary, sm, danger, ghost, disabled, full }) 
 
 function ConfirmMini({ titulo, texto, onSi, onNo }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(3px)' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, backdropFilter: 'blur(3px)' }}
       onClick={e => { if (e.target === e.currentTarget) onNo(); }}>
       <div className="modal-in fade" style={{ background: '#fff', borderRadius: 14, width: 340, maxWidth: '92vw', padding: 20, border: '1px solid #E0DFD9', boxShadow: '0 16px 48px rgba(0,0,0,.15)' }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: '#141412', marginBottom: 8 }}>{titulo || '¿Eliminar?'}</div>
@@ -1208,6 +1206,7 @@ function ModuloInspecciones({ obra, onSave }) {
         )}
       </div>
       )}
+      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
   );
 }
