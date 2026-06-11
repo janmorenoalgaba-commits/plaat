@@ -733,426 +733,244 @@ function comprimirImagen(file) {
   });
 }
 
-function PlanoPunto({ punto, onUpdate, obra, nombreDisciplina, numActa, onActaGenerada }) {
-  const isMobile    = useIsMobile();
-  const imgRef      = useRef(null);
-  const [cargando,      setCargando]      = useState(false);
-  const [marcando,      setMarcando]      = useState(null);
-  const [formMarca,     setFormMarca]     = useState({ titulo: '', desc: '', foto: null });
-  const [marcaOpen,     setMarcaOpen]     = useState(null);
-  const [planoVisible,  setPlanoVisible]  = useState(true);
-  const [generandoActa, setGenerandoActa] = useState(false);
-  const [confirmacion,  setConfirmacion]  = useState(null);
+// ─── Actas de inspección genéricas (historial por obra) ─────────────────────
+const ESTADOS_INSP_ACTA = {
+  ok:         { label: 'Correcto',   bg: '#E8F5E0', color: '#2D5E10' },
+  incidencia: { label: 'Incidencia', bg: '#FDECEC', color: '#8A1F1F' },
+  info:       { label: 'Informativo',bg: '#EEEDE7', color: '#52524E' },
+};
 
-  const plano  = punto.plano;
-  const marcas = plano?.marcas || [];
+function FormActaInspeccion({ obra, acta, onGuardar, onCerrar, onExportar }) {
+  const isMobile = useIsMobile();
+  const [a, setA] = useState(() => acta || {
+    id: uid(),
+    num: (obra.actasInsp || []).length + 1,
+    fecha: today(),
+    aspecto: '',
+    temas: [],
+    creadaEn: now(),
+  });
+  const [confirmacion, setConfirmacion] = useState(null);
 
-  // ── Generar acta PDF — réplica del acta oficial PLAAT ───────────────────────
-  async function generarActa() {
-    if (!marcas.length) { alert('No hay marcas en el plano para generar el acta.'); return; }
-    setGenerandoActa(true);
-    try {
-      if (!window.jspdf) {
-        await new Promise((res, rej) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-          s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar jsPDF'));
-          document.head.appendChild(s);
-        });
-      }
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const PW = 210, PH = 297, M = 18, CW = PW - M * 2;
-      const num = String(numActa || 1).padStart(2, '0');
-      const fechaCorta = new Date().toLocaleDateString('es-ES');
-      const fechaLarga = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
-      const NEGRO = [0, 0, 0], GRIS = [217, 217, 217], LH = 4.6;
-
-      // Cabecera (cada página): Parte/Fecha bold izq + "Plaat." grande dcha
-      function cabecera() {
-        doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-        doc.text(`PARTE DE INSPECCIÓN Nº: ${num}`, M, 12);
-        doc.text(`FECHA PARTE INSPECCIÓN: ${fechaCorta}`, M, 16.5);
-        doc.setFontSize(30);
-        doc.text('Plaat.', PW - M, 17, { align: 'right' });
-      }
-      // Pie (cada página)
-      function pie() {
-        doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-        doc.text('Plaat Arquitectura Técnica', M, PH - 12);
-        doc.text('Barcelona – Madrid', PW / 2, PH - 12, { align: 'center' });
-        doc.text('www.plaat.es', PW - M, PH - 12, { align: 'right' });
-      }
-      function nuevaPagina() { doc.addPage(); cabecera(); }
-
-      // Tabla clave/valor: etiqueta gris + valor blanco, todo bordeado, negrita
-      function fila(yy, label, value, wL) {
-        wL = wL || 50;
-        const vlines = doc.splitTextToSize(value || '', CW - wL - 5);
-        const h = Math.max(8, vlines.length * LH + 4);
-        doc.setFillColor(...GRIS); doc.rect(M, yy, wL, h, 'F');
-        doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
-        doc.rect(M, yy, wL, h); doc.rect(M + wL, yy, CW - wL, h);
-        doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
-        doc.text(label, M + 2.5, yy + h / 2 + 1.2);
-        doc.text(vlines, M + wL + 2.5, yy + h / 2 - (vlines.length - 1) * (LH / 2) + 1.2);
-        return yy + h;
-      }
-
-      // ═══ PÁGINA 1 ═══
-      cabecera();
-      let y = 30;
-      // Banda título
-      doc.setFillColor(...GRIS); doc.rect(M, y, CW, 8, 'F');
-      doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(M, y, CW, 8);
-      doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
-      doc.text('ACTA DE INSPECCIÓN DE OBRA', M + 3, y + 5.5);
-      doc.text(`NÚM.: ${num}`, PW - M - 3, y + 5.5, { align: 'right' });
-      y += 14;
-
-      // OBRA / EMPLAZAMIENTO
-      y = fila(y, 'OBRA', (obra?.nombre || '').toUpperCase());
-      y = fila(y, 'EMPLAZAMIENTO', (obra?.emplazamiento || obra?.direccion || '').toUpperCase());
-      y += 12;
-
-      // DATOS DE LA OBRA
-      doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-      doc.text('DATOS DE LA OBRA:', M, y); y += 7;
-      [
-        ['PROPIEDAD', (obra?.propiedad || obra?.cliente || '').toUpperCase()],
-        ['PROYECTISTA', obra?.proyectista || ''],
-        ['DO', obra?.direccionObra || ''],
-        ['DEO', 'PLAAT ARQUITECTURA TÉCNICA S.L.'],
-        ['CONSTRUCTORA', (obra?.constructora || '').toUpperCase()],
-      ].forEach(([k, v]) => { y = fila(y, k, v); });
-      y += 16;
-
-      // FECHA FIRMA
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-      doc.text('FECHA FIRMA:', M, y); y += 7;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-      doc.text(`Barcelona, ${fechaLarga}.`, M, y);
-
-      // Firmante (parte inferior)
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-      doc.text('DIRECTOR DE EJECUCIÓN DE OBRA', M, PH - 40);
-      doc.setFont('helvetica', 'normal');
-      doc.text(obra?.deoFirmante || obra?.responsable || '', M, PH - 35);
-
-      // ═══ PÁGINA 2 — Aspecto revisado ═══
-      nuevaPagina(); y = 30;
-      doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-      doc.text('Aspecto revisado:', M, y); y += 7;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-      doc.text('Durante la visita realizada, se han revisado los siguientes aspectos:', M, y); y += 8;
-
-      // Tabla N.º / INCIDENCIAS
-      const wN = 18;
-      doc.setFillColor(...GRIS); doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
-      doc.rect(M, y, wN, 8, 'F'); doc.rect(M + wN, y, CW - wN, 8, 'F');
-      doc.rect(M, y, wN, 8); doc.rect(M + wN, y, CW - wN, 8);
-      doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
-      doc.text('N.º', M + 4, y + 5.3);
-      doc.text('INCIDENCIAS', M + wN + 3, y + 5.3);
-      y += 8;
-      marcas.forEach((m, idx) => {
-        const titulo = (m.titulo || m.desc || '').toUpperCase();
-        const tl = doc.splitTextToSize(titulo, CW - wN - 6);
-        const h = Math.max(10, tl.length * LH + 5);
-        doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
-        doc.rect(M, y, wN, h); doc.rect(M + wN, y, CW - wN, h);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...NEGRO);
-        doc.text(`N${idx + 1}`, M + 4, y + h / 2 + 1);
-        doc.text(tl, M + wN + 3, y + h / 2 - (tl.length - 1) * (LH / 2) + 1.2);
-        y += h;
-      });
-      y += 8;
-
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-      doc.text('Se adjunta tabla con las zonas revisadas.', M, y); y += 10;
-
-      // Incidencias detectadas (subrayado)
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-      doc.text('Incidencias detectadas:', M, y);
-      const wTit = doc.getTextWidth('Incidencias detectadas:');
-      doc.setLineWidth(0.3); doc.line(M, y + 1, M + wTit, y + 1);
-      y += 8;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-      [
-        'Las incidencias detectadas, deberán subsanarse y dar respuesta a la DEO.',
-        'Para ello deberán rellenar los datos solicitados en cada una de las incidencias detectadas y enviar fotografías a la DEO con las rectificaciones.',
-        'Se adjuntan tablas con las incidencias detectadas.',
-        'Este Acta de Inspección de obra se ha llevado a cabo en base a las inspecciones y muestreos realizados por el DEO en la fecha indicada y en base a Partes de Inspección procedimentados.',
-      ].forEach(p => {
-        const pl = doc.splitTextToSize(p, CW);
-        doc.text(pl, M, y); y += pl.length * LH + 4;
-      });
-
-      // ═══ PÁGINA 3 — Zonas revisadas (plano + fichas) ═══
-      nuevaPagina(); y = 30;
-      doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
-      doc.text('1. ZONAS REVISADAS', M, y); y += 8;
-
-      // Plano con marcas (proporción real)
-      if (plano?.imgData) {
-        const ratio = plano.h && plano.w ? plano.h / plano.w : 0.6;
-        let pw = CW, ph = CW * ratio;
-        if (ph > 150) { ph = 150; pw = ph / ratio; }
-        const px = M + (CW - pw) / 2;
-        if (y + ph > PH - 18) { nuevaPagina(); y = 30; }
-        doc.addImage(plano.imgData, 'JPEG', px, y, pw, ph);
-        doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2); doc.rect(px, y, pw, ph);
-        marcas.forEach((m, idx) => {
-          const mx = px + (m.x / 100) * pw, my = y + (m.y / 100) * ph;
-          doc.setFillColor(226, 75, 74); doc.circle(mx, my, 1.9, 'F');
-          doc.setTextColor(255, 255, 255); doc.setFontSize(5); doc.setFont('helvetica', 'bold');
-          doc.text(String(idx + 1), mx, my + 0.7, { align: 'center' });
-        });
-        y += ph + 10;
-      }
-
-      // Fichas por incidencia (estilo tabla: col Nº gris + contenido)
-      for (let idx = 0; idx < marcas.length; idx++) {
-        const m = marcas[idx];
-        // Medir contenido
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-        const dl = doc.splitTextToSize(m.desc || '', CW - wN - 6);
-        let fw = 0, fh = 0;
-        if (m.foto) {
-          fw = 78; fh = 58;
-          try { const pr = doc.getImageProperties(m.foto); const r = pr.height / pr.width; fh = fw * r; if (fh > 72) { fh = 72; fw = fh / r; } } catch (e) {}
-        }
-        const hTitulo = 8;
-        const hCont = 4 + dl.length * LH + (m.foto ? fh + 5 : 0) + 6;
-        const hTotal = hTitulo + hCont;
-
-        if (y + hTotal > PH - 18) { nuevaPagina(); y = 30; }
-
-        // Fila título: Nº gris + título gris
-        doc.setFillColor(...GRIS); doc.setDrawColor(...NEGRO); doc.setLineWidth(0.2);
-        doc.rect(M, y, wN, hTitulo, 'F'); doc.rect(M + wN, y, CW - wN, hTitulo, 'F');
-        doc.rect(M, y, wN, hTitulo); doc.rect(M + wN, y, CW - wN, hTitulo);
-        doc.setTextColor(...NEGRO); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
-        doc.text(`N${idx + 1}`, M + 4, y + 5.3);
-        doc.text((m.titulo || `Incidencia ${idx + 1}`).toUpperCase(), M + wN + 3, y + 5.3);
-        // Fila contenido: col Nº vacía + contenido
-        const yc = y + hTitulo;
-        doc.rect(M, yc, wN, hCont); doc.rect(M + wN, yc, CW - wN, hCont);
-        let cy = yc + 6;
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...NEGRO);
-        doc.text(dl, M + wN + 3, cy); cy += dl.length * LH + 4;
-        if (m.foto) { doc.addImage(m.foto, 'JPEG', M + wN + 3, cy, fw, fh); cy += fh + 3; }
-        y += hTotal + 6;
-      }
-
-      // Cabecera y pie en todas las páginas + numeración
-      const total = doc.getNumberOfPages();
-      for (let p = 1; p <= total; p++) {
-        doc.setPage(p);
-        pie();
-      }
-
-      const fname = new Date().toISOString().slice(0, 10);
-      doc.save(`Acta_Inspeccion_${num}_${(obra?.nombre || 'obra').replace(/\s+/g, '_')}_${fname}.pdf`);
-      if (onActaGenerada) onActaGenerada(numActa);
-    } catch (e) {
-      alert('Error generando el acta: ' + e.message);
-    }
-    setGenerandoActa(false);
+  function upd(campo, val) { setA(prev => ({ ...prev, [campo]: val })); }
+  function addTema() {
+    setA(prev => ({ ...prev, temas: [...prev.temas, { id: uid(), titulo: '', texto: '', estado: 'incidencia', fotos: [] }] }));
+  }
+  function updTema(id, campo, val) {
+    setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === id ? { ...t, [campo]: val } : t) }));
+  }
+  function delTema(id) {
+    setA(prev => ({ ...prev, temas: prev.temas.filter(t => t.id !== id) }));
+    setConfirmacion(null);
+  }
+  function addFoto(temaId) {
+    pickFiles('image/*', f => setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === temaId ? { ...t, fotos: [...(t.fotos || []), { id: uid(), data: f.data }] } : t) })));
+  }
+  function delFoto(temaId, fotoId) {
+    setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === temaId ? { ...t, fotos: (t.fotos || []).filter(ft => ft.id !== fotoId) } : t) }));
   }
 
-  async function abrirSelector() {
-    const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = '.pdf,image/*';
-    inp.style.cssText = 'position:fixed;left:-9999px';
-    document.body.appendChild(inp);
-    inp.onchange = async () => {
-      const file = inp.files[0];
-      if (!file) return;
-      document.body.removeChild(inp);
-      if (file.size > 30 * 1024 * 1024) { alert('El archivo supera 30 MB'); return; }
-      setCargando(true);
-      try {
-        const r = file.type === 'application/pdf' || file.name.endsWith('.pdf')
-          ? await pdfFileToImgData(file)
-          : await comprimirImagen(file);
-        onUpdate({ ...punto, plano: { nombre: file.name, imgData: r.imgData, w: r.w, h: r.h, marcas: plano?.marcas || [] } });
-      } catch (e) { alert('Error al procesar el plano: ' + e.message); }
-      setCargando(false);
-    };
-    inp.click();
-  }
+  function guardar() { onGuardar(a); }
 
-  function coords(e) {
-    if (!imgRef.current) return null;
-    const rect = imgRef.current.getBoundingClientRect();
-    const cx = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
-    const cy = e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY;
-    let x = (cx - rect.left) / rect.width * 100;
-    let y = (cy - rect.top) / rect.height * 100;
-    x = Math.max(0, Math.min(100, x));
-    y = Math.max(0, Math.min(100, y));
-    return { x: parseFloat(x.toFixed(1)), y: parseFloat(y.toFixed(1)) };
-  }
-
-  function handleTapPlano(e) {
-    if (marcando) return;
-    const c = coords(e);
-    if (!c) return;
-    setMarcando(c);
-    setFormMarca({ titulo: '', desc: '', foto: null });
-  }
-
-  // Arrastrar el punto pendiente para ajustarlo con precisión
-  function iniciarArrastre(e) {
-    e.stopPropagation();
-    const mover = ev => { const c = coords(ev); if (c) setMarcando(c); };
-    const soltar = () => {
-      window.removeEventListener('mousemove', mover);
-      window.removeEventListener('mouseup', soltar);
-      window.removeEventListener('touchmove', mover);
-      window.removeEventListener('touchend', soltar);
-    };
-    window.addEventListener('mousemove', mover);
-    window.addEventListener('mouseup', soltar);
-    window.addEventListener('touchmove', mover, { passive: false });
-    window.addEventListener('touchend', soltar);
-  }
-
-  function guardarMarca() {
-    if (!formMarca.desc.trim()) return;
-    const nuevas = [...marcas, {
-      id: uid(), x: marcando.x, y: marcando.y,
-      titulo: formMarca.titulo.trim(), desc: formMarca.desc.trim(), foto: formMarca.foto,
-      createdAt: new Date().toISOString(),
-    }];
-    onUpdate({ ...punto, plano: { ...plano, marcas: nuevas } });
-    setMarcando(null);
-  }
-
-  function deleteMarca(id) {
-    onUpdate({ ...punto, plano: { ...plano, marcas: marcas.filter(m => m.id !== id) } });
-    if (marcaOpen === id) setMarcaOpen(null);
-  }
-
-  // — Sin plano —
-  if (!plano) return (
-    <div style={{ margin: '10px 0 4px', padding: '14px 16px', background: '#F9F8F5', borderRadius: 10, border: '1.5px dashed #E0DFD9' }}>
-      <div style={{ fontSize: 13, color: '#9B9B97', marginBottom: 10, lineHeight: 1.5 }}>
-        Adjunta un plano (PDF o imagen) para marcar incidencias con su ubicación exacta.
-      </div>
-      {cargando
-        ? <div style={{ fontSize: 13, color: '#9B9B97', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid #D0D0CB', borderTopColor: '#141412', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
-            Procesando plano...
-          </div>
-        : <button onClick={abrirSelector} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #D0D0CB', background: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>+ Subir plano (PDF o imagen)</button>
-      }
-    </div>
-  );
-
-  // — Con plano —
   return (
-    <div style={{ margin: '10px 0 4px' }}>
-      {/* Cabecera plano */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: planoVisible ? 8 : 0 }}>
-        <button onClick={() => setPlanoVisible(v => !v)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#141412', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5, padding: 0, flex: 1, minWidth: 0, textAlign: 'left' }}>
-          <span style={{ fontSize: 10, color: '#A5A5A0', transition: 'transform .2s', display: 'inline-block', transform: planoVisible ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plano.nombre}</span>
-          <span style={{ fontSize: 11, color: '#A5A5A0', fontWeight: 400, flexShrink: 0 }}>{marcas.length} marca{marcas.length !== 1 ? 's' : ''}</span>
-        </button>
-        {marcas.length > 0 && (
-          <button onClick={generarActa} disabled={generandoActa}
-            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid #1C1C1A', background: generandoActa ? '#ECEAE4' : '#1C1C1A', color: generandoActa ? '#A5A5A0' : '#F2F1ED', cursor: generandoActa ? 'default' : 'pointer', fontWeight: 500, flexShrink: 0 }}>
-            {generandoActa ? 'Generando...' : '↓ Acta PDF'}
-          </button>
-        )}
-        {cargando
-          ? <span style={{ fontSize: 11, color: '#9B9B97', flexShrink: 0 }}>Procesando...</span>
-          : <button onClick={abrirSelector} style={{ fontSize: 11, color: '#9B9B97', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 6, border: '1px solid #E8E7E1', flexShrink: 0 }}>↺</button>}
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: isMobile ? 'auto' : '70vh', background: '#FFFFFF', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
 
-      {/* Imagen del plano — ocultable */}
-      {planoVisible && (<>
-      <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid #E8E7E1', cursor: marcando ? 'default' : 'crosshair', userSelect: 'none', touchAction: 'none' }}
-        onClick={!marcando ? handleTapPlano : undefined}
-        onTouchEnd={!marcando ? e => { e.preventDefault(); handleTapPlano(e); } : undefined}>
-        <img ref={imgRef} src={plano.imgData} alt="Plano" style={{ width: '100%', display: 'block', pointerEvents: 'none' }} />
-        {/* Marcas existentes */}
-        {marcas.map((m, idx) => (
-          <button key={m.id} onClick={e => { e.stopPropagation(); setMarcaOpen(marcaOpen === m.id ? null : m.id); }}
-            style={{ position: 'absolute', left: m.x + '%', top: m.y + '%', transform: 'translate(-50%,-50%)', width: 19, height: 19, borderRadius: '50%', background: '#E24B4A', color: '#fff', border: '1.5px solid #fff', boxShadow: '0 1px 5px rgba(0,0,0,.35)', fontSize: 9.5, fontWeight: 700, cursor: 'pointer', zIndex: 2, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {idx + 1}
-          </button>
-        ))}
-        {/* Nueva marca (pendiente, arrastrable) */}
-        {marcando && (
-          <div
-            onMouseDown={iniciarArrastre}
-            onTouchStart={iniciarArrastre}
-            style={{ position: 'absolute', left: marcando.x + '%', top: marcando.y + '%', transform: 'translate(-50%,-50%)', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3, cursor: 'grab', touchAction: 'none' }}>
-            <span style={{ position: 'absolute', width: 40, height: 40, borderRadius: '50%', background: 'rgba(28,28,26,0.15)' }} />
-            <span style={{ position: 'relative', width: 22, height: 22, borderRadius: '50%', background: '#1C1C1A', color: '#fff', border: '2px solid #fff', boxShadow: '0 1px 6px rgba(0,0,0,.45)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 300 }}>+</span>
-          </div>
-        )}
-        {/* Hint sobre el plano */}
-        {!marcando && marcas.length === 0 && (
-          <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11, padding: '5px 11px', borderRadius: 20, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-            {isMobile ? 'Toca el plano' : 'Clic en el plano'} para marcar una incidencia
-          </div>
-        )}
-      </div>
-      </>)}
-
-      {/* Formulario nueva marca */}
-      {marcando && (
-        <div className="fade" style={{ marginTop: 8, padding: '12px 14px', background: '#F9F8F5', borderRadius: 10, border: '1px solid #E8E7E1' }}>
-          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#141412' }}>/ Nueva marca — ¿qué has visto?</div>
-          <div style={{ fontSize: 11, color: '#9B9B97', marginBottom: 8 }}>Arrastra el punto sobre el plano para ajustar su posición exacta.</div>
-          <input placeholder="Título breve (ej. Anclajes pantallas)" value={formMarca.titulo} onChange={e => setFormMarca(f => ({ ...f, titulo: e.target.value }))} style={{ marginBottom: 8 }} />
-          <textarea placeholder="Describe la incidencia observada..." value={formMarca.desc} onChange={e => setFormMarca(f => ({ ...f, desc: e.target.value }))} style={{ marginBottom: 8, minHeight: 64 }} />
-          {formMarca.foto
-            ? <div style={{ position: 'relative', marginBottom: 8, display: 'inline-block' }}>
-                <img src={formMarca.foto} style={{ maxWidth: '100%', maxHeight: 140, objectFit: 'contain', borderRadius: 8, display: 'block' }} />
-                <button onClick={() => setFormMarca(f => ({ ...f, foto: null }))} style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', borderRadius: '50%', width: 24, height: 24, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-              </div>
-            : <button onClick={() => pickFiles('image/*', f => setFormMarca(fm => ({ ...fm, foto: f.data })))}
-                style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginBottom: 8 }}>+ Añadir foto</button>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Btn primary full disabled={!formMarca.desc.trim()} onClick={guardarMarca}>Guardar marca</Btn>
-            <Btn onClick={() => setMarcando(null)}>✕</Btn>
-          </div>
-        </div>
-      )}
-
-      {/* Lista de marcas */}
-      {marcas.length > 0 && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {marcas.map((m, idx) => (
-            <div key={m.id} style={{ border: `1px solid ${marcaOpen === m.id ? '#1C1C1A' : '#E8E7E1'}`, borderRadius: 9, overflow: 'hidden', transition: 'border-color .15s' }}>
-              <div onClick={() => setMarcaOpen(marcaOpen === m.id ? null : m.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', cursor: 'pointer', background: marcaOpen === m.id ? '#F5F4F0' : '#fff' }}>
-                <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#E24B4A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</div>
-                <div style={{ flex: 1, fontSize: 13, fontWeight: m.titulo ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.titulo || m.desc}</div>
-                <div style={{ fontSize: 11, color: '#A5A5A0', flexShrink: 0 }}>{fmtShort(m.createdAt)}</div>
-                <span style={{ fontSize: 12, color: '#C5C4BE' }}>{marcaOpen === m.id ? '▲' : '▼'}</span>
-              </div>
-              {marcaOpen === m.id && (
-                <div className="fade" style={{ padding: '0 12px 12px' }}>
-                  {m.foto && <img src={m.foto} style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 8, marginBottom: 8, marginTop: 6, display: 'block' }} />}
-                  {m.titulo && <div style={{ fontSize: 13, fontWeight: 600, color: '#141412', marginBottom: 3 }}>{m.titulo}</div>}
-                  <p style={{ fontSize: 13, color: '#18180F', lineHeight: 1.55, marginBottom: 10 }}>{m.desc}</p>
-                  <Btn sm danger onClick={() => setConfirmacion({ titulo: 'Eliminar marca', texto: 'Vas a eliminar esta marca y su contenido. Esta acción no se puede deshacer.', onSi: () => { deleteMarca(m.id); setConfirmacion(null); } })}>Eliminar marca</Btn>
-                </div>
-              )}
+        {/* Cabecera */}
+        <div style={{ background: '#1A1A17', padding: isMobile ? '16px' : '18px 22px', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '18px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <button onClick={onCerrar} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 15, cursor: 'pointer', padding: 0 }}>←</button>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#F2F1ED', display: 'flex', alignItems: 'baseline', gap: 7 }}>
+              Acta de inspección <span style={{ fontSize: 12, color: '#8AA88A' }}>.</span>
             </div>
-          ))}
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Nº {String(a.num).padStart(2, '0')}</div>
+          </div>
+          <button onClick={guardar} style={{ padding: '8px 16px', borderRadius: 11, border: 'none', background: '#5A7D5A', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Guardar</button>
         </div>
-      )}
+
+        {/* Cuerpo */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px' : '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Datos */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Nº de acta">
+              <input type="number" min="1" value={a.num} onChange={e => upd('num', Math.max(1, parseInt(e.target.value || '1', 10)))} />
+            </Field>
+            <Field label="Fecha de inspección">
+              <input type="date" value={a.fecha} onChange={e => upd('fecha', e.target.value)} />
+            </Field>
+          </div>
+
+          <Field label="Aspecto revisado">
+            <textarea value={a.aspecto} onChange={e => upd('aspecto', e.target.value)} placeholder="Describe brevemente qué se ha revisado en esta inspección..." style={{ minHeight: 70 }} />
+          </Field>
+
+          {/* Temas / incidencias */}
+          <div>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 600, marginBottom: 10 }}>Incidencias detectadas</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {a.temas.map((t, i) => {
+                const est = ESTADOS_INSP_ACTA[t.estado] || ESTADOS_INSP_ACTA.incidencia;
+                return (
+                  <div key={t.id} style={{ background: '#F7F6F3', borderRadius: 14, border: '1px solid #E6E4DD', padding: '14px 15px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ width: 26, height: 26, borderRadius: 8, background: '#1A1A17', color: '#F2F1ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{i + 1}</span>
+                      <input value={t.titulo} onChange={e => updTema(t.id, 'titulo', e.target.value)} placeholder="Título de la incidencia" style={{ flex: 1, fontWeight: 600, padding: '8px 11px' }} />
+                      <button onClick={() => setConfirmacion({ titulo: 'Eliminar incidencia', texto: `Vas a eliminar "${t.titulo || 'esta incidencia'}".`, onSi: () => delTema(t.id) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, lineHeight: 1, flexShrink: 0 }}>×</button>
+                    </div>
+                    <textarea value={t.texto} onChange={e => updTema(t.id, 'texto', e.target.value)} placeholder="Descripción de la incidencia..." style={{ minHeight: 60, marginBottom: 10 }} />
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                      {Object.entries(ESTADOS_INSP_ACTA).map(([k, v]) => (
+                        <button key={k} onClick={() => updTema(t.id, 'estado', k)} style={{ padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${t.estado === k ? v.color : '#E6E4DD'}`, background: t.estado === k ? v.bg : 'transparent', color: t.estado === k ? v.color : '#9B9B97', fontSize: 12, fontWeight: t.estado === k ? 600 : 400, cursor: 'pointer' }}>
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Fotos */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {(t.fotos || []).map(ft => (
+                        <div key={ft.id} style={{ position: 'relative', width: 72, height: 54 }}>
+                          <img src={ft.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8, display: 'block' }} />
+                          <button onClick={() => delFoto(t.id, ft.id)} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 17, height: 17, cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
+                        </div>
+                      ))}
+                      <button onClick={() => addFoto(t.id)} style={{ width: 72, height: 54, borderRadius: 8, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 11, color: '#9B9B97' }}>+ foto</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={addTema} style={{ width: '100%', padding: '11px', marginTop: 10, borderRadius: 12, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#6B6B66', fontWeight: 500 }}>+ Añadir incidencia</button>
+          </div>
+        </div>
+
+        {/* Pie: exportar */}
+        <div style={{ borderTop: '1px solid #ECEAE4', padding: isMobile ? '12px 16px calc(12px + env(safe-area-inset-bottom))' : '14px 22px', display: 'flex', gap: 10, flexShrink: 0, background: '#fff' }}>
+          <Btn onClick={onCerrar} full>Cerrar</Btn>
+          <Btn primary full onClick={() => { onGuardar(a); onExportar(a); }}>↓ Exportar PDF</Btn>
+        </div>
+
       {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
   );
+}
+
+// Generador PDF del acta de inspección genérica
+async function generarActaInspeccion(obra, acta) {
+  if (!window.jspdf) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar jsPDF'));
+      document.head.appendChild(s);
+    });
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const PW = 210, PH = 297, M = 14, CW = PW - M * 2;
+  const NEGRO = [0, 0, 0], GRIS = [217, 217, 217];
+  const num = String(acta.num).padStart(2, '0');
+  const fecha = acta.fecha ? new Date(acta.fecha).toLocaleDateString('es-ES') : '';
+  let y = 0;
+
+  function setLW() { doc.setLineWidth(0.25); doc.setDrawColor(...NEGRO); }
+  function pie() {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
+    doc.text('Plaat Arquitectura Técnica', M, PH - 8);
+    doc.text('Barcelona \u2013 Madrid', PW / 2, PH - 8, { align: 'center' });
+    doc.text('www.plaat.es', PW - M, PH - 8, { align: 'right' });
+  }
+  function cabecera() {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
+    doc.text(`PARTE DE INSPECCIÓN Nº ${num}`, M, 10);
+    doc.setFontSize(22); doc.text('Plaat.', PW - M, 12, { align: 'right' });
+  }
+  function checkPage(h) { if (y + h > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; } }
+
+  cabecera(); pie(); y = 20;
+
+  // Banda título
+  doc.setFillColor(...GRIS); setLW();
+  doc.rect(M, y, CW, 9, 'F'); doc.rect(M, y, CW, 9);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(0, 0, 0);
+  doc.text(`ACTA DE INSPECCIÓN DE OBRA · NÚM. ${num}`, M + 3, y + 6.2);
+  y += 9;
+
+  // Datos obra
+  const datos = [
+    ['OBRA', obra.nombre || ''],
+    ['EMPLAZAMIENTO', obra.emplazamiento || obra.direccion || ''],
+    ['FECHA INSPECCIÓN', fecha],
+  ];
+  datos.forEach(([k, v]) => {
+    const ll = doc.splitTextToSize(String(v), CW - 48);
+    const h = Math.max(7, ll.length * 4.4 + 3);
+    checkPage(h);
+    doc.setFillColor(...GRIS); doc.rect(M, y, 46, h, 'F'); setLW();
+    doc.rect(M, y, 46, h); doc.rect(M + 46, y, CW - 46, h);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.text(k, M + 2, y + 4.8);
+    doc.setFont('helvetica', 'normal'); doc.text(ll, M + 48, y + 4.8);
+    y += h;
+  });
+  y += 5;
+
+  // Aspecto revisado
+  if (acta.aspecto) {
+    checkPage(14);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+    doc.text('ASPECTO REVISADO', M, y); y += 5;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    const al = doc.splitTextToSize(acta.aspecto, CW);
+    doc.text(al, M, y + 3); y += al.length * 4.4 + 8;
+  }
+
+  // Incidencias
+  checkPage(10);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+  doc.text('INCIDENCIAS DETECTADAS', M, y); y += 7;
+
+  (acta.temas || []).forEach((t, i) => {
+    const titulo = `${i + 1}. ${t.titulo || ''}`;
+    const tl = doc.splitTextToSize(titulo, CW - 4);
+    const hHead = tl.length * 4.6 + 3;
+    checkPage(hHead + 6);
+    // Fila título gris
+    doc.setFillColor(...GRIS); doc.rect(M, y, CW, hHead, 'F'); setLW(); doc.rect(M, y, CW, hHead);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+    doc.text(tl, M + 2, y + 4.8);
+    y += hHead;
+    // Texto
+    if (t.texto) {
+      const dl = doc.splitTextToSize(t.texto, CW - 4);
+      const dh = dl.length * 4.4 + 5;
+      checkPage(dh);
+      setLW(); doc.rect(M, y, CW, dh);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(dl, M + 2, y + 5);
+      y += dh;
+    }
+    // Fotos 2 por fila
+    const fotos = t.fotos || [];
+    const fW = (CW - 4) / 2;
+    for (let fi = 0; fi < fotos.length; fi += 2) {
+      const pair = [fotos[fi], fotos[fi + 1]].filter(Boolean);
+      const dims = pair.map(f => { try { const pr = doc.getImageProperties(f.data); const r = pr.height / pr.width; const h = Math.min(fW * r, 70); return { w: h / r, h }; } catch (e) { return { w: fW, h: 52 }; } });
+      const rowH = Math.max(...dims.map(d => d.h));
+      checkPage(rowH + 4);
+      pair.forEach((f, pi) => doc.addImage(f.data, 'JPEG', M + pi * (fW + 4), y, dims[pi].w, dims[pi].h));
+      y += rowH + 4;
+    }
+    y += 5;
+  });
+
+  // Firma
+  checkPage(28); y += 4;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+  doc.text('Director de Ejecución de Obra:', M, y); y += 4;
+  if (obra.deoFirmante) { doc.setFont('helvetica', 'bold'); doc.text(obra.deoFirmante, M, y + 4); }
+  setLW(); doc.rect(M, y + 8, CW / 2, 18);
+
+  const total = doc.getNumberOfPages();
+  for (let p = 1; p <= total; p++) { doc.setPage(p); pie(); }
+  doc.save(`Acta_Inspeccion_${num}_${(obra.nombre || 'obra').replace(/\s+/g, '_')}.pdf`);
 }
 
 function ModuloInspecciones({ obra, onSave }) {
@@ -1162,23 +980,28 @@ function ModuloInspecciones({ obra, onSave }) {
   const [showNuevoPunto,      setShowNuevoPunto]      = useState(false);
   const [nombreDisciplina,    setNombreDisciplina]    = useState('');
   const [nombrePunto,         setNombrePunto]         = useState('');
-  const [puntosExpandidos,    setPuntosExpandidos]    = useState(new Set());
   const [confirmacion,        setConfirmacion]         = useState(null); // {titulo,texto,onSi}
   const [menuDisciplina,      setMenuDisciplina]       = useState(false);
+  const [actaActiva,          setActaActiva]           = useState(null); // acta abierta en el formulario (objeto o 'nueva')
+  const [generandoActa,       setGenerandoActa]        = useState(false);
 
-  function togglePunto(id) {
-    setPuntosExpandidos(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+  const actas = obra.actasInsp || [];
+
+  function guardarActa(acta) {
+    const existe = actas.some(x => x.id === acta.id);
+    const nuevas = existe ? actas.map(x => x.id === acta.id ? acta : x) : [acta, ...actas];
+    onSave({ ...obra, actasInsp: nuevas });
+    setActaActiva(acta); // mantener referencia fresca
   }
-
-  function updatePunto(updated) {
-    const disciplinas = obra.disciplinas.map(d => d.id === disciplinaActiva
-      ? { ...d, puntos: d.puntos.map(p => p.id === updated.id ? updated : p) }
-      : d);
-    onSave({ ...obra, disciplinas });
+  function eliminarActa(id) {
+    onSave({ ...obra, actasInsp: actas.filter(x => x.id !== id) });
+    setConfirmacion(null);
+  }
+  async function exportarActa(acta) {
+    setGenerandoActa(true);
+    try { await generarActaInspeccion(obra, acta); }
+    catch (e) { alert('Error al exportar: ' + e.message); }
+    setGenerandoActa(false);
   }
 
   const disciplina = obra.disciplinas.find(d => d.id === disciplinaActiva);
@@ -1226,7 +1049,56 @@ function ModuloInspecciones({ obra, onSave }) {
   const inspeccionados  = obra.disciplinas.reduce((s, d) => s + d.puntos.filter(p => p.estado === 'inspeccionado').length, 0);
   const conIncidencia   = obra.disciplinas.reduce((s, d) => s + d.puntos.filter(p => p.estado === 'incidencia').length, 0);
 
+  // Si hay un acta abierta, el formulario reemplaza toda la vista (como Acta VO)
+  if (actaActiva) {
+    return (
+      <>
+        <FormActaInspeccion
+          obra={obra}
+          acta={actaActiva === 'nueva' ? null : actaActiva}
+          onGuardar={guardarActa}
+          onCerrar={() => setActaActiva(null)}
+          onExportar={exportarActa}
+        />
+        {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
+      </>
+    );
+  }
+
   return (
+    <>
+      {/* ── Actas de inspección ── */}
+      <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 3px 12px rgba(0,0,0,0.04)', padding: isMobile ? '14px 15px' : '16px 18px', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: actas.length ? 12 : 0 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#16160F' }}>Actas de inspección</div>
+            <div style={{ fontSize: 11.5, color: '#9B9B97', marginTop: 1 }}>{actas.length ? `${actas.length} acta${actas.length !== 1 ? 's' : ''} registrada${actas.length !== 1 ? 's' : ''}` : 'Aún no hay actas'}</div>
+          </div>
+          <button onClick={() => setActaActiva('nueva')} className="tap" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 15px', borderRadius: 11, border: '1.5px solid #5A7D5A', background: '#5A7D5A', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            + Crear acta de inspección
+          </button>
+        </div>
+        {actas.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {actas.map(act => {
+              const nInc = (act.temas || []).filter(t => t.estado === 'incidencia').length;
+              return (
+                <div key={act.id} className="hov-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 11, border: '1px solid #ECEAE4', cursor: 'pointer' }}
+                  onClick={() => setActaActiva(act)}>
+                  <span style={{ width: 30, height: 30, borderRadius: 9, background: '#1A1A17', color: '#F2F1ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{String(act.num).padStart(2, '0')}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: '#16160F' }}>Acta Nº {String(act.num).padStart(2, '0')}</div>
+                    <div style={{ fontSize: 11.5, color: '#9B9B97' }}>{fmtDate(act.fecha)} · {(act.temas || []).length} incidencia{(act.temas || []).length !== 1 ? 's' : ''}{nInc > 0 ? ` · ${nInc} abierta${nInc !== 1 ? 's' : ''}` : ''}</div>
+                  </div>
+                  <button onClick={e => { e.stopPropagation(); exportarActa(act); }} disabled={generandoActa} title="Exportar PDF" style={{ background: 'none', border: '1px solid #E6E4DD', borderRadius: 9, padding: '5px 10px', cursor: 'pointer', fontSize: 12, color: '#6B6B66', flexShrink: 0 }}>↓ PDF</button>
+                  <button onClick={e => { e.stopPropagation(); setConfirmacion({ titulo: 'Eliminar acta', texto: `Vas a eliminar el Acta Nº ${String(act.num).padStart(2, '0')}. Esta acción no se puede deshacer.`, onSi: () => eliminarActa(act.id) }); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
     <div style={{ display: isMobile ? 'flex' : 'grid', flexDirection: isMobile ? 'column' : undefined, gridTemplateColumns: isMobile ? undefined : '220px 1fr', gap: 12, height: isMobile ? 'auto' : '100%' }}>
       {/* Panel izquierdo: disciplinas (en móvil, solo si no hay disciplina abierta) */}
       {(!isMobile || !disciplina) && (
@@ -1321,13 +1193,10 @@ function ModuloInspecciones({ obra, onSave }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
               {disciplina.puntos.map(p => {
-                const est       = ESTADOS_INSP[p.estado] || ESTADOS_INSP.pendiente;
-                const expandido = puntosExpandidos.has(p.id);
-                const nMarcas   = p.plano?.marcas?.length || 0;
+                const est = ESTADOS_INSP[p.estado] || ESTADOS_INSP.pendiente;
                 return (
-                  <div key={p.id} style={{ border: `1px solid ${expandido ? '#C5C4BE' : '#E8E7E1'}`, borderRadius: 9, overflow: 'hidden', transition: 'border-color .15s' }}>
-                    {/* Fila principal */}
-                    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? 8 : 10, padding: '10px 12px', background: expandido ? '#FAFAF8' : '#fff' }}>
+                  <div key={p.id} style={{ border: '1px solid #E8E7E1', borderRadius: 11, overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? 8 : 10, padding: '10px 12px', background: '#fff' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 400, color: '#18180F' }}>{p.nombre}</div>
                         {p.fecha && <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 2 }}>{fmtDate(p.fecha)}</div>}
@@ -1337,18 +1206,15 @@ function ModuloInspecciones({ obra, onSave }) {
                           style={{ width: isMobile ? '100%' : 'auto', fontSize: 12, padding: '5px 9px', borderRadius: 20, border: `1px solid ${est.color}30`, background: est.bg, color: est.color, fontWeight: 500, cursor: 'pointer' }}>
                           {Object.entries(ESTADOS_INSP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                         </select>
-                        {/* Botón plano */}
-                        <button onClick={() => togglePunto(p.id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 6, border: '1px solid #E0DFD9', background: expandido ? '#1C1C1A' : '#fff', color: expandido ? '#F2F1ED' : '#6B6B66', fontSize: 11, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                          / Plano{nMarcas > 0 ? ` (${nMarcas})` : ''}
-                        </button>
-                        <button onClick={() => setConfirmacion({ titulo: 'Eliminar punto de control', texto: `Vas a eliminar "${p.nombre}" y su plano. Esta acción no se puede deshacer.`, onSi: () => { deletePunto(p.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                        <button onClick={() => setConfirmacion({ titulo: 'Eliminar punto de control', texto: `Vas a eliminar "${p.nombre}". Esta acción no se puede deshacer.`, onSi: () => { deletePunto(p.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
                       </div>
                     </div>
-                    {/* Plano expandido */}
-                    {expandido && (
-                      <div className="fade" style={{ padding: '0 12px 12px', borderTop: '1px solid #F2F1ED', background: '#FAFAF8' }}>
-                        <PlanoPunto punto={p} onUpdate={updatePunto} obra={obra} nombreDisciplina={disciplina.nombre} numActa={(obra.numActaSeq || 0) + 1} onActaGenerada={n => onSave({ ...obra, numActaSeq: n })} />
+                    {p.notas !== undefined && (
+                      <div style={{ padding: '0 12px 10px', background: '#fff' }}>
+                        <textarea value={p.notas || ''} onChange={e => {
+                          const disciplinas = obra.disciplinas.map(d => d.id === disciplinaActiva ? { ...d, puntos: d.puntos.map(pp => pp.id === p.id ? { ...pp, notas: e.target.value } : pp) } : d);
+                          onSave({ ...obra, disciplinas });
+                        }} placeholder="Notas del punto de control..." style={{ minHeight: 44, fontSize: 12.5 }} />
                       </div>
                     )}
                   </div>
@@ -1371,6 +1237,7 @@ function ModuloInspecciones({ obra, onSave }) {
       )}
       {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
+    </>
   );
 }
 
@@ -4633,18 +4500,21 @@ export default function App() {
     setBackupAuto(false);
   }
 
-  // Backup automático semanal al abrir la app
+  // Sesión
   useEffect(() => {
-    if (!obras.length) return;
-    const ultima = localStorage.getItem(BACKUP_KEY);
-    if (!ultima) return; // primera vez: no forzar, que el usuario lo lance manual
-    const diasDesde = (Date.now() - new Date(ultima).getTime()) / (1000 * 60 * 60 * 24);
-    if (diasDesde >= 7) {
-      setBackupAuto(true);
-      setShowBackup(true);
-      setBackupMsg('⏰ Han pasado más de 7 días desde el último backup. Pulsa "Hacer backup ahora" para guardarlo en Drive.');
-    }
-  }, [obras.length > 0]);
+    if (!window.auth) { setUser({ local: true, id: 'local' }); return; }
+    window.auth.getUser().then(u => setUser(u || null));
+    window.auth.onChange(u => setUser(u || null));
+  }, []);
+
+  // Cargar obras cuando hay usuario
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.id || user.sub || 'local';
+    cargarObras(userId);
+  }, [user]);
+
+
 
   async function importarBackup(file) {
     setImportando(true); setBackupMsg('');
@@ -4653,82 +4523,171 @@ export default function App() {
       const data = JSON.parse(text);
       const lista = data.obras || (Array.isArray(data) ? data : []);
       if (!lista.length) { setBackupMsg('El archivo no contiene obras válidas.'); setImportando(false); return; }
-      const T = ms => new Promise((_,r) => setTimeout(() => r(new Error('timeout')), ms));
-      await Promise.all(lista.map(o =>
-        Promise.race([window.storage?.set(SK_OBR(o.id), JSON.stringify(o), true), T(10000)]).catch(()=>null)
-      ));
-      await Promise.race([window.storage?.set(SK_IDX, JSON.stringify(lista.map(o=>o.id)), true), T(10000)]).catch(()=>null);
-      setObras(lista);
+      const userId = user?.id || user?.sub || 'local';
+      for (const o of lista) {
+        await window.db.upsertObra(obraRow(o, userId));
+        for (const inc of (o.incidencias || [])) await window.db.upsertModulo('incidencias', { id: inc.id, obra_id: o.id, data: inc, updated_at: now() });
+        if (o.actaVO) await window.db.upsertModulo('actas_vo', { id: o.id + '_vo', obra_id: o.id, data: o.actaVO, updated_at: now() });
+        for (const acta of (o.actasInsp || [])) await window.db.upsertModulo('actas_insp', { id: acta.id, obra_id: o.id, data: acta, updated_at: now() });
+        for (const nota of (o.apuntes || [])) await window.db.upsertModulo('notas', { id: nota.id, obra_id: o.id, data: nota, updated_at: now() });
+        if (o.materiales?.length || o.seguimientoCQ?.length) await window.db.upsertModulo('calidad', { id: o.id + '_cal', obra_id: o.id, data: { materiales: o.materiales || [], seguimientoCQ: o.seguimientoCQ || [] }, updated_at: now() });
+      }
+      await cargarObras(userId);
       localStorage.setItem(BACKUP_KEY, new Date().toISOString());
       setBackupMsg(`✓ Restauradas ${lista.length} obras correctamente.`);
     } catch(e) { setBackupMsg('Error al importar: ' + e.message); }
     setImportando(false);
   }
 
-  // Sesión: si no hay sistema de auth (p.ej. dentro de Claude), entra directo
-  useEffect(() => {
-    if (!window.auth) { setUser({ local: true }); return; }
-    window.auth.getUser().then(u => setUser(u || null));
-    window.auth.onChange(u => setUser(u || null));
-  }, []);
+  // ── Helpers para separar datos por módulo ──────────────────────────────────
+  function obraRow(o, userId) {
+    return {
+      id: o.id, user_id: userId,
+      nombre: o.nombre, cliente: o.cliente, direccion: o.direccion,
+      responsable: o.responsable, estado: o.estado,
+      data: {
+        tipo: o.tipo, diasVisita: o.diasVisita, emplazamiento: o.emplazamiento,
+        propiedad: o.propiedad, proyectista: o.proyectista,
+        direccionObra: o.direccionObra, constructora: o.constructora,
+        deoFirmante: o.deoFirmante, numActaSeq: o.numActaSeq,
+        fases: o.fases, disciplinas: o.disciplinas, lotes: o.lotes,
+        creadaEn: o.creadaEn,
+      },
+      updated_at: now(),
+    };
+  }
 
-  // Cargar obras: primero intenta índice nuevo, luego migra del blob antiguo
-  useEffect(() => {
-    if (!user) return;
-    let cancelado = false;
-    (async () => {
-      setLoading(true);
-      try {
-        if (window.storage) {
-          const T = ms => new Promise((_, r) => setTimeout(() => r(new Error('timeout')), ms));
-          let listaObras = [];
+  function rowToObra(row, modulos) {
+    return {
+      id: row.id, nombre: row.nombre, cliente: row.cliente,
+      direccion: row.direccion, responsable: row.responsable, estado: row.estado,
+      ...(row.data || {}),
+      incidencias: (modulos?.incidencias || []).map(r => r.data),
+      actaVO: modulos?.actas_vo?.[0]?.data || null,
+      actasInsp: (modulos?.actas_insp || []).map(r => r.data),
+      apuntes: (modulos?.notas || []).map(r => r.data),
+      materiales: modulos?.calidad?.[0]?.data?.materiales || [],
+      seguimientoCQ: modulos?.calidad?.[0]?.data?.seguimientoCQ || [],
+    };
+  }
 
-          // 1. Intenta índice nuevo
-          const idxR = await Promise.race([window.storage.get(SK_IDX, true), T(8000)]).catch(() => null);
-          if (idxR?.value) {
-            const ids = JSON.parse(idxR.value);
-            const resultados = await Promise.all(ids.map(id =>
-              Promise.race([window.storage.get(SK_OBR(id), true), T(8000)])
-                .then(r => r?.value ? JSON.parse(r.value) : null)
-                .catch(() => null)
-            ));
-            listaObras = resultados.filter(Boolean);
-          } else {
-            // 2. Migra blob antiguo
-            const viejoR = await Promise.race([window.storage.get(SK, true), T(8000)]).catch(() => null);
-            if (viejoR?.value) {
-              listaObras = JSON.parse(viejoR.value);
-              // Guarda cada obra por separado
-              await Promise.all(listaObras.map(o =>
-                window.storage.set(SK_OBR(o.id), JSON.stringify(o), true).catch(() => null)
-              ));
-              await window.storage.set(SK_IDX, JSON.stringify(listaObras.map(o => o.id)), true).catch(() => null);
-              console.log('Migración completada:', listaObras.length, 'obras');
-            }
-          }
-          if (!cancelado) setObras(listaObras);
-        }
-      } catch (e) { console.error('Carga de obras:', e); }
-      if (!cancelado) setLoading(false);
-    })();
-    return () => { cancelado = true; };
-  }, [user]);
-
-  // Guarda UNA obra + actualiza el índice (operación mínima de escritura)
-  async function saveUnaObra(obra, lista) {
-    const T = ms => new Promise((_, r) => setTimeout(() => r(new Error('timeout')), ms));
-    const obraJSON = JSON.stringify(obra);
-    const kb = Math.round(obraJSON.length / 1024);
-    if (kb > 4000) {
-      alert(`Esta obra ocupa ${kb} KB. Las fotos y planos consumen mucho espacio — considera reducirlas o eliminar las antiguas. Se intentará guardar igualmente.`);
-    }
+  // ── Migración automática: storage antiguo → tablas nuevas ─────────────────
+  async function migrarSiNecesario(userId) {
     try {
-      if (!window.storage) return;
-      await Promise.race([window.storage.set(SK_OBR(obra.id), obraJSON, true), T(10000)]);
-      await Promise.race([window.storage.set(SK_IDX, JSON.stringify(lista.map(o => o.id)), true), T(10000)]);
+      // ¿Ya hay datos en la tabla nueva?
+      const existentes = await window.db.getObras(userId);
+      if (existentes.length > 0) return false; // ya migrado
+
+      // Lee obras del storage antiguo
+      const T = ms => new Promise((_,r) => setTimeout(() => r(new Error('timeout')), ms));
+      if (!window.storage) return false;
+
+      let listaObras = [];
+      const idxR = await Promise.race([window.storage.get(SK_IDX, true), T(8000)]).catch(() => null);
+      if (idxR?.value) {
+        const ids = JSON.parse(idxR.value);
+        const res = await Promise.all(ids.map(id =>
+          Promise.race([window.storage.get(SK_OBR(id), true), T(8000)])
+            .then(r => r?.value ? JSON.parse(r.value) : null).catch(() => null)
+        ));
+        listaObras = res.filter(Boolean);
+      } else {
+        const viejoR = await Promise.race([window.storage.get(SK, true), T(8000)]).catch(() => null);
+        if (viejoR?.value) listaObras = JSON.parse(viejoR.value);
+      }
+
+      if (!listaObras.length) return false;
+
+      // Migra cada obra a sus tablas
+      for (const o of listaObras) {
+        await window.db.upsertObra(obraRow(o, userId));
+        if (o.incidencias?.length) {
+          for (const inc of o.incidencias) {
+            await window.db.upsertModulo('incidencias', { id: inc.id, obra_id: o.id, data: inc, updated_at: now() });
+          }
+        }
+        if (o.actaVO) {
+          await window.db.upsertModulo('actas_vo', { id: o.id + '_vo', obra_id: o.id, data: o.actaVO, updated_at: now() });
+        }
+        if (o.actasInsp?.length) {
+          for (const acta of o.actasInsp) {
+            await window.db.upsertModulo('actas_insp', { id: acta.id, obra_id: o.id, data: acta, updated_at: now() });
+          }
+        }
+        if (o.apuntes?.length) {
+          for (const nota of o.apuntes) {
+            await window.db.upsertModulo('notas', { id: nota.id, obra_id: o.id, data: nota, updated_at: now() });
+          }
+        }
+        if (o.materiales?.length || o.seguimientoCQ?.length) {
+          await window.db.upsertModulo('calidad', { id: o.id + '_cal', obra_id: o.id, data: { materiales: o.materiales || [], seguimientoCQ: o.seguimientoCQ || [] }, updated_at: now() });
+        }
+      }
+      console.log('Migración completada:', listaObras.length, 'obras');
+      return true;
+    } catch (e) {
+      console.error('Error en migración:', e);
+      return false;
+    }
+  }
+
+  // ── Cargar todas las obras del usuario ────────────────────────────────────
+  async function cargarObras(userId) {
+    if (!window.db) return;
+    setLoading(true);
+    try {
+      await migrarSiNecesario(userId);
+      const rows = await window.db.getObras(userId);
+      // Cargar módulos de cada obra en paralelo
+      const obrasCompletas = await Promise.all(rows.map(async row => {
+        const [incs, vos, insps, notas, cal] = await Promise.all([
+          window.db.getModulo('incidencias', row.id),
+          window.db.getModulo('actas_vo', row.id),
+          window.db.getModulo('actas_insp', row.id),
+          window.db.getModulo('notas', row.id),
+          window.db.getModulo('calidad', row.id),
+        ]);
+        return rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal });
+      }));
+      setObras(obrasCompletas);
+    } catch (e) { console.error('Error cargando obras:', e); }
+    setLoading(false);
+  }
+
+  // ── Guardar obra: solo la parte que cambió ─────────────────────────────────
+  async function saveUnaObra(obra, lista) {
+    if (!window.db || !user) return;
+    try {
+      const userId = user.id || user.sub;
+      // Datos generales de la obra
+      await window.db.upsertObra(obraRow(obra, userId));
+      // Módulos independientes
+      // Incidencias
+      const incActuales = obra.incidencias || [];
+      for (const inc of incActuales) {
+        await window.db.upsertModulo('incidencias', { id: inc.id, obra_id: obra.id, data: inc, updated_at: now() });
+      }
+      // Acta VO
+      if (obra.actaVO !== undefined) {
+        await window.db.upsertModulo('actas_vo', { id: obra.id + '_vo', obra_id: obra.id, data: obra.actaVO || {}, updated_at: now() });
+      }
+      // Actas Inspección
+      const actasInsp = obra.actasInsp || [];
+      for (const acta of actasInsp) {
+        await window.db.upsertModulo('actas_insp', { id: acta.id, obra_id: obra.id, data: acta, updated_at: now() });
+      }
+      // Notas/Apuntes
+      const apuntes = obra.apuntes || [];
+      for (const nota of apuntes) {
+        await window.db.upsertModulo('notas', { id: nota.id, obra_id: obra.id, data: nota, updated_at: now() });
+      }
+      // Calidad
+      if (obra.materiales !== undefined || obra.seguimientoCQ !== undefined) {
+        await window.db.upsertModulo('calidad', { id: obra.id + '_cal', obra_id: obra.id, data: { materiales: obra.materiales || [], seguimientoCQ: obra.seguimientoCQ || [] }, updated_at: now() });
+      }
     } catch (e) {
       console.error('Error guardando obra:', e);
-      alert('No se pudieron guardar los cambios. Esta obra tiene demasiados datos (fotos/planos). Prueba a eliminar fotos antiguas de incidencias o planos para liberar espacio.');
+      alert('No se pudieron guardar los cambios: ' + e.message);
     }
   }
 
@@ -4740,7 +4699,9 @@ export default function App() {
       proyectista: data.proyectista || '', direccionObra: data.direccionObra || '',
       constructora: data.constructora || '', deoFirmante: data.deoFirmante || '',
       numActaSeq: 0, estado: 'en_curso',
-      disciplinas: [], lotes: [], incidencias: [], apuntes: [], creadaEn: now(),
+      disciplinas: [], lotes: [], incidencias: [], apuntes: [],
+      materiales: [], seguimientoCQ: [], actasInsp: [],
+      creadaEn: now(),
     };
     const lista = [obra, ...obras];
     setObras(lista);
@@ -4769,13 +4730,53 @@ export default function App() {
     const lista = obras.filter(o => o.id !== id);
     setObras(lista);
     try {
-      if (window.storage) {
-        await window.storage.delete(SK_OBR(id), true).catch(() => null);
-        await window.storage.set(SK_IDX, JSON.stringify(lista.map(o => o.id)), true);
-      }
+      await window.db.deleteObra(id);
     } catch (e) { console.error('Error eliminando obra:', e); }
     setObraEliminar(null);
   }
+
+  // ── Realtime: escuchar cambios mientras la app está abierta ───────────────
+  useEffect(() => {
+    if (!user || !window.db) return;
+    const userId = user.id || user.sub;
+    const unsub = window.db.subscribeListaObras(userId, async () => {
+      // Alguien creó/eliminó una obra → recarga la lista
+      const rows = await window.db.getObras(userId);
+      const obrasCompletas = await Promise.all(rows.map(async row => {
+        const [incs, vos, insps, notas, cal] = await Promise.all([
+          window.db.getModulo('incidencias', row.id),
+          window.db.getModulo('actas_vo', row.id),
+          window.db.getModulo('actas_insp', row.id),
+          window.db.getModulo('notas', row.id),
+          window.db.getModulo('calidad', row.id),
+        ]);
+        return rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal });
+      }));
+      setObras(obrasCompletas);
+    });
+    return unsub;
+  }, [user]);
+
+  useEffect(() => {
+    if (!obraActiva || !user || !window.db) return;
+    const unsub = window.db.subscribeObra(obraActiva.id, user.id || user.sub, async (tabla) => {
+      // Un módulo de la obra activa cambió → recarga esa obra
+      const rows = await window.db.getObras(user.id || user.sub);
+      const row = rows.find(r => r.id === obraActiva.id);
+      if (!row) return;
+      const [incs, vos, insps, notas, cal] = await Promise.all([
+        window.db.getModulo('incidencias', row.id),
+        window.db.getModulo('actas_vo', row.id),
+        window.db.getModulo('actas_insp', row.id),
+        window.db.getModulo('notas', row.id),
+        window.db.getModulo('calidad', row.id),
+      ]);
+      const obraActualizada = rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal });
+      setObras(prev => prev.map(o => o.id === obraActualizada.id ? obraActualizada : o));
+      setObraActiva(obraActualizada);
+    });
+    return unsub;
+  }, [obraActiva?.id, user]);
 
   // Calcular el contador del badge "Hoy"
   const stats = {
