@@ -4196,6 +4196,7 @@ function DetalleObra({ obra, onBack, onSave, isMobile, user }) {
   const pad         = isMobile ? '12px 14px' : '18px 22px';
 
   return (
+    <>
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* Header oscuro — mismo estilo que el sidebar */}
@@ -4285,6 +4286,7 @@ function DetalleObra({ obra, onBack, onSave, isMobile, user }) {
       )}
     </div>
     {showCompartir && <ModalCompartir obra={obra} user={user} onClose={() => setShowCompartir(false)} />}
+  </>
   );
 }
 
