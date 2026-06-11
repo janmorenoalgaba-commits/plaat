@@ -339,6 +339,79 @@ function DashedBtn({ children, onClick }) {
 
 // ─── Modal base ───────────────────────────────────────────────────────────────
 
+// ── Modal Compartir obra ─────────────────────────────────────────────────────
+function ModalCompartir({ obra, user, onClose }) {
+  const [email, setEmail] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [usuarios, setUsuarios] = useState([]);
+  const userId = user?.id || user?.sub;
+
+  useEffect(() => {
+    window.db?.getUsuariosObra(obra.id).then(setUsuarios).catch(() => {});
+  }, [obra.id]);
+
+  async function invitar() {
+    if (!email.trim()) return;
+    setEnviando(true); setMsg('');
+    try {
+      await window.db.invitarUsuario(obra.id, email.trim(), userId);
+      setMsg('✓ Usuario añadido correctamente.');
+      setEmail('');
+      const updated = await window.db.getUsuariosObra(obra.id);
+      setUsuarios(updated);
+    } catch (e) { setMsg('Error: ' + e.message); }
+    setEnviando(false);
+  }
+
+  async function quitar(uid) {
+    try {
+      await window.db.quitarAcceso(obra.id, uid);
+      setUsuarios(prev => prev.filter(u => u.user_id !== uid));
+    } catch (e) { setMsg('Error: ' + e.message); }
+  }
+
+  return (
+    <Modal title={`Compartir — ${obra.nombre}`} onClose={onClose}>
+      <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16, lineHeight: 1.5 }}>
+        Añade a compañeros por su email. Podrán ver y editar esta obra. Solo el creador puede eliminarla.
+      </p>
+      <Field label="Email del compañero">
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && invitar()}
+            placeholder="correo@plaat.es" style={{ flex: 1 }} />
+          <Btn primary disabled={enviando || !email.trim()} onClick={invitar}>
+            {enviando ? '...' : 'Añadir'}
+          </Btn>
+        </div>
+      </Field>
+      {msg && <div style={{ fontSize: 13, padding: '8px 12px', borderRadius: 9, marginBottom: 12, background: msg.startsWith('✓') ? '#E8F5E0' : '#FDECEC', color: msg.startsWith('✓') ? '#2D5E10' : '#8A1F1F' }}>{msg}</div>}
+      {usuarios.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 600, marginBottom: 8 }}>Con acceso</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {usuarios.map(u => (
+              <div key={u.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 11, border: '1px solid #ECEAE4', background: '#FAFAF8' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#1A1A17', color: '#F2F1ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                  {u.user_id.slice(0, 2).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{u.user_id === userId ? 'Tú' : 'Compañero'}</div>
+                  <div style={{ fontSize: 11, color: '#A5A5A0' }}>{u.rol === 'owner' ? 'Creador' : 'Editor'}</div>
+                </div>
+                {u.rol !== 'owner' && obra._rol === 'owner' && (
+                  <button onClick={() => quitar(u.user_id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, lineHeight: 1 }}>×</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function Modal({ title, onClose, children, footer, wide }) {
   const [confirmando, setConfirmando] = useState(false);
   const isMobile = useIsMobile();
@@ -560,7 +633,7 @@ function ObraCard({ obra, onClick, onEditar, onEliminar }) {
                     <div onClick={ev => { ev.stopPropagation(); setMenu(false); }} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
                     <div style={{ position: 'absolute', right: 0, top: '100%', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 9, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 5, zIndex: 21, minWidth: 130 }}>
                       <div onClick={ev => { ev.stopPropagation(); setMenu(false); onEditar(obra); }} style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#141412' }} className="hov-row">Editar</div>
-                      <div onClick={ev => { ev.stopPropagation(); setMenu(false); onEliminar(obra); }} style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#8A1F1F' }} className="hov-row">Eliminar</div>
+                      {obra._rol === 'owner' && <div onClick={ev => { ev.stopPropagation(); setMenu(false); onEliminar(obra); }} style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#8A1F1F' }} className="hov-row">Eliminar</div>}
                     </div>
                   </>
                 )}
@@ -4104,9 +4177,11 @@ function fmtFechaCorta(iso) {
 
 
 
-function DetalleObra({ obra, onBack, onSave, isMobile }) {
+function DetalleObra({ obra, onBack, onSave, isMobile, user }) {
   const [tab, setTab]               = useState('inspecciones');
   const [editEstado, setEditEstado] = useState(false);
+  const [showCompartir, setShowCompartir] = useState(false);
+  const esOwner = obra._rol === 'owner';
 
   const tabs = [
     { id: 'inspecciones', label: 'Inspecciones',   short: 'Insp.'   },
@@ -4148,6 +4223,7 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
             </button>
             {editEstado && (
               <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#2A2A28', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, boxShadow: '0 12px 32px rgba(0,0,0,.4)', padding: 6, zIndex: 10, minWidth: 160 }}>
+
                 {Object.entries(ESTADOS_OBRA).map(([k, v]) => (
                   <div key={k} onClick={() => { onSave({ ...obra, estado: k }); setEditEstado(false); }}
                     style={{ padding: '7px 12px', borderRadius: 7, cursor: 'pointer', fontSize: 13, fontWeight: obra.estado === k ? 500 : 400, background: obra.estado === k ? 'rgba(255,255,255,0.08)' : 'transparent', color: STATUS_ACCENT[k] || '#F2F1ED' }}>
@@ -4157,6 +4233,11 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
               </div>
             )}
           </div>
+
+          {/* Botón compartir */}
+          <button onClick={() => setShowCompartir(true)} style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5 }}>
+            👥{!isMobile && ' Compartir'}
+          </button>
         </div>
 
         {/* Tabs arriba — solo escritorio */}
@@ -4203,10 +4284,9 @@ function DetalleObra({ obra, onBack, onSave, isMobile }) {
         </div>
       )}
     </div>
+    {showCompartir && <ModalCompartir obra={obra} user={user} onClose={() => setShowCompartir(false)} />}
   );
 }
-
-// ─── Pantalla de login ────────────────────────────────────────────────────────
 
 // ─── Fondo arquitectónico animado (login + splash) ──────────────────────────
 const FondoArquitectonico = memo(function FondoArquitectonico() {
@@ -4601,6 +4681,8 @@ export default function App() {
       // Migra cada obra a sus tablas
       for (const o of listaObras) {
         await window.db.upsertObra(obraRow(o, userId));
+        // Registrar como owner
+        await window.db.addOwner(o.id, userId).catch(() => null);
         if (o.incidencias?.length) {
           for (const inc of o.incidencias) {
             await window.db.upsertModulo('incidencias', { id: inc.id, obra_id: o.id, data: inc, updated_at: now() });
@@ -4637,8 +4719,7 @@ export default function App() {
     setLoading(true);
     try {
       await migrarSiNecesario(userId);
-      const rows = await window.db.getObras(userId);
-      // Cargar módulos de cada obra en paralelo
+      const rows = await window.db.getObras(); // RLS filtra automáticamente
       const obrasCompletas = await Promise.all(rows.map(async row => {
         const [incs, vos, insps, notas, cal] = await Promise.all([
           window.db.getModulo('incidencias', row.id),
@@ -4647,7 +4728,8 @@ export default function App() {
           window.db.getModulo('notas', row.id),
           window.db.getModulo('calidad', row.id),
         ]);
-        return rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal });
+        const rol = await window.db.getRolUsuario(row.id, userId);
+        return { ...rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal }), _rol: rol };
       }));
       setObras(obrasCompletas);
     } catch (e) { console.error('Error cargando obras:', e); }
@@ -4701,11 +4783,14 @@ export default function App() {
       numActaSeq: 0, estado: 'en_curso',
       disciplinas: [], lotes: [], incidencias: [], apuntes: [],
       materiales: [], seguimientoCQ: [], actasInsp: [],
-      creadaEn: now(),
+      creadaEn: now(), _rol: 'owner',
     };
     const lista = [obra, ...obras];
     setObras(lista);
+    const userId = user?.id || user?.sub;
     await saveUnaObra(obra, lista);
+    // Registrar como owner en obra_usuarios
+    await window.db.addOwner(obra.id, userId).catch(e => console.error('addOwner:', e));
     setShowNueva(false);
     setObraActiva(obra);
   }
@@ -4739,9 +4824,8 @@ export default function App() {
   useEffect(() => {
     if (!user || !window.db) return;
     const userId = user.id || user.sub;
-    const unsub = window.db.subscribeListaObras(userId, async () => {
-      // Alguien creó/eliminó una obra → recarga la lista
-      const rows = await window.db.getObras(userId);
+    const unsub = window.db.subscribeListaObras(async () => {
+      const rows = await window.db.getObras();
       const obrasCompletas = await Promise.all(rows.map(async row => {
         const [incs, vos, insps, notas, cal] = await Promise.all([
           window.db.getModulo('incidencias', row.id),
@@ -4750,7 +4834,8 @@ export default function App() {
           window.db.getModulo('notas', row.id),
           window.db.getModulo('calidad', row.id),
         ]);
-        return rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal });
+        const rol = await window.db.getRolUsuario(row.id, userId);
+        return { ...rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal }), _rol: rol };
       }));
       setObras(obrasCompletas);
     });
@@ -4759,9 +4844,9 @@ export default function App() {
 
   useEffect(() => {
     if (!obraActiva || !user || !window.db) return;
-    const unsub = window.db.subscribeObra(obraActiva.id, user.id || user.sub, async (tabla) => {
-      // Un módulo de la obra activa cambió → recarga esa obra
-      const rows = await window.db.getObras(user.id || user.sub);
+    const userId = user.id || user.sub;
+    const unsub = window.db.subscribeObra(obraActiva.id, async (tabla) => {
+      const rows = await window.db.getObras();
       const row = rows.find(r => r.id === obraActiva.id);
       if (!row) return;
       const [incs, vos, insps, notas, cal] = await Promise.all([
@@ -4771,7 +4856,8 @@ export default function App() {
         window.db.getModulo('notas', row.id),
         window.db.getModulo('calidad', row.id),
       ]);
-      const obraActualizada = rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal });
+      const rol = await window.db.getRolUsuario(row.id, userId);
+      const obraActualizada = { ...rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal }), _rol: rol };
       setObras(prev => prev.map(o => o.id === obraActualizada.id ? obraActualizada : o));
       setObraActiva(obraActualizada);
     });
@@ -4822,7 +4908,7 @@ export default function App() {
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', overflow: 'hidden' }}>
           {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} onBackup={() => { setShowBackup(true); setBackupMsg(""); }} />}
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <DetalleObra obra={fresh} onBack={() => setObraActiva(null)} onSave={actualizarObra} isMobile={isMobile} />
+            <DetalleObra obra={fresh} onBack={() => setObraActiva(null)} onSave={actualizarObra} isMobile={isMobile} user={user} />
           </div>
         </div>
       </>
