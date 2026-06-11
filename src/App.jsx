@@ -1885,7 +1885,7 @@ function ModalRevision({ inc, onSinCambios, onConCambios, onClose }) {
           )}
         </div>
       </div>
-      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
+      {confirmar && <ConfirmMini titulo="Eliminar incidencia" texto="Vas a eliminar esta incidencia y todo su historial. Esta acción no se puede deshacer." onSi={() => { setConfirmar(false); onEliminar(); }} onNo={() => setConfirmar(false)} />}
     </div>
   );
 }
