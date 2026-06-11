@@ -4624,11 +4624,12 @@ export default function App() {
   // ── Helpers para separar datos por módulo ──────────────────────────────────
   function obraRow(o, userId) {
     return {
-      id: o.id, user_id: userId,
-      nombre: o.nombre, cliente: o.cliente, direccion: o.direccion,
-      responsable: o.responsable, estado: o.estado,
+      id: o.id,
+      user_id: userId,
       data: {
-        tipo: o.tipo, diasVisita: o.diasVisita, emplazamiento: o.emplazamiento,
+        nombre: o.nombre, cliente: o.cliente, direccion: o.direccion,
+        responsable: o.responsable, estado: o.estado, tipo: o.tipo,
+        diasVisita: o.diasVisita, emplazamiento: o.emplazamiento,
         propiedad: o.propiedad, proyectista: o.proyectista,
         direccionObra: o.direccionObra, constructora: o.constructora,
         deoFirmante: o.deoFirmante, numActaSeq: o.numActaSeq,
@@ -4640,10 +4641,17 @@ export default function App() {
   }
 
   function rowToObra(row, modulos) {
+    const d = row.data || {};
     return {
-      id: row.id, nombre: row.nombre, cliente: row.cliente,
-      direccion: row.direccion, responsable: row.responsable, estado: row.estado,
-      ...(row.data || {}),
+      id: row.id,
+      nombre: d.nombre, cliente: d.cliente, direccion: d.direccion,
+      responsable: d.responsable, estado: d.estado, tipo: d.tipo,
+      diasVisita: d.diasVisita, emplazamiento: d.emplazamiento,
+      propiedad: d.propiedad, proyectista: d.proyectista,
+      direccionObra: d.direccionObra, constructora: d.constructora,
+      deoFirmante: d.deoFirmante, numActaSeq: d.numActaSeq,
+      fases: d.fases || [], disciplinas: d.disciplinas || [],
+      lotes: d.lotes || [], creadaEn: d.creadaEn,
       incidencias: (modulos?.incidencias || []).map(r => r.data),
       actaVO: modulos?.actas_vo?.[0]?.data || null,
       actasInsp: (modulos?.actas_insp || []).map(r => r.data),
