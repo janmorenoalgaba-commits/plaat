@@ -4,49 +4,155 @@ import { createClient } from '@supabase/supabase-js'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase.js'
 import App from './App.jsx'
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  realtime: { params: { eventsPerSecond: 10 } },
+})
 
-// ── Almacenamiento (la app usa window.storage; lo redirigimos a Supabase) ──
+// ── Storage legacy (migración) ───────────────────────────────────────────────
 window.storage = {
   async get(key) {
     const { data, error } = await supabase
-      .from('plaat_data')
-      .select('value')
-      .eq('key', key)
-      .maybeSingle()
+      .from('plaat_data').select('value').eq('key', key).maybeSingle()
     if (error) throw error
     return data ? { value: data.value } : null
   },
   async set(key, value) {
-    const { error } = await supabase
-      .from('plaat_data')
-      .upsert({ key, value })
+    const { error } = await supabase.from('plaat_data').upsert({ key, value })
     if (error) throw error
     return { value }
   },
+  async delete(key) {
+    const { error } = await supabase.from('plaat_data').delete().eq('key', key)
+    if (error) throw error
+    return { deleted: true }
+  },
 }
 
-// ── Autenticación (login con correo y contraseña) ──
+// ── DB ───────────────────────────────────────────────────────────────────────
+window.db = {
+
+  // ─ Obras (RLS via obra_usuarios) ─────────────────────────────────────────
+  async getObras() {
+    // RLS filtra automáticamente las obras a las que el usuario tiene acceso
+    const { data, error } = await supabase
+      .from('obras').select('*').order('created_at', { ascending: false })
+    if (error) throw error
+    return data || []
+  },
+
+  async upsertObra(row) {
+    const { error } = await supabase.from('obras').upsert(row)
+    if (error) throw error
+  },
+
+  async deleteObra(id) {
+    // Solo funciona si el usuario es owner (RLS lo bloquea si no)
+    const { error } = await supabase.from('obras').delete().eq('id', id)
+    if (error) throw error
+  },
+
+  // ─ Permisos: obra_usuarios ───────────────────────────────────────────────
+  async getUsuariosObra(obraId) {
+    const { data, error } = await supabase
+      .from('obra_usuarios')
+      .select('user_id, rol, created_at, invitado_por')
+      .eq('obra_id', obraId)
+    if (error) throw error
+    return data || []
+  },
+
+  async addOwner(obraId, userId) {
+    const { error } = await supabase.from('obra_usuarios').upsert({
+      obra_id: obraId, user_id: userId, rol: 'owner', invitado_por: userId,
+    })
+    if (error) throw error
+  },
+
+  async invitarUsuario(obraId, emailInvitado, invitadoPorId) {
+    // Busca el user_id por email via función RPC
+    const { data, error } = await supabase.rpc('get_user_id_by_email', {
+      email_input: emailInvitado.trim().toLowerCase()
+    })
+    if (error) throw new Error('No se encontró ningún usuario con ese email')
+    if (!data) throw new Error('No se encontró ningún usuario con ese email')
+    const { error: e2 } = await supabase.from('obra_usuarios').upsert({
+      obra_id: obraId, user_id: data, rol: 'editor', invitado_por: invitadoPorId,
+    })
+    if (e2) throw e2
+    return data
+  },
+
+  async quitarAcceso(obraId, userId) {
+    const { error } = await supabase.from('obra_usuarios')
+      .delete().eq('obra_id', obraId).eq('user_id', userId)
+    if (error) throw error
+  },
+
+  async getRolUsuario(obraId, userId) {
+    const { data } = await supabase.from('obra_usuarios')
+      .select('rol').eq('obra_id', obraId).eq('user_id', userId).maybeSingle()
+    return data?.rol || null
+  },
+
+  // ─ Módulos independientes ────────────────────────────────────────────────
+  async getModulo(tabla, obraId) {
+    const { data, error } = await supabase
+      .from(tabla).select('*').eq('obra_id', obraId)
+    if (error) throw error
+    return data || []
+  },
+
+  async upsertModulo(tabla, row) {
+    const { error } = await supabase.from(tabla).upsert(row)
+    if (error) throw error
+  },
+
+  async deleteModulo(tabla, id) {
+    const { error } = await supabase.from(tabla).delete().eq('id', id)
+    if (error) throw error
+  },
+
+  // ─ Realtime ──────────────────────────────────────────────────────────────
+  subscribeObra(obraId, onCambio) {
+    const canal = supabase.channel(`obra-${obraId}`)
+    const tablas = ['obras', 'incidencias', 'actas_vo', 'actas_insp', 'notas', 'calidad']
+    tablas.forEach(tabla => {
+      canal.on('postgres_changes', {
+        event: '*', schema: 'public', table: tabla,
+        filter: tabla === 'obras' ? `id=eq.${obraId}` : `obra_id=eq.${obraId}`,
+      }, payload => onCambio(tabla, payload))
+    })
+    canal.subscribe()
+    return () => supabase.removeChannel(canal)
+  },
+
+  subscribeListaObras(onCambio) {
+    const canal = supabase.channel('obras-lista')
+    canal.on('postgres_changes', {
+      event: '*', schema: 'public', table: 'obra_usuarios',
+    }, () => onCambio())
+    canal.subscribe()
+    return () => supabase.removeChannel(canal)
+  },
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
 window.auth = {
   async signIn(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
     return data
   },
-  async signOut() {
-    await supabase.auth.signOut()
-  },
+  async signOut() { await supabase.auth.signOut() },
   async getUser() {
     const { data } = await supabase.auth.getUser()
     return data?.user || null
   },
   onChange(cb) {
-    supabase.auth.onAuthStateChange((_event, session) => cb(session?.user || null))
+    supabase.auth.onAuthStateChange((_e, session) => cb(session?.user || null))
   },
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  <React.StrictMode><App /></React.StrictMode>,
 )
