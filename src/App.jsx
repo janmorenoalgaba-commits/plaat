@@ -808,126 +808,123 @@ function comprimirImagen(file) {
 
 // ─── Actas de inspección genéricas (historial por obra) ─────────────────────
 const ESTADOS_INSP_ACTA = {
-  ok:         { label: 'Correcto',   bg: '#E8F5E0', color: '#2D5E10' },
-  incidencia: { label: 'Incidencia', bg: '#FDECEC', color: '#8A1F1F' },
-  info:       { label: 'Informativo',bg: '#EEEDE7', color: '#52524E' },
+  ok:         { label: 'Correcto',    bg: '#E8F5E0', color: '#2D5E10' },
+  incidencia: { label: 'Incidencia',  bg: '#FDECEC', color: '#8A1F1F' },
+  info:       { label: 'Informativo', bg: '#EEEDE7', color: '#52524E' },
 };
 
 function FormActaInspeccion({ obra, acta, onGuardar, onCerrar, onExportar }) {
   const isMobile = useIsMobile();
+  const nextNum = acta ? acta.num : ((obra.actasInsp || []).length + 1);
   const [a, setA] = useState(() => acta || {
-    id: uid(),
-    num: (obra.actasInsp || []).length + 1,
-    fecha: today(),
-    aspecto: '',
-    temas: [],
-    creadaEn: now(),
+    id: uid(), num: nextNum, fecha: today(), temas: [], creadaEn: now(),
   });
   const [confirmacion, setConfirmacion] = useState(null);
 
-  function upd(campo, val) { setA(prev => ({ ...prev, [campo]: val })); }
+  function upd(k, v) { setA(prev => ({ ...prev, [k]: v })); }
+
   function addTema() {
-    setA(prev => ({ ...prev, temas: [...prev.temas, { id: uid(), titulo: '', texto: '', estado: 'incidencia', fotos: [] }] }));
+    setA(prev => ({ ...prev, temas: [...prev.temas, {
+      id: uid(), num: `N${prev.temas.length + 1}`, titulo: '', descripcion: '', estado: 'incidencia', fotos: [],
+    }]}));
   }
-  function updTema(id, campo, val) {
-    setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === id ? { ...t, [campo]: val } : t) }));
+  function updTema(id, k, v) {
+    setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === id ? { ...t, [k]: v } : t) }));
   }
-  function delTema(id) {
-    setA(prev => ({ ...prev, temas: prev.temas.filter(t => t.id !== id) }));
-    setConfirmacion(null);
-  }
+  function delTema(id) { setA(prev => ({ ...prev, temas: prev.temas.filter(t => t.id !== id) })); setConfirmacion(null); }
   function addFoto(temaId) {
-    pickFiles('image/*', f => setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === temaId ? { ...t, fotos: [...(t.fotos || []), { id: uid(), data: f.data }] } : t) })));
+    pickFiles('image/*', f => setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === temaId ? { ...t, fotos: [...(t.fotos||[]), { id: uid(), data: f.data }] } : t) })));
   }
   function delFoto(temaId, fotoId) {
-    setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === temaId ? { ...t, fotos: (t.fotos || []).filter(ft => ft.id !== fotoId) } : t) }));
+    setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === temaId ? { ...t, fotos: (t.fotos||[]).filter(f => f.id !== fotoId) } : t) }));
   }
 
-  function guardar() { onGuardar(a); }
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: isMobile ? 'auto' : '70vh', background: '#FFFFFF', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-
-        {/* Cabecera */}
-        <div style={{ background: '#1A1A17', padding: isMobile ? '16px' : '18px 22px', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '18px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <button onClick={onCerrar} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 15, cursor: 'pointer', padding: 0 }}>←</button>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#F2F1ED', display: 'flex', alignItems: 'baseline', gap: 7 }}>
-              Acta de inspección <span style={{ fontSize: 12, color: '#8AA88A' }}>.</span>
-            </div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Nº {String(a.num).padStart(2, '0')}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#FFFFFF', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+      {/* Cabecera */}
+      <div style={{ background: '#1A1A17', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        <button onClick={onCerrar} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 15, cursor: 'pointer', padding: 0, flexShrink: 0 }}>←</button>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#F2F1ED', display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            Acta de inspección <span style={{ color: '#8AA88A' }}>Nº {String(a.num).padStart(2,'0')}</span>
           </div>
-          <button onClick={guardar} style={{ padding: '8px 16px', borderRadius: 11, border: 'none', background: '#5A7D5A', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Guardar</button>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{obra.nombre}</div>
         </div>
+        <button onClick={() => onGuardar(a)} style={{ padding: '8px 18px', borderRadius: 11, border: 'none', background: '#5A7D5A', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Guardar</button>
+      </div>
 
-        {/* Cuerpo */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px' : '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Cuerpo */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Datos */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Nº de acta">
-              <input type="number" min="1" value={a.num} onChange={e => upd('num', Math.max(1, parseInt(e.target.value || '1', 10)))} />
-            </Field>
-            <Field label="Fecha de inspección">
-              <input type="date" value={a.fecha} onChange={e => upd('fecha', e.target.value)} />
-            </Field>
-          </div>
-
-          <Field label="Aspecto revisado">
-            <textarea value={a.aspecto} onChange={e => upd('aspecto', e.target.value)} placeholder="Describe brevemente qué se ha revisado en esta inspección..." style={{ minHeight: 70 }} />
+        {/* Nº y fecha */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Field label="Nº de acta">
+            <input type="number" min="1" value={a.num} onChange={e => upd('num', Math.max(1, parseInt(e.target.value||'1',10)))} />
           </Field>
+          <Field label="Fecha de inspección">
+            <input type="date" value={a.fecha} onChange={e => upd('fecha', e.target.value)} />
+          </Field>
+        </div>
 
-          {/* Temas / incidencias */}
-          <div>
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 600, marginBottom: 10 }}>Incidencias detectadas</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {a.temas.map((t, i) => {
-                const est = ESTADOS_INSP_ACTA[t.estado] || ESTADOS_INSP_ACTA.incidencia;
-                return (
-                  <div key={t.id} style={{ background: '#F7F6F3', borderRadius: 14, border: '1px solid #E6E4DD', padding: '14px 15px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                      <span style={{ width: 26, height: 26, borderRadius: 8, background: '#1A1A17', color: '#F2F1ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{i + 1}</span>
-                      <input value={t.titulo} onChange={e => updTema(t.id, 'titulo', e.target.value)} placeholder="Título de la incidencia" style={{ flex: 1, fontWeight: 600, padding: '8px 11px' }} />
-                      <button onClick={() => setConfirmacion({ titulo: 'Eliminar incidencia', texto: `Vas a eliminar "${t.titulo || 'esta incidencia'}".`, onSi: () => delTema(t.id) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, lineHeight: 1, flexShrink: 0 }}>×</button>
-                    </div>
-                    <textarea value={t.texto} onChange={e => updTema(t.id, 'texto', e.target.value)} placeholder="Descripción de la incidencia..." style={{ minHeight: 60, marginBottom: 10 }} />
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-                      {Object.entries(ESTADOS_INSP_ACTA).map(([k, v]) => (
-                        <button key={k} onClick={() => updTema(t.id, 'estado', k)} style={{ padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${t.estado === k ? v.color : '#E6E4DD'}`, background: t.estado === k ? v.bg : 'transparent', color: t.estado === k ? v.color : '#9B9B97', fontSize: 12, fontWeight: t.estado === k ? 600 : 400, cursor: 'pointer' }}>
-                          {v.label}
-                        </button>
-                      ))}
-                    </div>
-                    {/* Fotos */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {(t.fotos || []).map(ft => (
-                        <div key={ft.id} style={{ position: 'relative', width: 72, height: 54 }}>
-                          <img src={ft.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8, display: 'block' }} />
-                          <button onClick={() => delFoto(t.id, ft.id)} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 17, height: 17, cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
-                        </div>
-                      ))}
-                      <button onClick={() => addFoto(t.id)} style={{ width: 72, height: 54, borderRadius: 8, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 11, color: '#9B9B97' }}>+ foto</button>
-                    </div>
-                  </div>
-                );
-              })}
+        {/* Tabla resumen de temas tratados */}
+        <div style={{ background: '#F7F6F3', borderRadius: 12, border: '1px solid #E6E4DD', overflow: 'hidden' }}>
+          <div style={{ background: '#1A1A17', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#F2F1ED', letterSpacing: '0.05em' }}>TEMAS TRATADOS</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginLeft: 'auto' }}>{a.temas.length} tema{a.temas.length !== 1 ? 's' : ''}</span>
+          </div>
+          {a.temas.length === 0 && <div style={{ padding: '14px', fontSize: 13, color: '#A5A5A0', textAlign: 'center' }}>Sin temas todavía — añade uno abajo</div>}
+          {a.temas.map((t, i) => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: i > 0 ? '1px solid #E6E4DD' : 'none', background: '#fff' }}>
+              <span style={{ width: 32, height: 32, borderRadius: 8, background: '#1A1A17', color: '#F2F1ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{t.num}</span>
+              <input value={t.titulo} onChange={e => updTema(t.id,'titulo',e.target.value)} placeholder="Título del tema..." style={{ flex: 1, fontWeight: 600, fontSize: 13 }} />
+              <select value={t.estado} onChange={e => updTema(t.id,'estado',e.target.value)} style={{ fontSize: 11, padding: '4px 8px', borderRadius: 20, border: `1px solid ${ESTADOS_INSP_ACTA[t.estado]?.color}30`, background: ESTADOS_INSP_ACTA[t.estado]?.bg, color: ESTADOS_INSP_ACTA[t.estado]?.color, fontWeight: 600, width: 'auto' }}>
+                {Object.entries(ESTADOS_INSP_ACTA).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+              <button onClick={() => setConfirmacion({ titulo: 'Eliminar tema', texto: `Vas a eliminar "${t.titulo||'este tema'}".`, onSi: () => delTema(t.id) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, lineHeight: 1, flexShrink: 0 }}>×</button>
             </div>
-            <button onClick={addTema} style={{ width: '100%', padding: '11px', marginTop: 10, borderRadius: 12, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#6B6B66', fontWeight: 500 }}>+ Añadir incidencia</button>
+          ))}
+          <div style={{ padding: '10px 14px', borderTop: a.temas.length > 0 ? '1px solid #E6E4DD' : 'none' }}>
+            <button onClick={addTema} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#6B6B66', fontWeight: 500 }}>+ Añadir tema</button>
           </div>
         </div>
 
-        {/* Pie: exportar */}
-        <div style={{ borderTop: '1px solid #ECEAE4', padding: isMobile ? '12px 16px calc(12px + env(safe-area-inset-bottom))' : '14px 22px', display: 'flex', gap: 10, flexShrink: 0, background: '#fff' }}>
-          <Btn onClick={onCerrar} full>Cerrar</Btn>
-          <Btn primary full onClick={() => { onGuardar(a); onExportar(a); }}>↓ Exportar PDF</Btn>
-        </div>
+        {/* Desarrollo de cada tema */}
+        {a.temas.map((t, i) => (
+          <div key={t.id} style={{ background: '#fff', borderRadius: 14, border: '1px solid #E6E4DD', overflow: 'hidden' }}>
+            <div style={{ background: '#F0EFE9', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 28, height: 28, borderRadius: 7, background: '#1A1A17', color: '#F2F1ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{t.num}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#16160F', flex: 1 }}>{t.titulo || 'Sin título'}</span>
+              <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: ESTADOS_INSP_ACTA[t.estado]?.bg, color: ESTADOS_INSP_ACTA[t.estado]?.color, fontWeight: 600 }}>{ESTADOS_INSP_ACTA[t.estado]?.label}</span>
+            </div>
+            <div style={{ padding: '14px' }}>
+              <Field label="Descripción detallada">
+                <textarea value={t.descripcion} onChange={e => updTema(t.id,'descripcion',e.target.value)} placeholder="Describe la incidencia, qué se observa, qué se solicita a la EC..." style={{ minHeight: 90 }} />
+              </Field>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                {(t.fotos||[]).map(ft => (
+                  <div key={ft.id} style={{ position: 'relative', width: 80, height: 60 }}>
+                    <img src={ft.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 9, display: 'block' }} />
+                    <button onClick={() => delFoto(t.id, ft.id)} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                  </div>
+                ))}
+                <button onClick={() => addFoto(t.id)} style={{ width: 80, height: 60, borderRadius: 9, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 11, color: '#9B9B97' }}>+ foto</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
 
+      {/* Pie */}
+      <div style={{ borderTop: '1px solid #ECEAE4', padding: '14px 20px', display: 'flex', gap: 10, flexShrink: 0, background: '#fff' }}>
+        <Btn onClick={onCerrar} full>Cerrar</Btn>
+        <Btn primary full onClick={() => { onGuardar(a); onExportar(a); }}>↓ Exportar PDF</Btn>
+      </div>
       {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
   );
 }
 
-// Generador PDF del acta de inspección genérica
+// ─── Generador PDF Acta Inspección ────────────────────────────────────────────
 async function generarActaInspeccion(obra, acta) {
   if (!window.jspdf) {
     await new Promise((res, rej) => {
@@ -940,111 +937,214 @@ async function generarActaInspeccion(obra, acta) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PW = 210, PH = 297, M = 14, CW = PW - M * 2;
-  const NEGRO = [0, 0, 0], GRIS = [217, 217, 217];
-  const num = String(acta.num).padStart(2, '0');
-  const fecha = acta.fecha ? new Date(acta.fecha).toLocaleDateString('es-ES') : '';
+  const LW = 0.25;
+  const num = String(acta.num).padStart(2,'0');
+  const fechaStr = acta.fecha ? new Date(acta.fecha).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
   let y = 0;
 
-  function setLW() { doc.setLineWidth(0.25); doc.setDrawColor(...NEGRO); }
-  function pie() {
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
-    doc.text('Plaat Arquitectura Técnica', M, PH - 8);
-    doc.text('Barcelona \u2013 Madrid', PW / 2, PH - 8, { align: 'center' });
-    doc.text('www.plaat.es', PW - M, PH - 8, { align: 'right' });
-  }
+  function setLW() { doc.setLineWidth(LW); doc.setDrawColor(0,0,0); }
   function cabecera() {
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
-    doc.text(`PARTE DE INSPECCIÓN Nº ${num}`, M, 10);
-    doc.setFontSize(22); doc.text('Plaat.', PW - M, 12, { align: 'right' });
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+    doc.text(`PARTE DE INSPECCIÓN Nº: ${num}`, M, 8);
+    doc.text(`FECHA PARTE INSPECCIÓN: ${fechaStr}`, M, 12);
+    doc.setFontSize(22); doc.setFont('helvetica','normal');
+    doc.text('Plaat.', PW-M, 12, {align:'right'});
   }
-  function checkPage(h) { if (y + h > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; } }
+  function pie() {
+    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+    doc.text('Plaat Arquitectura Técnica', M, PH-6);
+    doc.text('Barcelona \u2013 Madrid', PW/2, PH-6, {align:'center'});
+    doc.text('www.plaat.es', PW-M, PH-6, {align:'right'});
+  }
+  function checkPage(h) {
+    if (y+h > PH-16) { doc.addPage(); cabecera(); pie(); y=22; }
+  }
+  function wText(x,yy,w,h,txt,opts={}) {
+    if (!txt) return;
+    const sz=opts.size||8.5; const bold=opts.bold||false;
+    doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(sz); doc.setTextColor(0,0,0);
+    const ll=doc.splitTextToSize(String(txt),w-3);
+    let ty=yy+3+sz*0.352645;
+    ll.forEach(l=>{doc.text(l,x+2,ty);ty+=sz*0.352645+0.6;});
+  }
+  function rowH(txt,w,sz,minH) {
+    doc.setFontSize(sz||8.5);
+    const h=doc.splitTextToSize(String(txt||''),w-3).length*((sz||8.5)*0.352645+0.6)+5;
+    return Math.max(minH||7,h);
+  }
 
-  cabecera(); pie(); y = 20;
+  cabecera(); pie(); y=18;
 
-  // Banda título
-  doc.setFillColor(...GRIS); setLW();
-  doc.rect(M, y, CW, 9, 'F'); doc.rect(M, y, CW, 9);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(0, 0, 0);
-  doc.text(`ACTA DE INSPECCIÓN DE OBRA · NÚM. ${num}`, M + 3, y + 6.2);
-  y += 9;
+  // ── Banda título principal ──────────────────────────────────────────────
+  doc.setFillColor(217,217,217); setLW();
+  doc.rect(M,y,CW-30,9,'F'); doc.rect(M,y,CW-30,9);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(0,0,0);
+  doc.text('ACTA DE INSPECCIÓN DE OBRA', M+2, y+6);
+  doc.rect(M+CW-30,y,30,9,'F'); doc.rect(M+CW-30,y,30,9);
+  doc.text(`NÚM.: ${num}`, M+CW-29, y+6);
+  y+=9;
 
-  // Datos obra
-  const datos = [
-    ['OBRA', obra.nombre || ''],
-    ['EMPLAZAMIENTO', obra.emplazamiento || obra.direccion || ''],
-    ['FECHA INSPECCIÓN', fecha],
+  // ── Obra y emplazamiento ────────────────────────────────────────────────
+  [['OBRA', obra.nombre||''], ['EMPLAZAMIENTO', obra.emplazamiento||obra.direccion||'']].forEach(([k,v])=>{
+    const h=rowH(v,CW-38,8.5,7);
+    checkPage(h); setLW();
+    doc.setFillColor(235,235,230); doc.rect(M,y,38,h,'F'); doc.rect(M,y,38,h);
+    doc.rect(M+38,y,CW-38,h); doc.setFillColor(255,255,255);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+    doc.text(k, M+2, y+5.2);
+    doc.setFont('helvetica','normal'); wText(M+38,y,CW-38,h,v,{size:8.5});
+    y+=h;
+  });
+  y+=5;
+
+  // ── Datos de la obra ────────────────────────────────────────────────────
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+  doc.text('DATOS DE LA OBRA:', M, y); y+=5;
+  const datosObra=[
+    ['PROPIEDAD',    obra.propiedad||''],
+    ['PROYECTISTA',  obra.proyectista||''],
+    ['DO',           obra.direccionObra||''],
+    ['DEO',          obra.deoFirmante ? `PLAAT ARQUITECTURA TÉCNICA S.L. \u2014 ${obra.deoFirmante}` : 'PLAAT ARQUITECTURA TÉCNICA S.L.'],
+    ['CONSTRUCTORA', obra.constructora||''],
   ];
-  datos.forEach(([k, v]) => {
-    const ll = doc.splitTextToSize(String(v), CW - 48);
-    const h = Math.max(7, ll.length * 4.4 + 3);
-    checkPage(h);
-    doc.setFillColor(...GRIS); doc.rect(M, y, 46, h, 'F'); setLW();
-    doc.rect(M, y, 46, h); doc.rect(M + 46, y, CW - 46, h);
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.text(k, M + 2, y + 4.8);
-    doc.setFont('helvetica', 'normal'); doc.text(ll, M + 48, y + 4.8);
-    y += h;
+  datosObra.forEach(([k,v])=>{
+    const h=rowH(v,CW-38,8.5,7);
+    checkPage(h); setLW();
+    doc.setFillColor(235,235,230); doc.rect(M,y,38,h,'F'); doc.rect(M,y,38,h);
+    doc.rect(M+38,y,CW-38,h);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+    doc.text(k, M+2, y+5.2);
+    doc.setFont('helvetica','normal'); wText(M+38,y,CW-38,h,v,{size:8.5});
+    y+=h;
   });
-  y += 5;
+  y+=8;
 
-  // Aspecto revisado
-  if (acta.aspecto) {
-    checkPage(14);
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
-    doc.text('ASPECTO REVISADO', M, y); y += 5;
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-    const al = doc.splitTextToSize(acta.aspecto, CW);
-    doc.text(al, M, y + 3); y += al.length * 4.4 + 8;
+  // ── Aspecto revisado: tabla de temas tratados ───────────────────────────
+  if ((acta.temas||[]).length > 0) {
+    checkPage(20);
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text('Aspecto revisado:', M, y); y+=4;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+    const introTxt = 'Durante la visita realizada, se han revisado los siguientes aspectos:';
+    doc.text(doc.splitTextToSize(introTxt, CW), M, y); y+=8;
+
+    // Cabecera tabla
+    checkPage(10);
+    doc.setFillColor(235,235,230); setLW();
+    doc.rect(M,y,20,7,'F'); doc.rect(M,y,20,7);
+    doc.rect(M+20,y,CW-20,7,'F'); doc.rect(M+20,y,CW-20,7);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+    doc.text('N.º', M+2, y+5);
+    doc.text('TEMAS TRATADOS', M+22, y+5);
+    y+=7;
+
+    (acta.temas||[]).forEach(t=>{
+      const h=rowH(t.titulo,CW-20,8.5,9);
+      checkPage(h); setLW();
+      doc.rect(M,y,20,h);
+      doc.rect(M+20,y,CW-20,h);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+      doc.text(t.num||'', M+2, y+5.5);
+      wText(M+20,y,CW-20,h,t.titulo,{bold:true,size:8.5});
+      y+=h;
+    });
+    y+=6;
+
+    // Texto incidencias
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+    doc.text('Incidencias detectadas:', M, y); y+=4;
+    doc.setFont('helvetica','normal');
+    const txt1='Las incidencias detectadas, deberán subsanarse y dar respuesta a la DEO.';
+    const txt2='Para ello deberán rellenar los datos solicitados en cada una de las incidencias detectadas y enviar fotografías a la DEO con las rectificaciones.';
+    const txt3='Se adjuntan tablas con las incidencias detectadas.';
+    [txt1,txt2,txt3].forEach(t=>{
+      const ll=doc.splitTextToSize(t,CW); doc.text(ll,M,y); y+=ll.length*4.4+2;
+    });
+    y+=4;
+    const txt4='Este Acta de Inspección de obra se ha llevado a cabo en base a las inspecciones y muestreos realizados por el DEO en la fecha indicada y en base a Partes de Inspección procedimentados.';
+    const ll4=doc.splitTextToSize(txt4,CW); doc.text(ll4,M,y); y+=ll4.length*4.4+6;
   }
 
-  // Incidencias
-  checkPage(10);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
-  doc.text('INCIDENCIAS DETECTADAS', M, y); y += 7;
+  // ── Zonas revisadas (desarrollo por tema) ──────────────────────────────
+  if ((acta.temas||[]).length > 0) {
+    doc.addPage(); cabecera(); pie(); y=22;
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(0,0,0);
+    doc.text('1. ZONAS REVISADAS', M, y); y+=8;
 
-  (acta.temas || []).forEach((t, i) => {
-    const titulo = `${i + 1}. ${t.titulo || ''}`;
-    const tl = doc.splitTextToSize(titulo, CW - 4);
-    const hHead = tl.length * 4.6 + 3;
-    checkPage(hHead + 6);
-    // Fila título gris
-    doc.setFillColor(...GRIS); doc.rect(M, y, CW, hHead, 'F'); setLW(); doc.rect(M, y, CW, hHead);
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
-    doc.text(tl, M + 2, y + 4.8);
-    y += hHead;
-    // Texto
-    if (t.texto) {
-      const dl = doc.splitTextToSize(t.texto, CW - 4);
-      const dh = dl.length * 4.4 + 5;
-      checkPage(dh);
-      setLW(); doc.rect(M, y, CW, dh);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(dl, M + 2, y + 5);
-      y += dh;
+    for (const t of acta.temas) {
+      // Fila encabezado tema
+      const hHead=rowH(t.titulo,CW-20,9,9);
+      checkPage(hHead+6);
+      doc.setFillColor(255,255,255); setLW();
+      doc.rect(M,y,20,hHead);
+      doc.rect(M+20,y,CW-20,hHead);
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+      doc.text(t.num||'', M+2, y+hHead/2+1.5);
+      wText(M+20,y,CW-20,hHead,t.titulo,{bold:true,size:9});
+      y+=hHead;
+
+      // Descripción
+      if (t.descripcion) {
+        const dl=doc.splitTextToSize(t.descripcion,CW-6);
+        const dh=Math.max(12,dl.length*4.6+6);
+        checkPage(dh); setLW();
+        doc.rect(M,y,CW,dh);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+        doc.text(dl,M+3,y+5.5);
+        y+=dh;
+      }
+
+      // Fotos 2 por fila
+      const fotos=t.fotos||[]; const fW=(CW-4)/2;
+      for (let fi=0;fi<fotos.length;fi+=2) {
+        const pair=[fotos[fi],fotos[fi+1]].filter(Boolean);
+        const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.data);const r=pr.height/pr.width;const h=Math.min(fW*r,75);return{w:h/r,h};}catch(e){return{w:fW,h:58};}});
+        const rh=Math.max(...dims.map(d=>d.h));
+        checkPage(rh+6);
+        pair.forEach((f,pi)=>{
+          doc.addImage(f.data,'JPEG',M+pi*(fW+4),y,dims[pi].w,dims[pi].h);
+          // Marco amarillo/rojo alrededor de la foto
+          doc.setLineWidth(0.6); doc.setDrawColor(220,150,0);
+          doc.rect(M+pi*(fW+4),y,dims[pi].w,dims[pi].h);
+          setLW();
+        });
+        y+=rh+6;
+      }
+
+      // Nota + tabla rectificación si es incidencia
+      if (t.estado === 'incidencia') {
+        checkPage(30);
+        doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+        const nota='NOTA: El contratista ha sido informado por la DF y se compromete a la ejecución de las medidas correctoras necesarias.';
+        const nl=doc.splitTextToSize(nota,CW); doc.text(nl,M,y+4); y+=nl.length*4+6;
+        // Tabla rectificación
+        checkPage(20); setLW();
+        const cols=[['Rectificado Día',40],['Responsable \u2013 Nombre',70],['Firma',CW-110]];
+        let cx=M;
+        cols.forEach(([label,w])=>{
+          doc.setFillColor(235,235,230); doc.rect(cx,y,w,7,'F'); doc.rect(cx,y,w,7);
+          doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text(label,cx+2,y+5);
+          doc.rect(cx,y+7,w,14); cx+=w;
+        });
+        y+=22;
+      }
+      y+=6;
     }
-    // Fotos 2 por fila
-    const fotos = t.fotos || [];
-    const fW = (CW - 4) / 2;
-    for (let fi = 0; fi < fotos.length; fi += 2) {
-      const pair = [fotos[fi], fotos[fi + 1]].filter(Boolean);
-      const dims = pair.map(f => { try { const pr = doc.getImageProperties(f.data); const r = pr.height / pr.width; const h = Math.min(fW * r, 70); return { w: h / r, h }; } catch (e) { return { w: fW, h: 52 }; } });
-      const rowH = Math.max(...dims.map(d => d.h));
-      checkPage(rowH + 4);
-      pair.forEach((f, pi) => doc.addImage(f.data, 'JPEG', M + pi * (fW + 4), y, dims[pi].w, dims[pi].h));
-      y += rowH + 4;
-    }
-    y += 5;
-  });
+  }
 
-  // Firma
-  checkPage(28); y += 4;
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
-  doc.text('Director de Ejecución de Obra:', M, y); y += 4;
-  if (obra.deoFirmante) { doc.setFont('helvetica', 'bold'); doc.text(obra.deoFirmante, M, y + 4); }
-  setLW(); doc.rect(M, y + 8, CW / 2, 18);
+  // ── Firma DEO ────────────────────────────────────────────────────────────
+  checkPage(36); y+=4;
+  const lugarFecha = `${obra.emplazamiento||obra.direccion||''}, ${acta.fecha?new Date(acta.fecha).toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'}):''}.`;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+  doc.text(lugarFecha, M, y); y+=12;
+  doc.setFont('helvetica','bold'); doc.text('DIRECTOR DE EJECUCIÓN DE OBRA', M, y); y+=5;
+  if (obra.deoFirmante) { doc.setFont('helvetica','normal'); doc.text(obra.deoFirmante, M, y); }
 
-  const total = doc.getNumberOfPages();
-  for (let p = 1; p <= total; p++) { doc.setPage(p); pie(); }
-  doc.save(`Acta_Inspeccion_${num}_${(obra.nombre || 'obra').replace(/\s+/g, '_')}.pdf`);
+  const total=doc.getNumberOfPages();
+  for(let p=1;p<=total;p++){doc.setPage(p);pie();}
+  doc.save(`Acta_Inspeccion_${num}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`);
 }
+
 
 function ModuloInspecciones({ obra, onSave }) {
   const isMobile = useIsMobile();
@@ -1060,13 +1160,22 @@ function ModuloInspecciones({ obra, onSave }) {
 
   const actas = obra.actasInsp || [];
 
-  function guardarActa(acta) {
+  async function guardarActa(acta) {
     const existe = actas.some(x => x.id === acta.id);
     const nuevas = existe ? actas.map(x => x.id === acta.id ? acta : x) : [acta, ...actas];
+    // Guardar en Supabase directamente
+    try {
+      await window.db.upsertModulo('actas_insp', { id: acta.id, obra_id: obra.id, data: acta, updated_at: now() });
+    } catch(e) { console.error('Error guardando acta:', e); }
     onSave({ ...obra, actasInsp: nuevas });
-    setActaActiva(acta); // mantener referencia fresca
+    setActaActiva(acta);
   }
-  function eliminarActa(id) {
+
+  async function eliminarActa(id) {
+    // Eliminar de Supabase directamente
+    try {
+      await window.db.deleteModulo('actas_insp', id);
+    } catch(e) { console.error('Error eliminando acta:', e); }
     onSave({ ...obra, actasInsp: actas.filter(x => x.id !== id) });
     setConfirmacion(null);
   }
