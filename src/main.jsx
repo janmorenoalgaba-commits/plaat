@@ -94,6 +94,17 @@ window.db = {
     return data?.rol || null
   },
 
+  // ─ Perfiles de usuario ───────────────────────────────────────────────────
+  async getPerfiles() {
+    const { data, error } = await supabase.from('perfiles').select('user_id, nombre');
+    if (error) throw error;
+    return data || [];
+  },
+  async upsertPerfil(userId, nombre) {
+    const { error } = await supabase.from('perfiles').upsert({ user_id: userId, nombre, updated_at: new Date().toISOString() });
+    if (error) throw error;
+  },
+
   // ─ Módulos independientes ────────────────────────────────────────────────
   async getModulo(tabla, obraId) {
     const { data, error } = await supabase
