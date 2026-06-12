@@ -1022,7 +1022,7 @@ async function generarActaInspeccion(obra, acta) {
     ['PROPIEDAD',    obra.propiedad || ''],
     ['PROYECTISTA',  obra.proyectista || ''],
     ['DO',           obra.direccionObra || ''],
-    ['DEO',          obra.deoFirmante ? `PLAAT ARQUITECTURA TÉCNICA S.L. \u2014 ${obra.deoFirmante}` : 'PLAAT ARQUITECTURA TÉCNICA S.L.'],
+    ['DEO',          'PLAAT ARQUITECTURA TÉCNICA S.L.'],
     ['CONSTRUCTORA', obra.constructora || ''],
   ].forEach(([k, v]) => {
     const h = calcH(v, CW - 36, 8.5, 8);
@@ -1035,9 +1035,9 @@ async function generarActaInspeccion(obra, acta) {
   y += 8;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
   doc.text('FECHA FIRMA:', M, y); y += 5;
-  const lugarFecha = `${obra.emplazamiento || obra.direccion || ''}, ${acta.fecha ? new Date(acta.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}.`;
+  const soloFecha = acta.fecha ? new Date(acta.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
-  doc.text(lugarFecha, M, y); y += 14;
+  doc.text(soloFecha, M, y); y += 14;
 
   // Firma portada
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
@@ -1103,45 +1103,62 @@ async function generarActaInspeccion(obra, acta) {
     const FOTO_H = 62;             // altura fija uniforme
 
     for (const t of temas) {
-      // Cabecera tema — Nº + título en gris
+      // Calcular altura total del bloque: cabecera + descripción + fotos
+      const fotos = t.fotos || [];
+      const filasFoto = Math.ceil(fotos.length / 2);
+      const descLL = t.descripcion ? doc.splitTextToSize(t.descripcion, CW - COL_N - 6) : [];
+      const descH = descLL.length > 0 ? descLL.length * 4.4 + 6 : 0;
+      const fotosH = filasFoto > 0 ? filasFoto * (FOTO_H + 4) + 4 : 0;
       const hTit = calcH(t.titulo, COL_T, 9, 9);
-      if (y + hTit + 10 > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
-      celda(M, y, COL_N, hTit, t.num || '', { bold: true, fill: GRIS_CAB });
+      const hCuerpo = Math.max(10, descH + fotosH);
+
+      // Salto de página si no cabe el bloque entero (o al menos cabecera + algo)
+      if (y + hTit + 20 > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
+
+      // Cabecera tema — Nº centrado + título en gris
+      // Columna Nº con texto centrado
+      sl(); doc.setFillColor(...GRIS_CAB);
+      doc.rect(M, y, COL_N, hTit, 'FD');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+      const numW = doc.getTextWidth(t.num || '');
+      doc.text(t.num || '', M + (COL_N - numW) / 2, y + hTit / 2 + 1.5);
+      // Columna título
       celda(M + COL_N, y, COL_T, hTit, t.titulo, { bold: true, fill: GRIS_CAB });
       y += hTit;
 
-      // Descripción
-      if (t.descripcion) {
-        const ll = doc.splitTextToSize(t.descripcion, CW - 4);
-        const dh = Math.max(12, ll.length * 4.4 + 6);
-        if (y + dh > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
-        sl(); doc.rect(M, y, CW, dh);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
-        doc.text(ll, M + 3, y + 5);
-        y += dh;
-      }
+      // Cuerpo: descripción + fotos en una sola zona sin celdas separadas
+      if (hCuerpo > 0) {
+        if (y + hCuerpo > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
+        // Marco exterior único
+        sl(); doc.rect(M, y, CW, hCuerpo);
+        let cy = y + 4;
 
-      // Fotos: 2 por fila, tamaño fijo FOTO_W x FOTO_H, sin bordes de color
-      const fotos = t.fotos || [];
-      for (let fi = 0; fi < fotos.length; fi += 2) {
-        const pair = [fotos[fi], fotos[fi + 1]].filter(Boolean);
-        if (y + FOTO_H + 4 > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
-        pair.forEach((f, pi) => {
-          try {
-            // Calcular dimensiones manteniendo proporción dentro del cuadro fijo
-            const pr = doc.getImageProperties(f.data);
-            const ratio = pr.width / pr.height;
-            let iw = FOTO_W, ih = FOTO_H;
-            if (ratio > FOTO_W / FOTO_H) { ih = FOTO_W / ratio; }
-            else { iw = FOTO_H * ratio; }
-            const ox = M + pi * (FOTO_W + 4) + (FOTO_W - iw) / 2;
-            const oy = y + (FOTO_H - ih) / 2;
-            doc.addImage(f.data, 'JPEG', ox, oy, iw, ih);
-            // Marco neutro fino
-            sl(); doc.rect(M + pi * (FOTO_W + 4), y, FOTO_W, FOTO_H);
-          } catch (e) { /* imagen inválida, ignorar */ }
-        });
-        y += FOTO_H + 4;
+        // Descripción
+        if (descLL.length > 0) {
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
+          doc.text(descLL, M + 3, cy + 4);
+          cy += descH;
+        }
+
+        // Fotos — 2 por fila, tamaño fijo, sin bordes extra
+        for (let fi = 0; fi < fotos.length; fi += 2) {
+          const pair = [fotos[fi], fotos[fi + 1]].filter(Boolean);
+          if (cy + FOTO_H + 4 > y + hCuerpo) break; // seguridad
+          pair.forEach((f, pi) => {
+            try {
+              const pr = doc.getImageProperties(f.data);
+              const ratio = pr.width / pr.height;
+              let iw = FOTO_W, ih = FOTO_H;
+              if (ratio > FOTO_W / FOTO_H) ih = FOTO_W / ratio;
+              else iw = FOTO_H * ratio;
+              const ox = M + pi * (FOTO_W + 4) + (FOTO_W - iw) / 2;
+              const oy = cy + (FOTO_H - ih) / 2;
+              doc.addImage(f.data, 'JPEG', ox, oy, iw, ih);
+            } catch (e) { /* imagen inválida */ }
+          });
+          cy += FOTO_H + 4;
+        }
+        y += hCuerpo;
       }
       y += 6;
     }
