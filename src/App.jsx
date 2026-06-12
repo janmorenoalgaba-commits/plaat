@@ -341,14 +341,26 @@ function DashedBtn({ children, onClick }) {
 
 // ── Modal Compartir obra ─────────────────────────────────────────────────────
 function ModalCompartir({ obra, user, onClose }) {
-  const [email, setEmail] = useState('');
+  const [email,    setEmail]    = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [msg,      setMsg]      = useState('');
   const [usuarios, setUsuarios] = useState([]);
+  const [perfiles, setPerfiles] = useState({});
+  const [confirm,  setConfirm]  = useState(null);
   const userId = user?.id || user?.sub;
+  const esOwner = obra._rol === 'owner';
 
   useEffect(() => {
-    window.db?.getUsuariosObra(obra.id).then(setUsuarios).catch(() => {});
+    // Cargar accesos y perfiles en paralelo
+    Promise.all([
+      window.db?.getUsuariosObra(obra.id).catch(() => []),
+      window.db?.getPerfiles().catch(() => []),
+    ]).then(([accesos, profs]) => {
+      setUsuarios(accesos);
+      const map = {};
+      profs.forEach(p => { map[p.user_id] = p.nombre; });
+      setPerfiles(map);
+    });
   }, [obra.id]);
 
   async function invitar() {
@@ -358,55 +370,97 @@ function ModalCompartir({ obra, user, onClose }) {
       await window.db.invitarUsuario(obra.id, email.trim(), userId);
       setMsg('✓ Usuario añadido correctamente.');
       setEmail('');
-      const updated = await window.db.getUsuariosObra(obra.id);
-      setUsuarios(updated);
-    } catch (e) { setMsg('Error: ' + e.message); }
+      const [accesos, profs] = await Promise.all([
+        window.db.getUsuariosObra(obra.id),
+        window.db.getPerfiles(),
+      ]);
+      setUsuarios(accesos);
+      const map = {};
+      profs.forEach(p => { map[p.user_id] = p.nombre; });
+      setPerfiles(map);
+    } catch(e) { setMsg('Error: ' + e.message); }
     setEnviando(false);
   }
 
-  async function quitar(uid) {
+  async function quitarAcceso(uid) {
     try {
       await window.db.quitarAcceso(obra.id, uid);
       setUsuarios(prev => prev.filter(u => u.user_id !== uid));
-    } catch (e) { setMsg('Error: ' + e.message); }
+      setMsg('✓ Acceso eliminado.');
+    } catch(e) { setMsg('Error: ' + e.message); }
+    setConfirm(null);
   }
+
+  const nombreUsuario = (uid) => perfiles[uid] || (uid === userId ? 'Tú' : uid.slice(0,8) + '…');
 
   return (
     <Modal title={`Compartir — ${obra.nombre}`} onClose={onClose}>
       <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16, lineHeight: 1.5 }}>
-        Añade a compañeros por su email. Podrán ver y editar esta obra. Solo el creador puede eliminarla.
+        Añade compañeros por su email. Podrán ver y editar esta obra. Solo el creador puede eliminarla.
       </p>
-      <Field label="Email del compañero">
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && invitar()}
-            placeholder="correo@plaat.es" style={{ flex: 1 }} />
-          <Btn primary disabled={enviando || !email.trim()} onClick={invitar}>
-            {enviando ? '...' : 'Añadir'}
-          </Btn>
+
+      {esOwner && (
+        <Field label="Email del compañero">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && invitar()}
+              placeholder="correo@plaat.es" style={{ flex: 1 }} />
+            <Btn primary disabled={enviando || !email.trim()} onClick={invitar}>
+              {enviando ? '...' : 'Añadir'}
+            </Btn>
+          </div>
+        </Field>
+      )}
+
+      {msg && (
+        <div style={{ fontSize: 13, padding: '8px 12px', borderRadius: 9, marginBottom: 12,
+          background: msg.startsWith('✓') ? '#E8F5E0' : '#FDECEC',
+          color:      msg.startsWith('✓') ? '#2D5E10'  : '#8A1F1F' }}>
+          {msg}
         </div>
-      </Field>
-      {msg && <div style={{ fontSize: 13, padding: '8px 12px', borderRadius: 9, marginBottom: 12, background: msg.startsWith('✓') ? '#E8F5E0' : '#FDECEC', color: msg.startsWith('✓') ? '#2D5E10' : '#8A1F1F' }}>{msg}</div>}
+      )}
+
       {usuarios.length > 0 && (
         <div>
-          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 600, marginBottom: 8 }}>Con acceso</div>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 600, marginBottom: 8 }}>
+            Con acceso ({usuarios.length})
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {usuarios.map(u => (
-              <div key={u.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 11, border: '1px solid #ECEAE4', background: '#FAFAF8' }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#1A1A17', color: '#F2F1ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
-                  {u.user_id.slice(0, 2).toUpperCase()}
+            {usuarios.map(u => {
+              const esYo     = u.user_id === userId;
+              const esCreador = u.rol === 'owner';
+              const nombre   = esYo ? `${nombreUsuario(u.user_id)} (tú)` : nombreUsuario(u.user_id);
+              return (
+                <div key={u.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 11, border: '1px solid #ECEAE4', background: '#FAFAF8' }}>
+                  {/* Avatar con iniciales */}
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: esCreador ? '#1A1A17' : '#ECEAE4', color: esCreador ? '#F2F1ED' : '#52524E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                    {(perfiles[u.user_id] || '?').slice(0,2).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#16160F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</div>
+                    <div style={{ fontSize: 11, color: '#A5A5A0' }}>{esCreador ? '👑 Creador' : 'Editor'}</div>
+                  </div>
+                  {/* Quitar acceso — solo owner puede, no puede echarse a sí mismo ni al creador */}
+                  {esOwner && !esYo && !esCreador && (
+                    <button onClick={() => setConfirm(u.user_id)}
+                      style={{ background: '#FDECEC', border: '1px solid #F9CACA', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontSize: 12, color: '#8A1F1F', fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      Quitar acceso
+                    </button>
+                  )}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{u.user_id === userId ? 'Tú' : 'Compañero'}</div>
-                  <div style={{ fontSize: 11, color: '#A5A5A0' }}>{u.rol === 'owner' ? 'Creador' : 'Editor'}</div>
-                </div>
-                {u.rol !== 'owner' && obra._rol === 'owner' && (
-                  <button onClick={() => quitar(u.user_id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 18, lineHeight: 1 }}>×</button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
+      )}
+
+      {confirm && (
+        <ConfirmMini
+          titulo="Quitar acceso"
+          texto={`Vas a quitar el acceso de ${nombreUsuario(confirm)} a esta obra. Podrás volver a invitarle en cualquier momento.`}
+          onSi={() => quitarAcceso(confirm)}
+          onNo={() => setConfirm(null)}
+        />
       )}
     </Modal>
   );
@@ -549,13 +603,15 @@ function Sidebar({ nav, setNav, stats, user, onBackup }) {
 
 function BottomNav({ nav, setNav, stats }) {
   const ICONS = {
-    alertas: 'M10 4a3 3 0 0 0-3 3c0 4-1.5 5-2 6h10c-.5-1-2-2-2-6a3 3 0 0 0-3-3Z M8.5 16a1.5 1.5 0 0 0 3 0',
-    tablero: 'M3 17V8l5-3 5 3v9 M7 17v-4h2v4',
-    salir:   'M7 4H4v12h3 M10 10h7 M14 7l3 3-3 3',
+    alertas:     'M10 4a3 3 0 0 0-3 3c0 4-1.5 5-2 6h10c-.5-1-2-2-2-6a3 3 0 0 0-3-3Z M8.5 16a1.5 1.5 0 0 0 3 0',
+    tablero:     'M3 17V8l5-3 5 3v9 M7 17v-4h2v4',
+    seguimiento: 'M4 6h12 M4 10h12 M4 14h7 M14 13l2 2 3-3',
+    salir:       'M7 4H4v12h3 M10 10h7 M14 7l3 3-3 3',
   };
   const items = [
-    { id: 'alertas', label: 'Alertas', badge: stats.alertas, alert: true },
-    { id: 'tablero', label: 'Obras',   badge: stats.total,   alert: false },
+    { id: 'alertas',     label: 'Alertas',     badge: stats.alertas, alert: true },
+    { id: 'tablero',     label: 'Obras',        badge: stats.total,   alert: false },
+    { id: 'seguimiento', label: 'Seguimiento',  badge: 0,             alert: false },
   ];
   function salir() { if (window.auth) window.auth.signOut(); }
   const Icono = ({ d, activo }) => (
@@ -570,7 +626,7 @@ function BottomNav({ nav, setNav, stats }) {
         return (
           <button key={it.id} onClick={() => setNav(it.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: activo ? '#F2F1ED' : 'rgba(255,255,255,0.4)', position: 'relative' }}>
             <Icono d={ICONS[it.id]} activo={activo} />
-            <span style={{ fontSize: 11, fontWeight: activo ? 500 : 400, letterSpacing: '0.02em' }}>{it.label}</span>
+            <span style={{ fontSize: 10.5, fontWeight: activo ? 500 : 400, letterSpacing: '0.02em' }}>{it.label}</span>
             {it.badge > 0 && (
               <span style={{ position: 'absolute', top: 6, left: '50%', marginLeft: 7, background: it.alert ? '#E24B4A' : 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 9, minWidth: 16, height: 16, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', fontWeight: 600 }}>{it.badge}</span>
             )}
@@ -579,7 +635,7 @@ function BottomNav({ nav, setNav, stats }) {
       })}
       <button onClick={salir} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: 'rgba(255,255,255,0.4)' }}>
         <Icono d={ICONS.salir} activo={false} />
-        <span style={{ fontSize: 11, letterSpacing: '0.02em' }}>Salir</span>
+        <span style={{ fontSize: 10.5, letterSpacing: '0.02em' }}>Salir</span>
       </button>
     </div>
   );
