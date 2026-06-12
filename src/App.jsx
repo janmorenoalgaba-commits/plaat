@@ -489,8 +489,9 @@ function MenuPerfil({ onBackup, onSalir }) {
 
 function Sidebar({ nav, setNav, stats, user, onBackup }) {
   const navItems = [
-    { id: 'alertas',    label: 'Alertas',     badge: stats.alertas, alert: stats.alertas > 0 },
-    { id: 'tablero',    label: 'Tablero',     badge: stats.total, alert: false },
+    { id: 'alertas',      label: 'Alertas',      badge: stats.alertas, alert: stats.alertas > 0 },
+    { id: 'tablero',      label: 'Tablero',       badge: stats.total, alert: false },
+    { id: 'seguimiento',  label: 'Seguimiento',   badge: 0, alert: false },
   ];
   const email = user?.email || '';
   const iniciales = email ? email.slice(0, 2).toUpperCase() : 'PL';
@@ -4366,6 +4367,327 @@ function fmtFechaCorta(iso) {
 
 
 
+// ─── MÓDULO: Seguimiento global de obra ──────────────────────────────────────
+const TEMATICAS = ['ESTRUCTURAS','INSTALACIONES','OBRA CIVIL','ACABADOS','COSTES OBRA','PLANIFICACIÓN','OTROS'];
+const VIAS = ['VT','VO','MAIL','LL','p'];
+const ESTADOS_SEG = ['En curso','Cerrado','Pendiente'];
+
+const SEG_KEY = 'plaat_seguimiento_v1';
+
+function VistaSeguimiento({ obras, isMobile }) {
+  const [puntos,      setPuntos]      = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [showForm,    setShowForm]    = useState(false);
+  const [editando,    setEditando]    = useState(null);
+  const [filtroObra,  setFiltroObra]  = useState('todas');
+  const [filtroEst,   setFiltroEst]   = useState('todos');
+  const [exportando,  setExportando]  = useState(false);
+  const [confirmacion,setConfirmacion]= useState(null);
+
+  // Cargar desde storage
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.storage?.get(SEG_KEY, true);
+        if (r?.value) setPuntos(JSON.parse(r.value));
+      } catch(e) {}
+      setLoading(false);
+    })();
+  }, []);
+
+  async function guardar(lista) {
+    setPuntos(lista);
+    try { await window.storage?.set(SEG_KEY, JSON.stringify(lista), true); } catch(e) {}
+  }
+
+  function nextNum(obraId) {
+    const deEstaObra = puntos.filter(p => p.obraId === obraId);
+    return deEstaObra.length + 1;
+  }
+
+  async function guardarPunto(punto) {
+    const existe = puntos.some(p => p.id === punto.id);
+    const lista = existe ? puntos.map(p => p.id === punto.id ? punto : p) : [...puntos, punto];
+    await guardar(lista);
+    setShowForm(false); setEditando(null);
+  }
+
+  async function eliminarPunto(id) {
+    await guardar(puntos.filter(p => p.id !== id));
+    setConfirmacion(null);
+  }
+
+  // Exportar a Excel con SheetJS
+  async function exportarExcel() {
+    setExportando(true);
+    try {
+      // Cargar SheetJS si no está
+      if (!window.XLSX) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      const { utils, writeFile } = window.XLSX;
+
+      // Cabeceras exactas del Excel original
+      const cab = ['NUM','TEMAS TRATADOS','','','','','','','','Responsable','Fecha ','Fecha límite resolución','Fecha resolución','Estado','TEMÁTICA','VIA'];
+      const filas = [cab];
+
+      const puntosExp = filtroObra !== 'todas' ? puntos.filter(p => p.obraId === filtroObra) : puntos;
+      puntosExp.forEach(p => {
+        const obraNombre = obras.find(o => o.id === p.obraId)?.nombre || '';
+        const fmtD = iso => iso ? new Date(iso).toLocaleDateString('es-ES') : '';
+        filas.push([
+          p.num, p.tema, '', '', '', '', '', '', '',
+          p.responsable, fmtD(p.fecha), fmtD(p.fechaLimite), fmtD(p.fechaResolucion),
+          p.estado, p.tematica, p.via
+        ]);
+      });
+
+      const ws = utils.aoa_to_sheet(filas);
+      // Anchos de columna aproximados
+      ws['!cols'] = [
+        {wch:6},{wch:60},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},
+        {wch:20},{wch:12},{wch:22},{wch:20},{wch:12},{wch:18},{wch:8}
+      ];
+      const wb = utils.book_new();
+      utils.book_append_sheet(wb, ws, 'Seguimiento');
+      const fecha = new Date().toLocaleDateString('es-ES').replace(/\//g,'-');
+      writeFile(wb, `Seguimiento_PLAAT_${fecha}.xlsx`);
+    } catch(e) { alert('Error exportando: ' + e.message); }
+    setExportando(false);
+  }
+
+  const obrasFiltro = filtroObra !== 'todas' ? puntos.filter(p => p.obraId === filtroObra) : puntos;
+  const puntosFiltrados = filtroEst !== 'todos' ? obrasFiltro.filter(p => p.estado === filtroEst) : obrasFiltro;
+
+  const fmtD = iso => iso ? new Date(iso).toLocaleDateString('es-ES', {day:'2-digit',month:'2-digit',year:'2-digit'}) : '—';
+
+  const ESTADO_COLORS = {
+    'En curso':  { bg: '#FEF3DB', color: '#7C4A00' },
+    'Cerrado':   { bg: '#E8F5E0', color: '#2D5E10' },
+    'Pendiente': { bg: '#EEEDE7', color: '#52524E' },
+  };
+
+  if (showForm || editando) {
+    return <FormSeguimiento
+      punto={editando}
+      obras={obras}
+      nextNum={nextNum}
+      onGuardar={guardarPunto}
+      onCerrar={() => { setShowForm(false); setEditando(null); }}
+      isMobile={isMobile}
+    />;
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden' }}>
+      {/* Banner */}
+      <div className="dash-banner" style={{ borderBottom:'1px solid #ECEAE4', padding: isMobile ? '18px 16px' : '22px 22px', flexShrink:0 }}>
+        <div className="arch-grid" />
+        <div className="dash-banner-ring db-r1" />
+        <div className="dash-beam" />
+        <div className="dash-title" style={{ position:'relative', zIndex:2, display:'flex', alignItems:'center', gap:12 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize: isMobile?18:20, fontWeight:700, color:'#F2F1ED', display:'flex', alignItems:'baseline', gap:7 }}>
+              Seguimiento <span style={{ fontSize:13, color:'#8AA88A' }}>.</span>
+            </div>
+            <div style={{ fontSize:12, color:'rgba(255,255,255,0.5)', marginTop:3 }}>{puntos.length} punto{puntos.length!==1?'s':''} registrado{puntos.length!==1?'s':''}</div>
+          </div>
+          <button onClick={exportarExcel} disabled={exportando} className="tap" style={{ padding:'7px 14px', borderRadius:9, border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.08)', color:'rgba(255,255,255,0.8)', fontSize:12, fontWeight:500, cursor:'pointer' }}>
+            {exportando ? '...' : '↓ Excel'}
+          </button>
+          <button onClick={() => setShowForm(true)} className="tap shimmer-btn" style={{ padding:'8px 16px', borderRadius:11, border:'none', background:'#5A7D5A', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+            + Nuevo punto
+          </button>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div style={{ padding: isMobile?'10px 16px':'12px 22px', borderBottom:'1px solid #ECEAE4', display:'flex', gap:8, flexWrap:'wrap', flexShrink:0, background:'#fff' }}>
+        <select value={filtroObra} onChange={e => setFiltroObra(e.target.value)} style={{ fontSize:12, padding:'5px 10px', borderRadius:20, width:'auto' }}>
+          <option value="todas">Todas las obras</option>
+          {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+        </select>
+        <select value={filtroEst} onChange={e => setFiltroEst(e.target.value)} style={{ fontSize:12, padding:'5px 10px', borderRadius:20, width:'auto' }}>
+          <option value="todos">Todos los estados</option>
+          {ESTADOS_SEG.map(e => <option key={e}>{e}</option>)}
+        </select>
+      </div>
+
+      {/* Tabla / Lista */}
+      <div style={{ flex:1, overflowY:'auto', padding: isMobile?'12px 16px':'14px 22px' }}>
+        {loading && <div style={{ textAlign:'center', padding:40, color:'#A5A5A0', fontSize:13 }}>Cargando...</div>}
+        {!loading && puntosFiltrados.length === 0 && (
+          <div style={{ textAlign:'center', padding:'60px 20px' }}>
+            <div style={{ fontSize:36, marginBottom:14 }}>📋</div>
+            <div style={{ fontSize:15, fontWeight:500, color:'#16160F', marginBottom:8 }}>Sin puntos de seguimiento</div>
+            <div style={{ fontSize:13, color:'#9B9B97', marginBottom:20 }}>Registra el primer punto de acción de una reunión</div>
+            <button onClick={() => setShowForm(true)} style={{ padding:'9px 20px', borderRadius:11, border:'none', background:'#5A7D5A', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer' }}>+ Nuevo punto</button>
+          </div>
+        )}
+        {!loading && puntosFiltrados.length > 0 && (
+          isMobile ? (
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {puntosFiltrados.map(p => {
+                const obraNombre = obras.find(o => o.id === p.obraId)?.nombre || '—';
+                const ec = ESTADO_COLORS[p.estado] || ESTADO_COLORS['Pendiente'];
+                return (
+                  <div key={p.id} className="hov-card" style={{ background:'#fff', borderRadius:14, boxShadow:'0 1px 2px rgba(0,0,0,0.04), 0 3px 12px rgba(0,0,0,0.04)', padding:'13px 15px', cursor:'pointer' }}
+                    onClick={() => setEditando(p)}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                      <span style={{ width:28, height:28, borderRadius:8, background:'#1A1A17', color:'#F2F1ED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, flexShrink:0 }}>{p.num}</span>
+                      <span style={{ fontSize:11, padding:'2px 8px', borderRadius:20, background:ec.bg, color:ec.color, fontWeight:600 }}>{p.estado}</span>
+                      <span style={{ fontSize:11, color:'#9B9B97', marginLeft:'auto' }}>{p.tematica}</span>
+                    </div>
+                    <div style={{ fontSize:13, fontWeight:500, color:'#16160F', lineHeight:1.4, marginBottom:5 }}>{p.tema}</div>
+                    <div style={{ fontSize:11, color:'#9B9B97', display:'flex', gap:10 }}>
+                      <span>{obraNombre}</span>
+                      <span>Resp: {p.responsable}</span>
+                      <span>Límite: {fmtD(p.fechaLimite)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ background:'#fff', borderRadius:14, boxShadow:'0 1px 2px rgba(0,0,0,0.04), 0 3px 12px rgba(0,0,0,0.04)', overflow:'hidden' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5 }}>
+                <thead>
+                  <tr style={{ background:'#F7F6F3', borderBottom:'1px solid #ECEAE4' }}>
+                    {['Nº','Obra','Tema','Responsable','Fecha','Límite','Resolución','Estado','Temática','Via',''].map(h => (
+                      <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontWeight:600, color:'#52524E', fontSize:11, letterSpacing:'0.04em', whiteSpace:'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {puntosFiltrados.map((p, i) => {
+                    const obraNombre = obras.find(o => o.id === p.obraId)?.nombre || '—';
+                    const ec = ESTADO_COLORS[p.estado] || ESTADO_COLORS['Pendiente'];
+                    return (
+                      <tr key={p.id} style={{ borderBottom:'1px solid #F0EFEA', background: i%2===0?'#fff':'#FAFAF8' }}>
+                        <td style={{ padding:'8px 12px', fontWeight:700, color:'#16160F' }}>{p.num}</td>
+                        <td style={{ padding:'8px 12px', color:'#6B6B66', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{obraNombre}</td>
+                        <td style={{ padding:'8px 12px', maxWidth:260, color:'#16160F' }}>{p.tema}</td>
+                        <td style={{ padding:'8px 12px', whiteSpace:'nowrap' }}>{p.responsable}</td>
+                        <td style={{ padding:'8px 12px', whiteSpace:'nowrap', color:'#6B6B66' }}>{fmtD(p.fecha)}</td>
+                        <td style={{ padding:'8px 12px', whiteSpace:'nowrap', color:'#6B6B66' }}>{fmtD(p.fechaLimite)}</td>
+                        <td style={{ padding:'8px 12px', whiteSpace:'nowrap', color:'#6B6B66' }}>{fmtD(p.fechaResolucion)}</td>
+                        <td style={{ padding:'8px 12px' }}><span style={{ fontSize:11, padding:'2px 9px', borderRadius:20, background:ec.bg, color:ec.color, fontWeight:600, whiteSpace:'nowrap' }}>{p.estado}</span></td>
+                        <td style={{ padding:'8px 12px', color:'#6B6B66', whiteSpace:'nowrap' }}>{p.tematica}</td>
+                        <td style={{ padding:'8px 12px', color:'#6B6B66' }}>{p.via}</td>
+                        <td style={{ padding:'8px 12px' }}>
+                          <div style={{ display:'flex', gap:6 }}>
+                            <button onClick={() => setEditando(p)} style={{ background:'none', border:'1px solid #E6E4DD', borderRadius:7, padding:'3px 9px', cursor:'pointer', fontSize:11, color:'#52524E' }}>Editar</button>
+                            <button onClick={() => setConfirmacion({ titulo:'Eliminar punto', texto:`Vas a eliminar el punto ${p.num}: "${p.tema?.slice(0,40)}..."`, onSi: () => eliminarPunto(p.id) })} style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:17, lineHeight:1 }}>×</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+      </div>
+      {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
+    </div>
+  );
+}
+
+function FormSeguimiento({ punto, obras, nextNum, onGuardar, onCerrar, isMobile }) {
+  const obraDefecto = obras[0]?.id || '';
+  const [f, setF] = useState(() => punto || {
+    id: uid(), obraId: obraDefecto, num: '', tema: '',
+    responsable: '', fecha: today(), fechaLimite: '', fechaResolucion: '',
+    estado: 'En curso', tematica: 'OTROS', via: 'VT',
+  });
+  const upd = (k,v) => setF(prev => ({ ...prev, [k]: v }));
+
+  // Autonumerar al cambiar obra
+  useEffect(() => {
+    if (!punto) upd('num', nextNum(f.obraId));
+  }, [f.obraId]);
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#F7F6F3', borderRadius:16, overflow:'hidden' }}>
+      {/* Cabecera */}
+      <div style={{ background:'#1A1A17', padding:'16px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        <button onClick={onCerrar} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:15, cursor:'pointer', padding:0 }}>←</button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:'#F2F1ED' }}>{punto ? 'Editar punto' : 'Nuevo punto de seguimiento'}</div>
+          <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Nº {f.num || '—'}</div>
+        </div>
+        <button onClick={() => onGuardar(f)} disabled={!f.tema?.trim()} style={{ padding:'8px 18px', borderRadius:11, border:'none', background:'#5A7D5A', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', opacity: f.tema?.trim()?1:0.5 }}>Guardar</button>
+      </div>
+
+      {/* Cuerpo */}
+      <div style={{ flex:1, overflowY:'auto', padding: isMobile?'16px':'20px 22px', display:'flex', flexDirection:'column', gap:14 }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:12 }}>
+          <Field label="Obra">
+            <select value={f.obraId} onChange={e => upd('obraId', e.target.value)}>
+              {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+            </select>
+          </Field>
+          <Field label="Nº">
+            <input type="number" min="1" value={f.num} onChange={e => upd('num', parseInt(e.target.value||'1',10))} />
+          </Field>
+        </div>
+
+        <Field label="Tema tratado *">
+          <textarea value={f.tema} onChange={e => upd('tema', e.target.value)} placeholder="Describe el punto de acción o tema tratado en la reunión..." style={{ minHeight:100 }} autoFocus />
+        </Field>
+
+        <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:12 }}>
+          <Field label="Responsable">
+            <input value={f.responsable} onChange={e => upd('responsable', e.target.value)} placeholder="Empresa o persona responsable" />
+          </Field>
+          <Field label="Estado">
+            <select value={f.estado} onChange={e => upd('estado', e.target.value)}>
+              {ESTADOS_SEG.map(e => <option key={e}>{e}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:12 }}>
+          <Field label="Fecha">
+            <input type="date" value={f.fecha} onChange={e => upd('fecha', e.target.value)} />
+          </Field>
+          <Field label="Fecha límite resolución">
+            <input type="date" value={f.fechaLimite} onChange={e => upd('fechaLimite', e.target.value)} />
+          </Field>
+          <Field label="Fecha resolución">
+            <input type="date" value={f.fechaResolucion} onChange={e => upd('fechaResolucion', e.target.value)} />
+          </Field>
+        </div>
+
+        <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:12 }}>
+          <Field label="Temática">
+            <select value={f.tematica} onChange={e => upd('tematica', e.target.value)}>
+              {TEMATICAS.map(t => <option key={t}>{t}</option>)}
+            </select>
+          </Field>
+          <Field label="Vía">
+            <select value={f.via} onChange={e => upd('via', e.target.value)}>
+              {VIAS.map(v => <option key={v}>{v}</option>)}
+            </select>
+          </Field>
+        </div>
+      </div>
+
+      {/* Pie */}
+      <div style={{ borderTop:'1px solid #ECEAE4', padding:'14px 20px', display:'flex', gap:10, flexShrink:0, background:'#fff' }}>
+        <Btn onClick={onCerrar} full>Cancelar</Btn>
+        <Btn primary full onClick={() => onGuardar(f)} disabled={!f.tema?.trim()}>Guardar punto</Btn>
+      </div>
+    </div>
+  );
+}
+
 function DetalleObra({ obra, onBack, onSave, isMobile, user }) {
   const [tab, setTab]               = useState('inspecciones');
   const [editEstado, setEditEstado] = useState(false);
@@ -5121,7 +5443,8 @@ export default function App() {
         {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} onBackup={() => { setShowBackup(true); setBackupMsg(""); }} />}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
-          {nav === 'alertas'   && <VistaAlertas obras={obras} onIrObra={o => setObraActiva(o)} isMobile={isMobile} />}
+          {nav === 'alertas'      && <VistaAlertas obras={obras} onIrObra={o => setObraActiva(o)} isMobile={isMobile} />}
+          {nav === 'seguimiento'  && <VistaSeguimiento obras={obras} isMobile={isMobile} />}
           {nav === 'tablero'   && (
             <>
               {/* Banner con fondo arquitectónico animado */}
