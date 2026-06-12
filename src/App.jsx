@@ -1098,67 +1098,67 @@ async function generarActaInspeccion(obra, acta) {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(0, 0, 0);
     doc.text('1. ZONAS REVISADAS', M, y); y += 8;
 
-    // Fotos: siempre 2 por fila, tamaño fijo uniforme
-    const FOTO_W = (CW - 4) / 2;  // ~88mm
-    const FOTO_H = 62;             // altura fija uniforme
+    // Fotos: siempre 2 por fila, tamaño fijo uniforme con margen interior
+    const FOTO_W = (CW - 8) / 2;  // ~87mm con margen entre fotos
+    const FOTO_H = 64;             // altura fija uniforme
+    const FOTO_PAD = 4;            // margen interior del marco
 
     for (const t of temas) {
-      // Calcular altura total del bloque: cabecera + descripción + fotos
       const fotos = t.fotos || [];
+      const descLL = t.descripcion ? doc.splitTextToSize(t.descripcion, CW - 6) : [];
+      const descH = descLL.length > 0 ? descLL.length * 4.4 + 8 : 0;
       const filasFoto = Math.ceil(fotos.length / 2);
-      const descLL = t.descripcion ? doc.splitTextToSize(t.descripcion, CW - COL_N - 6) : [];
-      const descH = descLL.length > 0 ? descLL.length * 4.4 + 6 : 0;
-      const fotosH = filasFoto > 0 ? filasFoto * (FOTO_H + 4) + 4 : 0;
+      const fotosH = filasFoto > 0 ? filasFoto * (FOTO_H + FOTO_PAD * 2 + 4) + 4 : 0;
       const hTit = calcH(t.titulo, COL_T, 9, 9);
-      const hCuerpo = Math.max(10, descH + fotosH);
+      const hCuerpo = descH + fotosH;
 
-      // Salto de página si no cabe el bloque entero (o al menos cabecera + algo)
-      if (y + hTit + 20 > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
+      // Cabecera + cuerpo SIEMPRE juntos — si no caben, nueva página
+      if (y + hTit + Math.min(hCuerpo, 20) > PH - 16) {
+        doc.addPage(); cabecera(); pie(); y = 20;
+      }
 
-      // Cabecera tema — Nº centrado + título en gris
-      // Columna Nº con texto centrado
+      // Cabecera: Nº centrado + título gris
       sl(); doc.setFillColor(...GRIS_CAB);
       doc.rect(M, y, COL_N, hTit, 'FD');
       doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
-      const numW = doc.getTextWidth(t.num || '');
-      doc.text(t.num || '', M + (COL_N - numW) / 2, y + hTit / 2 + 1.5);
-      // Columna título
+      const numTxtW = doc.getTextWidth(t.num || '');
+      doc.text(t.num || '', M + (COL_N - numTxtW) / 2, y + hTit / 2 + 1.5);
       celda(M + COL_N, y, COL_T, hTit, t.titulo, { bold: true, fill: GRIS_CAB });
       y += hTit;
 
-      // Cuerpo: descripción + fotos en una sola zona sin celdas separadas
-      if (hCuerpo > 0) {
-        if (y + hCuerpo > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
-        // Marco exterior único
-        sl(); doc.rect(M, y, CW, hCuerpo);
-        let cy = y + 4;
+      // Cuerpo: descripción
+      if (descLL.length > 0) {
+        if (y + descH > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
+        sl(); doc.rect(M, y, CW, descH);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
+        doc.text(descLL, M + 3, y + 5);
+        y += descH;
+      }
 
-        // Descripción
-        if (descLL.length > 0) {
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
-          doc.text(descLL, M + 3, cy + 4);
-          cy += descH;
-        }
-
-        // Fotos — 2 por fila, tamaño fijo, sin bordes extra
-        for (let fi = 0; fi < fotos.length; fi += 2) {
-          const pair = [fotos[fi], fotos[fi + 1]].filter(Boolean);
-          if (cy + FOTO_H + 4 > y + hCuerpo) break; // seguridad
-          pair.forEach((f, pi) => {
-            try {
-              const pr = doc.getImageProperties(f.data);
-              const ratio = pr.width / pr.height;
-              let iw = FOTO_W, ih = FOTO_H;
-              if (ratio > FOTO_W / FOTO_H) ih = FOTO_W / ratio;
-              else iw = FOTO_H * ratio;
-              const ox = M + pi * (FOTO_W + 4) + (FOTO_W - iw) / 2;
-              const oy = cy + (FOTO_H - ih) / 2;
-              doc.addImage(f.data, 'JPEG', ox, oy, iw, ih);
-            } catch (e) { /* imagen inválida */ }
-          });
-          cy += FOTO_H + 4;
-        }
-        y += hCuerpo;
+      // Fotos: 2 por fila, tamaño fijo con margen interior, misma altura siempre
+      for (let fi = 0; fi < fotos.length; fi += 2) {
+        const pair = [fotos[fi], fotos[fi + 1]].filter(Boolean);
+        const filaH = FOTO_H + FOTO_PAD * 2;
+        if (y + filaH > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
+        // Marco exterior fila (dos celdas contiguas)
+        sl(); doc.rect(M, y, FOTO_W + FOTO_PAD * 2, filaH);
+        if (pair.length === 2) sl(); doc.rect(M + FOTO_W + FOTO_PAD * 2 + 4, y, FOTO_W + FOTO_PAD * 2, filaH);
+        pair.forEach((f, pi) => {
+          const xBase = M + pi * (FOTO_W + FOTO_PAD * 2 + 4);
+          try {
+            const pr = doc.getImageProperties(f.data);
+            const ratio = pr.width / pr.height;
+            // Ajustar dentro del área disponible (FOTO_W x FOTO_H) manteniendo proporción
+            let iw = FOTO_W, ih = FOTO_H;
+            if (ratio > FOTO_W / FOTO_H) ih = FOTO_W / ratio;
+            else iw = FOTO_H * ratio;
+            // Centrar dentro del marco con padding
+            const ox = xBase + FOTO_PAD + (FOTO_W - iw) / 2;
+            const oy = y + FOTO_PAD + (FOTO_H - ih) / 2;
+            doc.addImage(f.data, 'JPEG', ox, oy, iw, ih);
+          } catch (e) { /* imagen inválida */ }
+        });
+        y += filaH + 4;
       }
       y += 6;
     }
