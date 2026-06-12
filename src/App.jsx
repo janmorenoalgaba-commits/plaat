@@ -938,211 +938,249 @@ async function generarActaInspeccion(obra, acta) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PW = 210, PH = 297, M = 14, CW = PW - M * 2;
   const LW = 0.25;
-  const num = String(acta.num).padStart(2,'0');
-  const fechaStr = acta.fecha ? new Date(acta.fecha).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
-  let y = 0;
+  const GRIS_CAB = [230, 230, 225];
+  const GRIS_TEMA = [217, 217, 212];
+  const num = String(acta.num).padStart(2, '0');
+  const fechaStr = acta.fecha ? new Date(acta.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+  const temas = acta.temas || [];
 
-  function setLW() { doc.setLineWidth(LW); doc.setDrawColor(0,0,0); }
+  // ── Utilidades ────────────────────────────────────────────────────────────
+  function sl() { doc.setLineWidth(LW); doc.setDrawColor(0, 0, 0); }
+
   function cabecera() {
-    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+    // Textos cabecera izquierda
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
     doc.text(`PARTE DE INSPECCIÓN Nº: ${num}`, M, 8);
+    doc.setFont('helvetica', 'normal');
     doc.text(`FECHA PARTE INSPECCIÓN: ${fechaStr}`, M, 12);
-    doc.setFontSize(22); doc.setFont('helvetica','normal');
-    doc.text('Plaat.', PW-M, 12, {align:'right'});
+    // Logo derecha — solo texto, sin caja ni fondo
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(0, 0, 0);
+    doc.text('Plaat.', PW - M, 12, { align: 'right' });
+    // Línea separadora
+    sl(); doc.line(M, 15, PW - M, 15);
   }
+
   function pie() {
-    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(0,0,0);
-    doc.text('Plaat Arquitectura Técnica', M, PH-6);
-    doc.text('Barcelona \u2013 Madrid', PW/2, PH-6, {align:'center'});
-    doc.text('www.plaat.es', PW-M, PH-6, {align:'right'});
-  }
-  function checkPage(h) {
-    if (y+h > PH-16) { doc.addPage(); cabecera(); pie(); y=22; }
-  }
-  function wText(x,yy,w,h,txt,opts={}) {
-    if (!txt) return;
-    const sz=opts.size||8.5; const bold=opts.bold||false;
-    doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(sz); doc.setTextColor(0,0,0);
-    const ll=doc.splitTextToSize(String(txt),w-3);
-    let ty=yy+3+sz*0.352645;
-    ll.forEach(l=>{doc.text(l,x+2,ty);ty+=sz*0.352645+0.6;});
-  }
-  function rowH(txt,w,sz,minH) {
-    doc.setFontSize(sz||8.5);
-    const h=doc.splitTextToSize(String(txt||''),w-3).length*((sz||8.5)*0.352645+0.6)+5;
-    return Math.max(minH||7,h);
+    sl(); doc.line(M, PH - 10, PW - M, PH - 10);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80, 80, 80);
+    doc.text('Plaat Arquitectura Técnica', M, PH - 6);
+    doc.text('Barcelona \u2013 Madrid', PW / 2, PH - 6, { align: 'center' });
+    doc.text('www.plaat.es', PW - M, PH - 6, { align: 'right' });
   }
 
-  cabecera(); pie(); y=18;
+  function calcH(txt, w, sz, minH) {
+    doc.setFontSize(sz || 8.5);
+    const lines = doc.splitTextToSize(String(txt || ''), w - 4);
+    return Math.max(minH || 7, lines.length * ((sz || 8.5) * 0.3528 + 0.8) + 4);
+  }
 
-  // ── Banda título principal ──────────────────────────────────────────────
-  doc.setFillColor(217,217,217); setLW();
-  doc.rect(M,y,CW-30,9,'F'); doc.rect(M,y,CW-30,9);
-  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(0,0,0);
-  doc.text('ACTA DE INSPECCIÓN DE OBRA', M+2, y+6);
-  doc.rect(M+CW-30,y,30,9,'F'); doc.rect(M+CW-30,y,30,9);
-  doc.text(`NÚM.: ${num}`, M+CW-29, y+6);
-  y+=9;
+  function celda(x, y, w, h, txt, opts = {}) {
+    const sz = opts.sz || 8.5;
+    const bold = opts.bold || false;
+    const fill = opts.fill;
+    sl();
+    if (fill) { doc.setFillColor(...fill); doc.rect(x, y, w, h, 'FD'); }
+    else doc.rect(x, y, w, h);
+    if (!txt && txt !== 0) return;
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(sz); doc.setTextColor(0, 0, 0);
+    const lines = doc.splitTextToSize(String(txt), w - 4);
+    const lineH = sz * 0.3528 + 0.8;
+    const totalH = lines.length * lineH;
+    let ty = y + (h - totalH) / 2 + sz * 0.3528;
+    lines.forEach(l => { doc.text(l, x + 2, ty); ty += lineH; });
+  }
 
-  // ── Obra y emplazamiento ────────────────────────────────────────────────
-  [['OBRA', obra.nombre||''], ['EMPLAZAMIENTO', obra.emplazamiento||obra.direccion||'']].forEach(([k,v])=>{
-    const h=rowH(v,CW-38,8.5,7);
-    checkPage(h); setLW();
-    doc.setFillColor(235,235,230); doc.rect(M,y,38,h,'F'); doc.rect(M,y,38,h);
-    doc.rect(M+38,y,CW-38,h); doc.setFillColor(255,255,255);
-    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-    doc.text(k, M+2, y+5.2);
-    doc.setFont('helvetica','normal'); wText(M+38,y,CW-38,h,v,{size:8.5});
-    y+=h;
+  // ══════════════════════════════════════════════════════════════════════════
+  // PÁGINA 1 — Portada + datos de obra
+  // ══════════════════════════════════════════════════════════════════════════
+  cabecera(); pie();
+  let y = 20;
+
+  // Banda título
+  doc.setFillColor(...GRIS_TEMA); sl();
+  doc.rect(M, y, CW - 32, 9, 'FD');
+  doc.rect(M + CW - 32, y, 32, 9, 'FD');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(0, 0, 0);
+  doc.text('ACTA DE INSPECCIÓN DE OBRA', M + 3, y + 6.2);
+  doc.text(`NÚM.: ${num}`, M + CW - 30, y + 6.2);
+  y += 9;
+
+  // OBRA + EMPLAZAMIENTO
+  [['OBRA', obra.nombre || ''], ['EMPLAZAMIENTO', obra.emplazamiento || obra.direccion || '']].forEach(([k, v]) => {
+    const h = calcH(v, CW - 36, 8.5, 8);
+    celda(M, y, 36, h, k, { bold: true, fill: GRIS_CAB });
+    celda(M + 36, y, CW - 36, h, v);
+    y += h;
   });
-  y+=5;
+  y += 6;
 
-  // ── Datos de la obra ────────────────────────────────────────────────────
-  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
-  doc.text('DATOS DE LA OBRA:', M, y); y+=5;
-  const datosObra=[
-    ['PROPIEDAD',    obra.propiedad||''],
-    ['PROYECTISTA',  obra.proyectista||''],
-    ['DO',           obra.direccionObra||''],
+  // Datos de la obra
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+  doc.text('DATOS DE LA OBRA:', M, y); y += 5;
+  [
+    ['PROPIEDAD',    obra.propiedad || ''],
+    ['PROYECTISTA',  obra.proyectista || ''],
+    ['DO',           obra.direccionObra || ''],
     ['DEO',          obra.deoFirmante ? `PLAAT ARQUITECTURA TÉCNICA S.L. \u2014 ${obra.deoFirmante}` : 'PLAAT ARQUITECTURA TÉCNICA S.L.'],
-    ['CONSTRUCTORA', obra.constructora||''],
-  ];
-  datosObra.forEach(([k,v])=>{
-    const h=rowH(v,CW-38,8.5,7);
-    checkPage(h); setLW();
-    doc.setFillColor(235,235,230); doc.rect(M,y,38,h,'F'); doc.rect(M,y,38,h);
-    doc.rect(M+38,y,CW-38,h);
-    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-    doc.text(k, M+2, y+5.2);
-    doc.setFont('helvetica','normal'); wText(M+38,y,CW-38,h,v,{size:8.5});
-    y+=h;
+    ['CONSTRUCTORA', obra.constructora || ''],
+  ].forEach(([k, v]) => {
+    const h = calcH(v, CW - 36, 8.5, 8);
+    celda(M, y, 36, h, k, { bold: true, fill: GRIS_CAB });
+    celda(M + 36, y, CW - 36, h, v);
+    y += h;
   });
-  y+=8;
 
-  // ── Aspecto revisado: tabla de temas tratados ───────────────────────────
-  if ((acta.temas||[]).length > 0) {
-    checkPage(20);
-    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
-    doc.text('Aspecto revisado:', M, y); y+=4;
-    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-    const introTxt = 'Durante la visita realizada, se han revisado los siguientes aspectos:';
-    doc.text(doc.splitTextToSize(introTxt, CW), M, y); y+=8;
+  // Fecha firma
+  y += 8;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+  doc.text('FECHA FIRMA:', M, y); y += 5;
+  const lugarFecha = `${obra.emplazamiento || obra.direccion || ''}, ${acta.fecha ? new Date(acta.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}.`;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+  doc.text(lugarFecha, M, y); y += 14;
 
-    // Cabecera tabla
-    checkPage(10);
-    doc.setFillColor(235,235,230); setLW();
-    doc.rect(M,y,20,7,'F'); doc.rect(M,y,20,7);
-    doc.rect(M+20,y,CW-20,7,'F'); doc.rect(M+20,y,CW-20,7);
-    doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
-    doc.text('N.º', M+2, y+5);
-    doc.text('TEMAS TRATADOS', M+22, y+5);
-    y+=7;
+  // Firma portada
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
+  doc.text('DIRECTOR DE EJECUCIÓN DE OBRA', M, y); y += 5;
+  if (obra.deoFirmante) { doc.setFont('helvetica', 'normal'); doc.text(obra.deoFirmante, M, y); }
 
-    (acta.temas||[]).forEach(t=>{
-      const h=rowH(t.titulo,CW-20,8.5,9);
-      checkPage(h); setLW();
-      doc.rect(M,y,20,h);
-      doc.rect(M+20,y,CW-20,h);
-      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-      doc.text(t.num||'', M+2, y+5.5);
-      wText(M+20,y,CW-20,h,t.titulo,{bold:true,size:8.5});
-      y+=h;
-    });
-    y+=6;
+  // ══════════════════════════════════════════════════════════════════════════
+  // PÁGINA 2 — Aspecto revisado + tabla temas + intro incidencias
+  // ══════════════════════════════════════════════════════════════════════════
+  doc.addPage(); cabecera(); pie();
+  y = 20;
 
-    // Texto incidencias
-    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-    doc.text('Incidencias detectadas:', M, y); y+=4;
-    doc.setFont('helvetica','normal');
-    const txt1='Las incidencias detectadas, deberán subsanarse y dar respuesta a la DEO.';
-    const txt2='Para ello deberán rellenar los datos solicitados en cada una de las incidencias detectadas y enviar fotografías a la DEO con las rectificaciones.';
-    const txt3='Se adjuntan tablas con las incidencias detectadas.';
-    [txt1,txt2,txt3].forEach(t=>{
-      const ll=doc.splitTextToSize(t,CW); doc.text(ll,M,y); y+=ll.length*4.4+2;
-    });
-    y+=4;
-    const txt4='Este Acta de Inspección de obra se ha llevado a cabo en base a las inspecciones y muestreos realizados por el DEO en la fecha indicada y en base a Partes de Inspección procedimentados.';
-    const ll4=doc.splitTextToSize(txt4,CW); doc.text(ll4,M,y); y+=ll4.length*4.4+6;
-  }
+  // Aspecto revisado
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+  doc.text('Aspecto revisado:', M, y); y += 5;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+  const introAsp = 'Durante la visita realizada, se han revisado los siguientes aspectos:';
+  doc.text(doc.splitTextToSize(introAsp, CW), M, y); y += 7;
 
-  // ── Zonas revisadas (desarrollo por tema) ──────────────────────────────
-  if ((acta.temas||[]).length > 0) {
-    doc.addPage(); cabecera(); pie(); y=22;
-    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(0,0,0);
-    doc.text('1. ZONAS REVISADAS', M, y); y+=8;
+  // Tabla temas tratados — cabecera
+  const COL_N = 18, COL_T = CW - COL_N;
+  celda(M, y, COL_N, 7, 'N.º', { bold: true, fill: GRIS_CAB });
+  celda(M + COL_N, y, COL_T, 7, 'TEMAS TRATADOS', { bold: true, fill: GRIS_CAB });
+  y += 7;
 
-    for (const t of acta.temas) {
-      // Fila encabezado tema
-      const hHead=rowH(t.titulo,CW-20,9,9);
-      checkPage(hHead+6);
-      doc.setFillColor(255,255,255); setLW();
-      doc.rect(M,y,20,hHead);
-      doc.rect(M+20,y,CW-20,hHead);
-      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
-      doc.text(t.num||'', M+2, y+hHead/2+1.5);
-      wText(M+20,y,CW-20,hHead,t.titulo,{bold:true,size:9});
-      y+=hHead;
+  temas.forEach(t => {
+    const h = calcH(t.titulo, COL_T, 8.5, 9);
+    celda(M, y, COL_N, h, t.num || '', { bold: true });
+    celda(M + COL_N, y, COL_T, h, t.titulo, { bold: true });
+    y += h;
+  });
+  y += 8;
+
+  // Intro incidencias
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
+  doc.text('Incidencias detectadas:', M, y); y += 5;
+  doc.setFont('helvetica', 'normal');
+  [
+    'Las incidencias detectadas, deberán subsanarse y dar respuesta a la DEO.',
+    'Para ello deberán rellenar los datos solicitados en cada una de las incidencias detectadas y enviar fotografías a la DEO con las rectificaciones.',
+    'Se adjuntan tablas con las incidencias detectadas.',
+  ].forEach(txt => {
+    const ll = doc.splitTextToSize(txt, CW);
+    doc.text(ll, M, y); y += ll.length * 4.6 + 2;
+  });
+  y += 4;
+  const txtBase = 'Este Acta de Inspección de obra se ha llevado a cabo en base a las inspecciones y muestreos realizados por el DEO en la fecha indicada y en base a Partes de Inspección procedimentados.';
+  const llBase = doc.splitTextToSize(txtBase, CW);
+  doc.text(llBase, M, y);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PÁGINA 3+ — Zonas revisadas (desarrollo por tema)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (temas.length > 0) {
+    doc.addPage(); cabecera(); pie();
+    y = 20;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(0, 0, 0);
+    doc.text('1. ZONAS REVISADAS', M, y); y += 8;
+
+    // Fotos: siempre 2 por fila, tamaño fijo uniforme
+    const FOTO_W = (CW - 4) / 2;  // ~88mm
+    const FOTO_H = 62;             // altura fija uniforme
+
+    for (const t of temas) {
+      // Cabecera tema — Nº + título en gris
+      const hTit = calcH(t.titulo, COL_T, 9, 9);
+      if (y + hTit + 10 > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
+      celda(M, y, COL_N, hTit, t.num || '', { bold: true, fill: GRIS_CAB });
+      celda(M + COL_N, y, COL_T, hTit, t.titulo, { bold: true, fill: GRIS_CAB });
+      y += hTit;
 
       // Descripción
       if (t.descripcion) {
-        const dl=doc.splitTextToSize(t.descripcion,CW-6);
-        const dh=Math.max(12,dl.length*4.6+6);
-        checkPage(dh); setLW();
-        doc.rect(M,y,CW,dh);
-        doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-        doc.text(dl,M+3,y+5.5);
-        y+=dh;
+        const ll = doc.splitTextToSize(t.descripcion, CW - 4);
+        const dh = Math.max(12, ll.length * 4.4 + 6);
+        if (y + dh > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
+        sl(); doc.rect(M, y, CW, dh);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
+        doc.text(ll, M + 3, y + 5);
+        y += dh;
       }
 
-      // Fotos 2 por fila
-      const fotos=t.fotos||[]; const fW=(CW-4)/2;
-      for (let fi=0;fi<fotos.length;fi+=2) {
-        const pair=[fotos[fi],fotos[fi+1]].filter(Boolean);
-        const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.data);const r=pr.height/pr.width;const h=Math.min(fW*r,75);return{w:h/r,h};}catch(e){return{w:fW,h:58};}});
-        const rh=Math.max(...dims.map(d=>d.h));
-        checkPage(rh+6);
-        pair.forEach((f,pi)=>{
-          doc.addImage(f.data,'JPEG',M+pi*(fW+4),y,dims[pi].w,dims[pi].h);
-          // Marco amarillo/rojo alrededor de la foto
-          doc.setLineWidth(0.6); doc.setDrawColor(220,150,0);
-          doc.rect(M+pi*(fW+4),y,dims[pi].w,dims[pi].h);
-          setLW();
+      // Fotos: 2 por fila, tamaño fijo FOTO_W x FOTO_H, sin bordes de color
+      const fotos = t.fotos || [];
+      for (let fi = 0; fi < fotos.length; fi += 2) {
+        const pair = [fotos[fi], fotos[fi + 1]].filter(Boolean);
+        if (y + FOTO_H + 4 > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
+        pair.forEach((f, pi) => {
+          try {
+            // Calcular dimensiones manteniendo proporción dentro del cuadro fijo
+            const pr = doc.getImageProperties(f.data);
+            const ratio = pr.width / pr.height;
+            let iw = FOTO_W, ih = FOTO_H;
+            if (ratio > FOTO_W / FOTO_H) { ih = FOTO_W / ratio; }
+            else { iw = FOTO_H * ratio; }
+            const ox = M + pi * (FOTO_W + 4) + (FOTO_W - iw) / 2;
+            const oy = y + (FOTO_H - ih) / 2;
+            doc.addImage(f.data, 'JPEG', ox, oy, iw, ih);
+            // Marco neutro fino
+            sl(); doc.rect(M + pi * (FOTO_W + 4), y, FOTO_W, FOTO_H);
+          } catch (e) { /* imagen inválida, ignorar */ }
         });
-        y+=rh+6;
+        y += FOTO_H + 4;
       }
-
-      // Nota + tabla rectificación si es incidencia
-      if (t.estado === 'incidencia') {
-        checkPage(30);
-        doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-        const nota='NOTA: El contratista ha sido informado por la DF y se compromete a la ejecución de las medidas correctoras necesarias.';
-        const nl=doc.splitTextToSize(nota,CW); doc.text(nl,M,y+4); y+=nl.length*4+6;
-        // Tabla rectificación
-        checkPage(20); setLW();
-        const cols=[['Rectificado Día',40],['Responsable \u2013 Nombre',70],['Firma',CW-110]];
-        let cx=M;
-        cols.forEach(([label,w])=>{
-          doc.setFillColor(235,235,230); doc.rect(cx,y,w,7,'F'); doc.rect(cx,y,w,7);
-          doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text(label,cx+2,y+5);
-          doc.rect(cx,y+7,w,14); cx+=w;
-        });
-        y+=22;
-      }
-      y+=6;
+      y += 6;
     }
+
+    // ── Tabla firma — SIEMPRE al final de todo ─────────────────────────────
+    // Forzar nueva página si no cabe
+    if (y + 50 > PH - 16) { doc.addPage(); cabecera(); pie(); y = 20; }
+    y += 4;
+
+    // Nota contratista
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(0, 0, 0);
+    const notaTxt = 'NOTA: El contratista ha sido informado por la DF y se compromete a la ejecución de las medidas correctoras necesarias.';
+    const notaLL = doc.splitTextToSize(notaTxt, CW);
+    doc.text(notaLL, M, y); y += notaLL.length * 4.2 + 6;
+
+    // Tabla rectificación
+    const colsRect = [['Rectificado Día', 40], ['Responsable \u2013 Nombre', 80], ['Firma', CW - 120]];
+    let cx = M;
+    colsRect.forEach(([label, w]) => {
+      celda(cx, y, w, 7, label, { bold: true, fill: GRIS_CAB });
+      cx += w;
+    });
+    y += 7;
+    cx = M;
+    colsRect.forEach(([, w]) => { sl(); doc.rect(cx, y, w, 18); cx += w; });
+    y += 24;
+
+    // Firma DEO
+    y += 6;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
+    doc.text('DIRECTOR DE EJECUCIÓN DE OBRA', M, y); y += 5;
+    if (obra.deoFirmante) { doc.setFont('helvetica', 'normal'); doc.text(obra.deoFirmante, M, y); }
   }
 
-  // ── Firma DEO ────────────────────────────────────────────────────────────
-  checkPage(36); y+=4;
-  const lugarFecha = `${obra.emplazamiento||obra.direccion||''}, ${acta.fecha?new Date(acta.fecha).toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'}):''}.`;
-  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-  doc.text(lugarFecha, M, y); y+=12;
-  doc.setFont('helvetica','bold'); doc.text('DIRECTOR DE EJECUCIÓN DE OBRA', M, y); y+=5;
-  if (obra.deoFirmante) { doc.setFont('helvetica','normal'); doc.text(obra.deoFirmante, M, y); }
+  // Pie en todas las páginas
+  const total = doc.getNumberOfPages();
+  for (let p = 1; p <= total; p++) { doc.setPage(p); pie(); }
 
-  const total=doc.getNumberOfPages();
-  for(let p=1;p<=total;p++){doc.setPage(p);pie();}
-  doc.save(`Acta_Inspeccion_${num}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`);
+  doc.save(`Acta_Inspeccion_${num}_${(obra.nombre || 'obra').replace(/\s+/g, '_')}.pdf`);
 }
 
 
