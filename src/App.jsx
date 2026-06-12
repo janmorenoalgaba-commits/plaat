@@ -1060,14 +1060,20 @@ async function generarActaInspeccion(obra, acta) {
 
   // Tabla temas tratados — cabecera
   const COL_N = 18, COL_T = CW - COL_N;
-  celda(M, y, COL_N, 7, 'N.º', { bold: true, fill: GRIS_CAB });
+  // Cabecera tabla Pg2 — N.º centrado
+  doc.setFillColor(...GRIS_CAB); doc.setDrawColor(0,0,0); doc.setLineWidth(LW);
+  doc.rect(M, y, COL_N, 7, 'FD');
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+  const nwCab = doc.getTextWidth('N.º');
+  doc.text('N.º', M + (COL_N - nwCab) / 2, y + 5);
   celda(M + COL_N, y, COL_T, 7, 'TEMAS TRATADOS', { bold: true, fill: GRIS_CAB });
   y += 7;
 
   temas.forEach(t => {
     const h = calcH(t.titulo, COL_T, 8.5, 9);
-    // Nº centrado
-    sl(); doc.setFillColor(255,255,255); doc.rect(M, y, COL_N, h);
+    // Nº centrado horizontal y vertical
+    doc.setFillColor(255,255,255); doc.setDrawColor(0,0,0); doc.setLineWidth(LW);
+    doc.rect(M, y, COL_N, h);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
     const nw = doc.getTextWidth(t.num || '');
     doc.text(t.num || '', M + (COL_N - nw) / 2, y + h / 2 + 1.5);
@@ -4384,20 +4390,50 @@ function VistaSeguimiento({ obras, isMobile }) {
   const [exportando,  setExportando]  = useState(false);
   const [confirmacion,setConfirmacion]= useState(null);
 
-  // Cargar desde storage
+  // Cargar desde Supabase con migración desde storage antiguo
   useEffect(() => {
     (async () => {
       try {
-        const r = await window.storage?.get(SEG_KEY, true);
-        if (r?.value) setPuntos(JSON.parse(r.value));
-      } catch(e) {}
+        if (window.db?.getSeguimiento) {
+          const lista = await window.db.getSeguimiento();
+          if (lista.length) { setPuntos(lista); setLoading(false); return; }
+          // Migración: leer storage antiguo y subir
+          const r = await window.storage?.get(SEG_KEY, true).catch(() => null);
+          if (r?.value) {
+            const vieja = JSON.parse(r.value);
+            for (const p of vieja) await window.db.upsertPuntoSeg(p).catch(() => {});
+            setPuntos(vieja);
+          }
+        } else {
+          const r = await window.storage?.get(SEG_KEY, true);
+          if (r?.value) setPuntos(JSON.parse(r.value));
+        }
+      } catch(e) { console.error('Seguimiento load:', e); }
       setLoading(false);
     })();
   }, []);
 
+  // Realtime: actualizar cuando otro usuario guarda
+  useEffect(() => {
+    if (!window.db?.subscribeSeguimiento) return;
+    const unsub = window.db.subscribeSeguimiento(async () => {
+      try {
+        const lista = await window.db.getSeguimiento();
+        setPuntos(lista);
+      } catch(e) {}
+    });
+    return unsub;
+  }, []);
+
   async function guardar(lista) {
     setPuntos(lista);
-    try { await window.storage?.set(SEG_KEY, JSON.stringify(lista), true); } catch(e) {}
+    try {
+      if (window.db?.upsertPuntoSeg) {
+        for (const p of lista) await window.db.upsertPuntoSeg(p);
+      } else {
+        await window.storage?.set(SEG_KEY, JSON.stringify(lista), true);
+      }
+    } catch(e) { console.error('Seguimiento save:', e); }
   }
 
   function nextNum(obraId) {
@@ -4413,7 +4449,12 @@ function VistaSeguimiento({ obras, isMobile }) {
   }
 
   async function eliminarPunto(id) {
-    await guardar(puntos.filter(p => p.id !== id));
+    const lista = puntos.filter(p => p.id !== id);
+    setPuntos(lista);
+    try {
+      if (window.db?.deletePuntoSeg) await window.db.deletePuntoSeg(id);
+      else await window.storage?.set(SEG_KEY, JSON.stringify(lista), true);
+    } catch(e) { console.error('Seguimiento delete:', e); }
     setConfirmacion(null);
   }
 
