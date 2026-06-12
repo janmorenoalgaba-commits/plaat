@@ -112,7 +112,30 @@ window.db = {
     if (error) throw error
   },
 
-  // ─ Realtime ──────────────────────────────────────────────────────────────
+  // ─ Seguimiento global ────────────────────────────────────────────────────
+  async getSeguimiento() {
+    const { data, error } = await supabase
+      .from('seguimiento').select('*').order('updated_at', { ascending: true });
+    if (error) throw error;
+    return (data || []).map(r => r.data);
+  },
+  async upsertPuntoSeg(punto) {
+    const { error } = await supabase.from('seguimiento').upsert({
+      id: punto.id, data: punto, updated_at: new Date().toISOString()
+    });
+    if (error) throw error;
+  },
+  async deletePuntoSeg(id) {
+    const { error } = await supabase.from('seguimiento').delete().eq('id', id);
+    if (error) throw error;
+  },
+  subscribeSeguimiento(onCambio) {
+    const canal = supabase.channel('seguimiento-global');
+    canal.on('postgres_changes', { event: '*', schema: 'public', table: 'seguimiento' },
+      () => onCambio());
+    canal.subscribe();
+    return () => supabase.removeChannel(canal);
+  },
   subscribeObra(obraId, onCambio) {
     const canal = supabase.channel(`obra-${obraId}`)
     const tablas = ['obras', 'incidencias', 'actas_vo', 'actas_insp', 'notas', 'calidad']
