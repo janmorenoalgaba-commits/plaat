@@ -4432,26 +4432,23 @@ function VistaSeguimiento({ obras, isMobile }) {
       }
       const { utils, writeFile } = window.XLSX;
 
-      // Cabeceras exactas del Excel original
-      const cab = ['NUM','TEMAS TRATADOS','','','','','','','','Responsable','Fecha ','Fecha límite resolución','Fecha resolución','Estado','TEMÁTICA','VIA'];
+      // Cabeceras sin columnas vacías
+      const cab = ['NUM','TEMAS TRATADOS','Responsable','Fecha','Fecha límite resolución','Fecha resolución','Estado','TEMÁTICA','VIA'];
       const filas = [cab];
 
       const puntosExp = filtroObra !== 'todas' ? puntos.filter(p => p.obraId === filtroObra) : puntos;
       puntosExp.forEach(p => {
-        const obraNombre = obras.find(o => o.id === p.obraId)?.nombre || '';
         const fmtD = iso => iso ? new Date(iso).toLocaleDateString('es-ES') : '';
         filas.push([
-          p.num, p.tema, '', '', '', '', '', '', '',
-          p.responsable, fmtD(p.fecha), fmtD(p.fechaLimite), fmtD(p.fechaResolucion),
+          p.num, p.tema,
+          p.responsable, fmtD(p.fecha), p.fechaLimite || '', fmtD(p.fechaResolucion),
           p.estado, p.tematica, p.via
         ]);
       });
 
       const ws = utils.aoa_to_sheet(filas);
-      // Anchos de columna aproximados
       ws['!cols'] = [
-        {wch:6},{wch:60},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},
-        {wch:20},{wch:12},{wch:22},{wch:20},{wch:12},{wch:18},{wch:8}
+        {wch:6},{wch:80},{wch:20},{wch:12},{wch:22},{wch:20},{wch:12},{wch:18},{wch:8}
       ];
       const wb = utils.book_new();
       utils.book_append_sheet(wb, ws, 'Seguimiento');
@@ -4608,81 +4605,92 @@ function FormSeguimiento({ punto, obras, nextNum, onGuardar, onCerrar, isMobile 
   });
   const upd = (k,v) => setF(prev => ({ ...prev, [k]: v }));
 
-  // Autonumerar al cambiar obra
   useEffect(() => {
     if (!punto) upd('num', nextNum(f.obraId));
   }, [f.obraId]);
 
+  const canSave = f.tema?.trim();
+
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#F7F6F3', borderRadius:16, overflow:'hidden' }}>
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#F7F6F3', borderRadius: isMobile?0:16, overflow:'hidden' }}>
       {/* Cabecera */}
-      <div style={{ background:'#1A1A17', padding:'16px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
-        <button onClick={onCerrar} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:15, cursor:'pointer', padding:0 }}>←</button>
+      <div style={{ background:'#1A1A17', padding: isMobile?'16px 16px':'16px 20px', paddingTop: isMobile?'calc(16px + env(safe-area-inset-top))':'16px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        <button onClick={onCerrar} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:18, cursor:'pointer', padding:'0 4px', lineHeight:1 }}>←</button>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:15, fontWeight:700, color:'#F2F1ED' }}>{punto ? 'Editar punto' : 'Nuevo punto de seguimiento'}</div>
-          <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Nº {f.num || '—'}</div>
+          <div style={{ fontSize:15, fontWeight:700, color:'#F2F1ED' }}>{punto ? 'Editar punto' : 'Nuevo punto'}</div>
+          <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginTop:1 }}>Seguimiento de obra</div>
         </div>
-        <button onClick={() => onGuardar(f)} disabled={!f.tema?.trim()} style={{ padding:'8px 18px', borderRadius:11, border:'none', background:'#5A7D5A', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', opacity: f.tema?.trim()?1:0.5 }}>Guardar</button>
+        <button onClick={() => canSave && onGuardar(f)} style={{ padding:'9px 20px', borderRadius:11, border:'none', background: canSave?'#5A7D5A':'#3A3A38', color:'#fff', fontSize:14, fontWeight:700, cursor: canSave?'pointer':'not-allowed', opacity: canSave?1:0.5 }}>
+          Guardar
+        </button>
       </div>
 
-      {/* Cuerpo */}
+      {/* Cuerpo — orden optimizado para móvil */}
       <div style={{ flex:1, overflowY:'auto', padding: isMobile?'16px':'20px 22px', display:'flex', flexDirection:'column', gap:14 }}>
+
+        {/* TEMA — lo más importante, primero y grande */}
+        <Field label="Tema tratado *">
+          <textarea value={f.tema} onChange={e => upd('tema', e.target.value)}
+            placeholder="Describe el punto de acción o tema tratado..."
+            style={{ minHeight: isMobile?120:100, fontSize: isMobile?15:14 }} autoFocus />
+        </Field>
+
+        {/* Obra + Responsable — lo más frecuente */}
         <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:12 }}>
           <Field label="Obra">
-            <select value={f.obraId} onChange={e => upd('obraId', e.target.value)}>
+            <select value={f.obraId} onChange={e => upd('obraId', e.target.value)} style={{ fontSize: isMobile?15:14 }}>
               {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
             </select>
           </Field>
-          <Field label="Nº">
-            <input type="number" min="1" value={f.num} onChange={e => upd('num', parseInt(e.target.value||'1',10))} />
+          <Field label="Responsable">
+            <input value={f.responsable} onChange={e => upd('responsable', e.target.value)}
+              placeholder="Empresa o persona" style={{ fontSize: isMobile?15:14 }} />
           </Field>
         </div>
 
-        <Field label="Tema tratado *">
-          <textarea value={f.tema} onChange={e => upd('tema', e.target.value)} placeholder="Describe el punto de acción o tema tratado en la reunión..." style={{ minHeight:100 }} autoFocus />
-        </Field>
-
-        <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:12 }}>
-          <Field label="Responsable">
-            <input value={f.responsable} onChange={e => upd('responsable', e.target.value)} placeholder="Empresa o persona responsable" />
-          </Field>
+        {/* Estado + Temática + Vía */}
+        <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr 1fr':'1fr 1fr 1fr', gap:12 }}>
           <Field label="Estado">
-            <select value={f.estado} onChange={e => upd('estado', e.target.value)}>
+            <select value={f.estado} onChange={e => upd('estado', e.target.value)} style={{ fontSize: isMobile?15:14 }}>
               {ESTADOS_SEG.map(e => <option key={e}>{e}</option>)}
             </select>
           </Field>
-        </div>
-
-        <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:12 }}>
-          <Field label="Fecha">
-            <input type="date" value={f.fecha} onChange={e => upd('fecha', e.target.value)} />
-          </Field>
-          <Field label="Fecha límite resolución">
-            <input type="date" value={f.fechaLimite} onChange={e => upd('fechaLimite', e.target.value)} />
-          </Field>
-          <Field label="Fecha resolución">
-            <input type="date" value={f.fechaResolucion} onChange={e => upd('fechaResolucion', e.target.value)} />
-          </Field>
-        </div>
-
-        <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:12 }}>
           <Field label="Temática">
-            <select value={f.tematica} onChange={e => upd('tematica', e.target.value)}>
+            <select value={f.tematica} onChange={e => upd('tematica', e.target.value)} style={{ fontSize: isMobile?15:14 }}>
               {TEMATICAS.map(t => <option key={t}>{t}</option>)}
             </select>
           </Field>
           <Field label="Vía">
-            <select value={f.via} onChange={e => upd('via', e.target.value)}>
+            <select value={f.via} onChange={e => upd('via', e.target.value)} style={{ fontSize: isMobile?15:14 }}>
               {VIAS.map(v => <option key={v}>{v}</option>)}
             </select>
           </Field>
         </div>
+
+        {/* Fechas — menos urgentes, al final */}
+        <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr 1fr':'repeat(3,1fr)', gap:12 }}>
+          <Field label="Fecha reunión">
+            <input type="date" value={f.fecha} onChange={e => upd('fecha', e.target.value)} style={{ fontSize: isMobile?15:14 }} />
+          </Field>
+          <Field label="Fecha límite (texto)">
+            <input value={f.fechaLimite} onChange={e => upd('fechaLimite', e.target.value)}
+              placeholder="ASAP / dd/mm/aa / FO..." style={{ fontSize: isMobile?15:14 }} />
+          </Field>
+          <Field label="Fecha resolución">
+            <input type="date" value={f.fechaResolucion} onChange={e => upd('fechaResolucion', e.target.value)} style={{ fontSize: isMobile?15:14 }} />
+          </Field>
+        </div>
+
+        {/* Nº — al final, autonumérico */}
+        <Field label="Nº de punto">
+          <input type="number" min="1" value={f.num} onChange={e => upd('num', parseInt(e.target.value||'1',10))} style={{ fontSize: isMobile?15:14 }} />
+        </Field>
       </div>
 
-      {/* Pie */}
-      <div style={{ borderTop:'1px solid #ECEAE4', padding:'14px 20px', display:'flex', gap:10, flexShrink:0, background:'#fff' }}>
+      {/* Pie fijo en móvil */}
+      <div style={{ borderTop:'1px solid #ECEAE4', padding: isMobile?'12px 16px calc(12px + env(safe-area-inset-bottom))':'14px 20px', display:'flex', gap:10, flexShrink:0, background:'#fff' }}>
         <Btn onClick={onCerrar} full>Cancelar</Btn>
-        <Btn primary full onClick={() => onGuardar(f)} disabled={!f.tema?.trim()}>Guardar punto</Btn>
+        <Btn primary full onClick={() => canSave && onGuardar(f)} disabled={!canSave}>Guardar punto</Btn>
       </div>
     </div>
   );
