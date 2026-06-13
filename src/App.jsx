@@ -5399,9 +5399,16 @@ export default function App() {
 
       // Migra cada obra a sus tablas
       for (const o of listaObras) {
-        await window.db.upsertObra(obraRow(o, userId));
-        // Registrar como owner
-        await window.db.addOwner(o.id, userId).catch(() => null);
+        await window.db.crearObraConOwner(o.id, {
+          nombre: o.nombre, cliente: o.cliente, direccion: o.direccion,
+          responsable: o.responsable, estado: o.estado, tipo: o.tipo,
+          diasVisita: o.diasVisita, emplazamiento: o.emplazamiento,
+          propiedad: o.propiedad, proyectista: o.proyectista,
+          direccionObra: o.direccionObra, constructora: o.constructora,
+          deoFirmante: o.deoFirmante, numActaSeq: o.numActaSeq,
+          fases: o.fases, disciplinas: o.disciplinas, lotes: o.lotes,
+          creadaEn: o.creadaEn,
+        }).catch(() => null);
         if (o.incidencias?.length) {
           for (const inc of o.incidencias) {
             await window.db.upsertModulo('incidencias', { id: inc.id, obra_id: o.id, data: inc, updated_at: now() });
@@ -5507,9 +5514,27 @@ export default function App() {
     const lista = [obra, ...obras];
     setObras(lista);
     const userId = user?.id || user?.sub;
-    await saveUnaObra(obra, lista);
-    // Registrar como owner en obra_usuarios
-    await window.db.addOwner(obra.id, userId).catch(e => console.error('addOwner:', e));
+    try {
+      // RPC atómica: crea obra + registra owner en una sola transacción
+      const obraRow = {
+        id: obra.id, user_id: userId,
+        data: {
+          nombre: obra.nombre, cliente: obra.cliente, direccion: obra.direccion,
+          responsable: obra.responsable, estado: obra.estado, tipo: obra.tipo,
+          diasVisita: obra.diasVisita, emplazamiento: obra.emplazamiento,
+          propiedad: obra.propiedad, proyectista: obra.proyectista,
+          direccionObra: obra.direccionObra, constructora: obra.constructora,
+          deoFirmante: obra.deoFirmante, numActaSeq: obra.numActaSeq,
+          fases: obra.fases, disciplinas: obra.disciplinas, lotes: obra.lotes,
+          creadaEn: obra.creadaEn,
+        },
+        updated_at: now(),
+      };
+      await window.db.crearObraConOwner(obra.id, obraRow.data);
+    } catch(e) {
+      console.error('Error creando obra:', e);
+      alert('No se pudo guardar la obra: ' + e.message);
+    }
     setShowNueva(false);
     setObraActiva(obra);
   }
