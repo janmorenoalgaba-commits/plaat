@@ -890,7 +890,7 @@ function FormActaInspeccion({ obra, acta, onGuardar, onCerrar, onExportar }) {
   }
   function delTema(id) { setA(prev => ({ ...prev, temas: prev.temas.filter(t => t.id !== id) })); setConfirmacion(null); }
   function addFoto(temaId) {
-    pickFiles('image/*', f => setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === temaId ? { ...t, fotos: [...(t.fotos||[]), { id: uid(), data: f.data }] } : t) })));
+    pickFiles('image/*', f => setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === temaId ? { ...t, fotos: [...(t.fotos||[]), f] } : t) })), obra?.id);
   }
   function delFoto(temaId, fotoId) {
     setA(prev => ({ ...prev, temas: prev.temas.map(t => t.id === temaId ? { ...t, fotos: (t.fotos||[]).filter(f => f.id !== fotoId) } : t) }));
@@ -1628,7 +1628,32 @@ function diasDesde(iso) {
   if (!iso) return 0;
   return Math.floor((Date.now() - new Date(iso)) / 86400000);
 }
-function pickFiles(accept, cb) {
+async function subirFotoStorage(obraId, fotoId, base64) {
+  if (!window.db?.subirFoto || !obraId) return { id: fotoId, data: base64 };
+  try {
+    const { path, url } = await window.db.subirFoto(obraId, fotoId, base64);
+    return { id: fotoId, path, url, data: base64 }; // guardamos base64 como fallback temporal
+  } catch(e) {
+    console.error('Error subiendo foto a Storage:', e);
+    return { id: fotoId, data: base64 }; // fallback: guardar base64
+  }
+}
+
+// Renovar URLs firmadas (caducan, hay que renovarlas al cargar)
+async function renovarUrlsFotos(fotos) {
+  if (!window.db?.getFotoUrl || !fotos?.length) return fotos;
+  return Promise.all(fotos.map(async f => {
+    if (f.path && (!f.url || f.url.includes('token='))) {
+      try {
+        const url = await window.db.getFotoUrl(f.path);
+        return { ...f, url };
+      } catch(e) { return f; }
+    }
+    return f;
+  }));
+}
+
+function pickFiles(accept, cb, obraId) {
   const inp = document.createElement('input');
   inp.type = 'file'; inp.multiple = true; inp.accept = accept;
   inp.style.position = 'fixed'; inp.style.left = '-9999px';
@@ -1641,12 +1666,17 @@ function pickFiles(accept, cb) {
         if (f.type.startsWith('image/')) {
           const img = new Image();
           img.onload = () => {
-            const maxW = 720, ratio = Math.min(1, maxW / img.width);
+            const maxW = 1080, ratio = Math.min(1, maxW / img.width);
             const c = document.createElement('canvas');
             c.width = Math.round(img.width * ratio);
             c.height = Math.round(img.height * ratio);
             c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-            cb({ id: uid(), nombre: f.name, tipo: 'imagen', data: c.toDataURL('image/jpeg', 0.55) });
+            const base64 = c.toDataURL('image/jpeg', 0.75);
+            const fotoId = uid();
+            // Subir a Storage si hay obraId
+            subirFotoStorage(obraId, fotoId, base64).then(foto => {
+              cb({ ...foto, nombre: f.name, tipo: 'imagen' });
+            });
           };
           img.onerror = () => alert('No se pudo procesar la imagen: ' + f.name);
           img.src = ev.target.result;
@@ -1662,7 +1692,11 @@ function pickFiles(accept, cb) {
   inp.click();
 }
 
-// ── Card de incidencia ────────────────────────────────────────────────────────
+// Helper: obtener src de una foto (URL de Storage o base64 fallback)
+function fotoSrc(foto) {
+  if (!foto) return '';
+  return foto.url || foto.data || '';
+}
 function IncCard({ inc, esVisitaHoy, onClick, onRevisar }) {
   const isMobile = useIsMobile();
   const est      = ESTADOS_INC[inc.estado] || ESTADOS_INC.detectada;
@@ -1681,7 +1715,7 @@ function IncCard({ inc, esVisitaHoy, onClick, onRevisar }) {
         {/* Foto */}
         <div onClick={onClick} style={{ width: isMobile ? 70 : 80, flexShrink: 0, position: 'relative', background: foto ? 'transparent' : '#F5F4F0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           {foto
-            ? <img src={foto.data} alt="" style={{ width: '100%', height: '100%', minHeight: isMobile ? 78 : 80, objectFit: 'cover', display: 'block' }} />
+            ? <img src={fotoSrc(foto)} alt="" style={{ width: '100%', height: '100%', minHeight: isMobile ? 78 : 80, objectFit: 'cover', display: 'block' }} />
             : <span style={{ fontSize: 20, color: '#C5C4BE', fontWeight: 300 }}>—</span>}
           {fotos.length > 1 && (
             <span style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 10, fontWeight: 500, padding: '1px 6px', borderRadius: 3 }}>{fotos.length} fotos</span>
@@ -1753,11 +1787,11 @@ function FormNuevaIncidencia({ onClose, onCrear }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {fotos.map(f => (
             <div key={f.id} style={{ position: 'relative', flexShrink: 0 }}>
-              <img src={f.data} alt="" style={{ width: 70, height: 56, objectFit: 'cover', borderRadius: 7, border: '1px solid #E0DFD9', display: 'block' }} />
+              <img src={fotoSrc(f)} alt="" style={{ width: 70, height: 56, objectFit: 'cover', borderRadius: 7, border: '1px solid #E0DFD9', display: 'block' }} />
               <button onClick={() => setFotos(p => p.filter(x => x.id !== f.id))} style={{ position: 'absolute', top: -5, right: -5, width: 16, height: 16, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
             </div>
           ))}
-          <button onClick={() => pickFiles('image/*', f => setFotos(p => [...p, f]))} style={{ width: 70, height: 56, borderRadius: 7, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 20, color: '#A5A5A0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📷</button>
+          <button onClick={() => pickFiles('image/*', f => setFotos(p => [...p, f]), obra?.id)} style={{ width: 70, height: 56, borderRadius: 7, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 20, color: '#A5A5A0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📷</button>
         </div>
       </div>
 
@@ -1926,7 +1960,7 @@ function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar }) {
           )}
 
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]))} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
+            <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obra?.id)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
             <Btn primary full onClick={guardar} disabled={!nota.trim() && adjuntos.length === 0 && estado === inc.estado}>Guardar</Btn>
           </div>
         </div>
@@ -2017,7 +2051,7 @@ function ModalRevision({ inc, onSinCambios, onConCambios, onClose }) {
                 </div>
               )}
 
-              <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]))} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#6B6B66', marginBottom: 14 }}>📎 Adjuntar foto o documento</button>
+              <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obra?.id)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#6B6B66', marginBottom: 14 }}>📎 Adjuntar foto o documento</button>
 
               <div style={{ display: 'flex', gap: 8 }}>
                 <Btn onClick={() => setFase('pregunta')} full>← Atrás</Btn>
@@ -2824,7 +2858,7 @@ function UnidadesNombradas({ ensayo, onUpdate, onPreview }) {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]))} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
+                  <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obra?.id)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
                   {u.marca && <Btn danger onClick={() => quitar(u.id)}>Desmarcar</Btn>}
                   <div style={{ flex: 1 }} />
                   <Btn onClick={() => setEditId(null)}>Cancelar</Btn>
@@ -2940,7 +2974,7 @@ function RegistrosLibres({ ensayo, onUpdate, onPreview }) {
             </div>
           )}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]))} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar acta</button>
+            <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obra?.id)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar acta</button>
             <Btn onClick={() => setShow(false)} full>Cancelar</Btn>
             <Btn primary full onClick={guardar}>Guardar</Btn>
           </div>
@@ -3820,7 +3854,7 @@ function ModuloActaVO({ obra, onSave }) {
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id === temaId ? { ...t, [campo]: val } : t) }) });
   }
   function addFotoEntrada(secId, temaId, entId) {
-    pickFiles('image/*', f => guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: t.entradas.map(e => e.id !== entId ? e : { ...e, fotos: [...(e.fotos||[]), { id: uid(), data: f.data }] }) }) }) }));
+    pickFiles('image/*', f => guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: t.entradas.map(e => e.id !== entId ? e : { ...e, fotos: [...(e.fotos||[]), f] }) }) }) }), obra?.id);
   }
   function delFotoEntrada(secId, temaId, entId, fotoId) {
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: t.entradas.map(e => e.id !== entId ? e : { ...e, fotos: (e.fotos||[]).filter(ft => ft.id !== fotoId) }) }) }) });
@@ -3841,7 +3875,7 @@ function ModuloActaVO({ obra, onSave }) {
   // Estado de obra
   function updEstado(campo, val) { guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), [campo]: val } }); }
   function addFotoEstado() {
-    pickFiles('image/*', f => guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: [...((vo.estadoObra||{}).fotos||[]), { id: uid(), data: f.data }] } }));
+    pickFiles('image/*', f => guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: [...((vo.estadoObra||{}).fotos||[]), f] } }), obra?.id);
   }
   function delFotoEstado(id) { guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: (vo.estadoObra.fotos||[]).filter(f => f.id !== id) } }); }
 
@@ -3954,7 +3988,7 @@ function ModuloActaVO({ obra, onSave }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
           {(vo.estadoObra?.fotos||[]).map(f => (
             <div key={f.id} style={{ position: 'relative', width: isMobile ? 80 : 110, height: isMobile ? 60 : 80 }}>
-              <img src={f.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }} />
+              <img src={fotoSrc(f)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }} />
               <button onClick={() => setConfirmacion({ titulo: 'Eliminar foto', texto: 'Vas a eliminar esta foto del estado de obra.', onSi: () => { delFotoEstado(f.id); setConfirmacion(null); } })} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
             </div>
           ))}
