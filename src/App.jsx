@@ -3918,6 +3918,9 @@ function ModuloActaVO({ obra, onSave }) {
   function delFotoEntrada(secId, temaId, entId, fotoId) {
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: t.entradas.map(e => e.id !== entId ? e : { ...e, fotos: (e.fotos||[]).filter(ft => ft.id !== fotoId) }) }) }) });
   }
+  function delEntrada(secId, temaId, entId) {
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: t.entradas.filter(e => e.id !== entId) }) }) });
+  }
   function reabrirTema(secId, temaId) {
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => {
       if (t.id !== temaId) return t;
@@ -4083,6 +4086,7 @@ function ModuloActaVO({ obra, onSave }) {
                   onAddEntrada={(tId,txt) => addEntrada(sec.id, tId, txt)}
                   onAddFoto={(tId,eId) => addFotoEntrada(sec.id, tId, eId)}
                   onDelFoto={(tId,eId,fId) => delFotoEntrada(sec.id, tId, eId, fId)}
+                  onDelEntrada={(tId,eId) => delEntrada(sec.id, tId, eId)}
                   onDel={() => setBorrar({ tipo: 'tema', secId: sec.id, id: t.id, label: t.num })} />
               );
             })}
@@ -4122,7 +4126,7 @@ function ModuloActaVO({ obra, onSave }) {
 }
 
 // Componente de un tema (para evitar closures stale en los selects)
-function TemaVO({ t, est, secId, voNum, onUpdEntrada, onUpdTema, onAddEntrada, onAddFoto, onDelFoto, onDel }) {
+function TemaVO({ t, est, secId, voNum, onUpdEntrada, onUpdTema, onAddEntrada, onAddFoto, onDelFoto, onDelEntrada, onDel }) {
   const [abierto, setAbierto] = useState(false);
   const [editNum, setEditNum] = useState(false);
   const [editEnt, setEditEnt] = useState(null); // id entrada en edición
@@ -4191,6 +4195,8 @@ function TemaVO({ t, est, secId, voNum, onUpdEntrada, onUpdTema, onAddEntrada, o
                       <button onClick={() => onAddFoto(t.id, en.id)} style={{ width: 64, height: 48, borderRadius: 6, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 11, color: '#9B9B97', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>+ foto</button>
                     </div>
                   </div>
+                  {/* Botón eliminar entrada */}
+                  <button onClick={() => onDelEntrada(t.id, en.id)} title="Eliminar comentario" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:16, lineHeight:1, padding:'2px 3px', flexShrink:0, marginTop:1 }}>×</button>
                 </div>
               </div>
             );
@@ -4660,14 +4666,27 @@ function VistaSeguimiento({ obras, isMobile }) {
   };
 
   if (showForm || editando) {
-    return <FormSeguimiento
-      punto={editando}
-      obras={obras}
-      nextNum={nextNum}
-      onGuardar={guardarPunto}
-      onCerrar={() => { setShowForm(false); setEditando(null); }}
-      isMobile={isMobile}
-    />;
+    return isMobile ? (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 500 }}>
+        <FormSeguimiento
+          punto={editando}
+          obras={obras}
+          nextNum={nextNum}
+          onGuardar={guardarPunto}
+          onCerrar={() => { setShowForm(false); setEditando(null); }}
+          isMobile={isMobile}
+        />
+      </div>
+    ) : (
+      <FormSeguimiento
+        punto={editando}
+        obras={obras}
+        nextNum={nextNum}
+        onGuardar={guardarPunto}
+        onCerrar={() => { setShowForm(false); setEditando(null); }}
+        isMobile={isMobile}
+      />
+    );
   }
 
   return (
