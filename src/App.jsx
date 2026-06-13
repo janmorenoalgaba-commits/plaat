@@ -5409,7 +5409,7 @@ export default function App() {
     setLoading(true);
     try {
       await migrarSiNecesario(userId);
-      const rows = await window.db.getObras(); // RLS filtra automáticamente
+      const rows = await window.db.getObras();
       const obrasCompletas = await Promise.all(rows.map(async row => {
         const [incs, vos, insps, notas, cal] = await Promise.all([
           window.db.getModulo('incidencias', row.id),
@@ -5422,8 +5422,82 @@ export default function App() {
         return { ...rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal }), _rol: rol };
       }));
       setObras(obrasCompletas);
+      // Migrar fotos antiguas en segundo plano (sin bloquear la UI)
+      setTimeout(() => migrarFotosAntiguas(obrasCompletas), 2000);
     } catch (e) { console.error('Error cargando obras:', e); }
     setLoading(false);
+  }
+
+  // ── Migración de fotos antiguas (base64 → Storage) en segundo plano ────────
+  async function migrarFotosAntiguas(listaObras) {
+    if (!window.db?.subirFoto) return;
+    let hayActualizaciones = false;
+
+    for (const obra of listaObras) {
+      let obraModificada = false;
+      const incidenciasNuevas = [];
+
+      for (const inc of (obra.incidencias || [])) {
+        let incModificada = false;
+        const historialNuevo = await Promise.all((inc.historial || []).map(async h => {
+          const adjuntosNuevos = await Promise.all((h.adjuntos || []).map(async a => {
+            // Si ya tiene path/url de Storage, no migrar
+            if (a.path || a.url || !a.data || !a.data.startsWith('data:image')) return a;
+            try {
+              const { path, url } = await window.db.subirFoto(obra.id, a.id || uid(), a.data);
+              incModificada = true;
+              return { ...a, path, url, data: undefined }; // eliminar base64
+            } catch(e) { return a; } // si falla, mantener base64
+          }));
+          return incModificada ? { ...h, adjuntos: adjuntosNuevos } : h;
+        }));
+
+        if (incModificada) {
+          const incActualizada = { ...inc, historial: historialNuevo };
+          await window.db.upsertModulo('incidencias', { id: inc.id, obra_id: obra.id, data: incActualizada, updated_at: now() });
+          incidenciasNuevas.push(incActualizada);
+          obraModificada = true;
+        } else {
+          incidenciasNuevas.push(inc);
+        }
+      }
+
+      // Migrar fotos de Acta VO
+      if (obra.actaVO?.secciones) {
+        let voModificado = false;
+        const seccionesNuevas = await Promise.all((obra.actaVO.secciones || []).map(async sec => {
+          const temasNuevos = await Promise.all((sec.temas || []).map(async t => {
+            const entradasNuevas = await Promise.all((t.entradas || []).map(async en => {
+              const fotosNuevas = await Promise.all((en.fotos || []).map(async f => {
+                if (f.path || f.url || !f.data || !f.data.startsWith('data:image')) return f;
+                try {
+                  const { path, url } = await window.db.subirFoto(obra.id, f.id || uid(), f.data);
+                  voModificado = true;
+                  return { ...f, path, url, data: undefined };
+                } catch(e) { return f; }
+              }));
+              return { ...en, fotos: fotosNuevas };
+            }));
+            return { ...t, entradas: entradasNuevas };
+          }));
+          return { ...sec, temas: temasNuevos };
+        }));
+        if (voModificado) {
+          const voActualizado = { ...obra.actaVO, secciones: seccionesNuevas };
+          await window.db.upsertModulo('actas_vo', { id: obra.id + '_vo', obra_id: obra.id, data: voActualizado, updated_at: now() });
+          obraModificada = true;
+        }
+      }
+
+      if (obraModificada) hayActualizaciones = true;
+    }
+
+    if (hayActualizaciones) {
+      console.log('Fotos antiguas migradas a Storage');
+      // Recargar obras para reflejar las URLs nuevas
+      const userId = user?.id || user?.sub;
+      if (userId) cargarObras(userId);
+    }
   }
 
   // ── Guardar obra: solo la parte que cambió ─────────────────────────────────
