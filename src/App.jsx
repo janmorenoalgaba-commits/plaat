@@ -1829,26 +1829,41 @@ function FormNuevaIncidencia({ onClose, onCrear, obraId }) {
 
 // ── Detalle de incidencia ─────────────────────────────────────────────────────
 function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar, obraId }) {
-  const [nota,     setNota]     = useState('');
-  const [adjuntos, setAdjuntos] = useState([]);
-  const [estado,   setEstado]   = useState(inc.estado);
-  const [preview,  setPreview]  = useState(null); // imagen ampliada
-  const [menu,     setMenu]     = useState(false);
-  const [confirmar, setConfirmar] = useState(false);
+  const [nota,       setNota]       = useState('');
+  const [adjuntos,   setAdjuntos]   = useState([]);
+  const [estado,     setEstado]     = useState(inc.estado);
+  const [preview,    setPreview]    = useState(null);
+  const [menu,       setMenu]       = useState(false);
+  const [confirmar,  setConfirmar]  = useState(false);
+  const [editTitulo, setEditTitulo] = useState(false);
+  const [titulo,     setTitulo]     = useState(inc.titulo);
+  const [editH,      setEditH]      = useState(null); // id de entrada del historial en edición
 
   function guardar() {
     if (!nota.trim() && adjuntos.length === 0 && estado === inc.estado) return;
     const estadoCambio = estado !== inc.estado;
-    const entrada = {
-      id: uid(),
-      tipo: estadoCambio ? 'cambio_estado' : 'nota',
-      estado,
-      nota: nota.trim(),
-      adjuntos,
-      fecha: now(),
-    };
-    onActualizar({ ...inc, estado, historial: [...(inc.historial || []), entrada], ultimaActualizacion: now() });
+    const entrada = { id: uid(), tipo: estadoCambio ? 'cambio_estado' : 'nota', estado, nota: nota.trim(), adjuntos, fecha: now() };
+    onActualizar({ ...inc, titulo, estado, historial: [...(inc.historial || []), entrada], ultimaActualizacion: now() });
     setNota(''); setAdjuntos([]);
+  }
+
+  function guardarTitulo() {
+    if (!titulo.trim()) return;
+    onActualizar({ ...inc, titulo: titulo.trim(), ultimaActualizacion: now() });
+    setEditTitulo(false);
+  }
+
+  function guardarEntrada(entradaId, nuevaNota, nuevosAdjuntos) {
+    const historial = (inc.historial || []).map(h =>
+      h.id === entradaId ? { ...h, nota: nuevaNota, adjuntos: nuevosAdjuntos } : h
+    );
+    onActualizar({ ...inc, historial, ultimaActualizacion: now() });
+    setEditH(null);
+  }
+
+  function eliminarEntrada(entradaId) {
+    const historial = (inc.historial || []).filter(h => h.id !== entradaId);
+    onActualizar({ ...inc, historial, ultimaActualizacion: now() });
   }
 
   const est = ESTADOS_INC[inc.estado] || ESTADOS_INC.detectada;
@@ -1859,7 +1874,11 @@ function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar, obraId }) {
       <div style={{ padding: '12px 16px', borderBottom: '1px solid #E8E7E1', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#6B6B66', display: 'flex', alignItems: 'center', gap: 4 }}>← Volver</button>
         <span style={{ color: '#D4D3CE' }}>/</span>
-        <span style={{ fontSize: 13, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.titulo}</span>
+        {editTitulo ? (
+          <input value={titulo} onChange={e => setTitulo(e.target.value)} onBlur={guardarTitulo} onKeyDown={e => e.key === 'Enter' && guardarTitulo()} autoFocus style={{ flex: 1, fontWeight: 500, fontSize: 13 }} />
+        ) : (
+          <span onClick={() => setEditTitulo(true)} title="Clic para editar" style={{ fontSize: 13, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text', borderBottom: '1px dashed #D4D3CE' }}>{inc.titulo}</span>
+        )}
         <Pill label={est.label} bg={est.bg} color={est.color} />
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <button onClick={() => setMenu(m => !m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>⋮</button>
@@ -1867,6 +1886,7 @@ function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar, obraId }) {
             <>
               <div onClick={() => setMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
               <div style={{ position: 'absolute', right: 0, top: '100%', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 9, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 5, zIndex: 21, minWidth: 130 }}>
+                <div onClick={() => { setMenu(false); setEditTitulo(true); }} className="hov-row" style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#16160F' }}>✏️ Editar título</div>
                 <div onClick={() => { setMenu(false); setConfirmar(true); }} className="hov-row" style={{ padding: '7px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#8A1F1F' }}>Eliminar</div>
               </div>
             </>
@@ -1888,8 +1908,7 @@ function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar, obraId }) {
       )}
 
       <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
-
-        {/* Cambio de estado */}
+        {/* Estado */}
         <div style={{ background: '#F9F8F5', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
           <div style={{ fontSize: 11, color: '#A5A5A0', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Estado</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1902,63 +1921,66 @@ function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar, obraId }) {
         </div>
 
         {/* Historial */}
-        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 500, marginBottom: 10 }}>
-          Historial
-        </div>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#A5A5A0', fontWeight: 500, marginBottom: 10 }}>Historial</div>
 
-            {(inc.historial || []).slice().reverse().map(h => (
-              <div key={h.id} style={{
-                padding: h.tipo === 'revision' ? '7px 12px' : '10px 12px',
-                background: h.tipo === 'revision' ? 'transparent' : '#fff',
-                border: `1px solid ${h.tipo === 'revision' ? '#EEECEA' : '#E8E7E1'}`,
-                borderRadius: 9, marginBottom: 6,
-              }}>
+        {(inc.historial || []).slice().reverse().map(h => (
+          <div key={h.id} style={{ padding: h.tipo === 'revision' ? '7px 12px' : '10px 12px', background: h.tipo === 'revision' ? 'transparent' : '#fff', border: `1px solid ${h.tipo === 'revision' ? '#EEECEA' : '#E8E7E1'}`, borderRadius: 9, marginBottom: 6 }}>
+
+            {editH === h.id ? (
+              // ── Modo edición inline ──────────────────────────────────────
+              <EntradaEditor
+                entrada={h}
+                obraId={obraId}
+                onGuardar={(nota, adjs) => guardarEntrada(h.id, nota, adjs)}
+                onCancelar={() => setEditH(null)}
+              />
+            ) : (
+              // ── Modo lectura ─────────────────────────────────────────────
+              <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: (h.nota || h.adjuntos?.length) ? 6 : 0 }}>
                   <span style={{ fontSize: 11, color: '#A5A5A0' }}>{fmtDate(h.fecha)}</span>
-                  {h.tipo === 'creacion' && (
-                    <span style={{ fontSize: 11, color: '#6B6B66', background: '#F0EFEA', padding: '1px 7px', borderRadius: 20 }}>Registrada</span>
-                  )}
-                  {h.tipo === 'cambio_estado' && (
-                    <Pill label={ESTADOS_INC[h.estado]?.label || h.estado} bg={ESTADOS_INC[h.estado]?.bg || '#eee'} color={ESTADOS_INC[h.estado]?.color || '#333'} />
-                  )}
-                  {h.tipo === 'nota' && (
-                    <span style={{ fontSize: 11, color: '#A5A5A0', fontStyle: 'italic' }}>Actualización</span>
-                  )}
-                  {h.tipo === 'revision' && (
-                    <span style={{ fontSize: 11, color: '#A5A5A0' }}>✓ Revisada en visita · Sin cambios</span>
+                  {h.tipo === 'creacion'     && <span style={{ fontSize: 11, color: '#6B6B66', background: '#F0EFEA', padding: '1px 7px', borderRadius: 20 }}>Registrada</span>}
+                  {h.tipo === 'cambio_estado'&& <Pill label={ESTADOS_INC[h.estado]?.label || h.estado} bg={ESTADOS_INC[h.estado]?.bg || '#eee'} color={ESTADOS_INC[h.estado]?.color || '#333'} />}
+                  {h.tipo === 'nota'         && <span style={{ fontSize: 11, color: '#A5A5A0', fontStyle: 'italic' }}>Actualización</span>}
+                  {h.tipo === 'revision'     && <span style={{ fontSize: 11, color: '#A5A5A0' }}>✓ Revisada · Sin cambios</span>}
+                  {/* Botones editar/eliminar entrada */}
+                  {(h.tipo === 'nota' || h.tipo === 'creacion' || h.tipo === 'cambio_estado') && (
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                      <button onClick={() => setEditH(h.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 13, padding: '0 3px' }} title="Editar">✏️</button>
+                      <button onClick={() => eliminarEntrada(h.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 15, lineHeight: 1, padding: '0 3px' }} title="Eliminar entrada">×</button>
+                    </div>
                   )}
                 </div>
                 {h.nota && <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: h.adjuntos?.length ? 8 : 0 }}>{h.nota}</div>}
                 {h.adjuntos?.length > 0 && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {h.adjuntos.map(a => a.tipo === 'imagen'
-                      ? <img key={a.id} src={a.data} alt={a.nombre} title="Clic para ampliar" onClick={() => setPreview(a)} style={{ width: 140, height: 110, objectFit: 'cover', borderRadius: 8, border: '1px solid #E0DFD9', display: 'block', cursor: 'zoom-in' }} />
-                      : <a key={a.id} href={a.data} download={a.nombre} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, padding: '4px 9px', borderRadius: 7, background: '#F5F4F0', border: '1px solid #E0DFD9', color: '#18180F', textDecoration: 'none' }}>📄 {a.nombre}</a>
+                      ? <img key={a.id} src={fotoSrc(a)} alt={a.nombre} onClick={() => setPreview(a)} style={{ width: 140, height: 110, objectFit: 'cover', borderRadius: 8, border: '1px solid #E0DFD9', cursor: 'zoom-in' }} />
+                      : <a key={a.id} href={fotoSrc(a)} download={a.nombre} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, padding: '4px 9px', borderRadius: 7, background: '#F5F4F0', border: '1px solid #E0DFD9', color: '#18180F', textDecoration: 'none' }}>📄 {a.nombre}</a>
                     )}
                   </div>
                 )}
-              </div>
-            ))}
+              </>
+            )}
+          </div>
+        ))}
 
         {/* Añadir actualización */}
         <div style={{ background: '#F9F8F5', borderRadius: 10, padding: '12px 14px', marginTop: 4 }}>
           <div style={{ fontSize: 11, color: '#A5A5A0', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Añadir actualización</div>
-          <textarea placeholder="Nota de seguimiento, notificación enviada, acta adjunta..." value={nota} onChange={e => setNota(e.target.value)} style={{ marginBottom: 8, minHeight: 64 }} />
-
+          <textarea placeholder="Nota de seguimiento..." value={nota} onChange={e => setNota(e.target.value)} style={{ marginBottom: 8, minHeight: 64 }} />
           {adjuntos.length > 0 && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
               {adjuntos.map(a => (
                 <div key={a.id} style={{ position: 'relative' }}>
                   {a.tipo === 'imagen'
-                    ? <img src={a.data} alt="" style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9' }} />
-                    : <div style={{ fontSize: 11, padding: '4px 8px', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 6 }}>📄 {a.nombre}</div>
-                  }
+                    ? <img src={fotoSrc(a)} alt="" style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9' }} />
+                    : <div style={{ fontSize: 11, padding: '4px 8px', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 6 }}>📄 {a.nombre}</div>}
                   <button onClick={() => setAdjuntos(p => p.filter(x => x.id !== a.id))} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                 </div>
               ))}
             </div>
           )}
-
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obraId)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
             <Btn primary full onClick={guardar} disabled={!nota.trim() && adjuntos.length === 0 && estado === inc.estado}>Guardar</Btn>
@@ -1966,15 +1988,44 @@ function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar, obraId }) {
         </div>
       </div>
 
-      {/* Lightbox de imagen */}
       {preview && (
-        <div onClick={() => setPreview(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 30, cursor: 'zoom-out' }}>
-          <img src={preview.data} alt={preview.nombre} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6 }} />
+        <div onClick={() => setPreview(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 30, cursor: 'zoom-out' }}>
+          <img src={fotoSrc(preview)} alt={preview.nombre} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6 }} />
           <button onClick={() => setPreview(null)} style={{ position: 'absolute', top: 20, right: 24, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 24, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', lineHeight: 1 }}>×</button>
-          <a href={preview.data} download={preview.nombre} onClick={e => e.stopPropagation()} style={{ position: 'absolute', bottom: 24, background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 13, padding: '8px 16px', borderRadius: 8, textDecoration: 'none' }}>↓ Descargar {preview.nombre}</a>
+          <a href={fotoSrc(preview)} download={preview.nombre} onClick={e => e.stopPropagation()} style={{ position: 'absolute', bottom: 24, background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 13, padding: '8px 16px', borderRadius: 8, textDecoration: 'none' }}>↓ Descargar</a>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Editor inline de entrada del historial ────────────────────────────────────
+function EntradaEditor({ entrada, obraId, onGuardar, onCancelar }) {
+  const [nota,     setNota]     = useState(entrada.nota || '');
+  const [adjuntos, setAdjuntos] = useState(entrada.adjuntos || []);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <textarea value={nota} onChange={e => setNota(e.target.value)} style={{ minHeight: 64, fontSize: 13 }} autoFocus />
+      {/* Fotos actuales */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {adjuntos.map(a => a.tipo === 'imagen' ? (
+          <div key={a.id} style={{ position: 'relative' }}>
+            <img src={fotoSrc(a)} alt="" style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9' }} />
+            <button onClick={() => setAdjuntos(p => p.filter(x => x.id !== a.id))} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+          </div>
+        ) : (
+          <div key={a.id} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '4px 8px', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 6 }}>
+            📄 {a.nombre}
+            <button onClick={() => setAdjuntos(p => p.filter(x => x.id !== a.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 13, lineHeight: 1 }}>×</button>
+          </div>
+        ))}
+        <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obraId)} style={{ width: 60, height: 48, borderRadius: 6, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 18, color: '#A5A5A0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn sm onClick={onCancelar} full>Cancelar</Btn>
+        <Btn sm primary onClick={() => onGuardar(nota, adjuntos)} full>Guardar cambios</Btn>
+      </div>
     </div>
   );
 }
@@ -5401,6 +5452,7 @@ export default function App() {
   // ── Guardar obra: solo la parte que cambió ─────────────────────────────────
   async function saveUnaObra(obra, lista) {
     if (!window.db || !user) return;
+    ignorarRealtime.current = true; // ignorar el evento Realtime que generará este guardado
     try {
       const userId = user.id || user.sub;
       // Datos generales de la obra
@@ -5504,10 +5556,14 @@ export default function App() {
     return unsub;
   }, [user]);
 
+  const ignorarRealtime = useRef(false);
+
   useEffect(() => {
     if (!obraActiva || !user || !window.db) return;
     const userId = user.id || user.sub;
     const unsub = window.db.subscribeObra(obraActiva.id, async (tabla) => {
+      // Ignorar eventos que acabamos de generar nosotros mismos
+      if (ignorarRealtime.current) { ignorarRealtime.current = false; return; }
       const rows = await window.db.getObras();
       const row = rows.find(r => r.id === obraActiva.id);
       if (!row) return;
