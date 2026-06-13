@@ -4673,7 +4673,7 @@ function VistaSeguimiento({ obras, isMobile }) {
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden' }}>
       {/* Banner */}
-      <div className="dash-banner" style={{ borderBottom:'1px solid #ECEAE4', padding: isMobile ? '18px 16px' : '22px 22px', flexShrink:0 }}>
+      <div className="dash-banner" style={{ borderBottom:'1px solid #ECEAE4', padding: isMobile ? '18px 16px' : '22px 22px', paddingTop: isMobile ? 'calc(18px + env(safe-area-inset-top))' : '22px', flexShrink:0 }}>
         <div className="arch-grid" />
         <div className="dash-banner-ring db-r1" />
         <div className="dash-beam" />
