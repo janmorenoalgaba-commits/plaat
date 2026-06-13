@@ -33,8 +33,8 @@ window.db = {
 
   async crearObraConOwner(obraId, obraData) {
     const { error } = await supabase.rpc('crear_obra_con_owner', {
-      obra_id: obraId,
-      obra_data: obraData,
+      p_obra_id: obraId,
+      p_obra_data: obraData,
     });
     if (error) throw error;
   },
