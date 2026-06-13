@@ -5452,8 +5452,6 @@ export default function App() {
   // ── Guardar obra: solo la parte que cambió ─────────────────────────────────
   async function saveUnaObra(obra, lista) {
     if (!window.db || !user) return;
-    // Ignorar eventos Realtime durante 3s (múltiples upserts generan múltiples eventos)
-    ignorarRealtimeHasta.current = Date.now() + 3000;
     try {
       const userId = user.id || user.sub;
       // Datos generales de la obra
@@ -5557,31 +5555,9 @@ export default function App() {
     return unsub;
   }, [user]);
 
-  const ignorarRealtimeHasta = useRef(0);
-
-  useEffect(() => {
-    if (!obraActiva || !user || !window.db) return;
-    const userId = user.id || user.sub;
-    const unsub = window.db.subscribeObra(obraActiva.id, async (tabla) => {
-      // Ignorar eventos durante 3s después de que nosotros hayamos guardado
-      if (Date.now() < ignorarRealtimeHasta.current) return;
-      const rows = await window.db.getObras();
-      const row = rows.find(r => r.id === obraActiva.id);
-      if (!row) return;
-      const [incs, vos, insps, notas, cal] = await Promise.all([
-        window.db.getModulo('incidencias', row.id),
-        window.db.getModulo('actas_vo', row.id),
-        window.db.getModulo('actas_insp', row.id),
-        window.db.getModulo('notas', row.id),
-        window.db.getModulo('calidad', row.id),
-      ]);
-      const rol = await window.db.getRolUsuario(row.id, userId);
-      const obraActualizada = { ...rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal }), _rol: rol };
-      setObras(prev => prev.map(o => o.id === obraActualizada.id ? obraActualizada : o));
-      setObraActiva(obraActualizada);
-    });
-    return unsub;
-  }, [obraActiva?.id, user]);
+  // Realtime solo para lista de obras (nuevas obras de compañeros)
+  // La obra activa NO usa Realtime — se actualiza solo desde estado local
+  // Esto evita el bug de "elemento vuelve a aparecer tras borrar"
 
   // Calcular el contador del badge "Hoy"
   const stats = {
