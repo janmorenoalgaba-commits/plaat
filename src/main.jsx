@@ -31,6 +31,14 @@ window.storage = {
 // ── DB ───────────────────────────────────────────────────────────────────────
 window.db = {
 
+  async crearObraConOwner(obraId, obraData) {
+    const { error } = await supabase.rpc('crear_obra_con_owner', {
+      obra_id: obraId,
+      obra_data: obraData,
+    });
+    if (error) throw error;
+  },
+
   // ─ Obras (RLS via obra_usuarios) ─────────────────────────────────────────
   async getObras() {
     // RLS filtra automáticamente las obras a las que el usuario tiene acceso
