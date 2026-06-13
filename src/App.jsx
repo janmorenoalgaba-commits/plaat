@@ -2142,9 +2142,15 @@ function ModuloIncidencias({ obra, onSave }) {
     onSave({ ...obra, incidencias: obra.incidencias.map(i => i.id === updated.id ? updated : i) });
   }
 
-  function borrarInc(incId) {
-    onSave({ ...obra, incidencias: obra.incidencias.filter(i => i.id !== incId) });
+  async function borrarInc(incId) {
+    // 1. Actualizar estado local inmediatamente
+    const nuevas = obra.incidencias.filter(i => i.id !== incId);
+    onSave({ ...obra, incidencias: nuevas });
     setIncActiva(null);
+    // 2. Borrar de Supabase directamente
+    try {
+      await window.db.deleteModulo('incidencias', incId);
+    } catch(e) { console.error('Error borrando incidencia:', e); }
   }
 
   // Revisión sin cambios — solo deja constancia
