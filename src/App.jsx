@@ -5295,7 +5295,15 @@ export default function App() {
   useEffect(() => {
     if (!window.auth) { setUser({ local: true, id: 'local' }); return; }
     window.auth.getUser().then(u => setUser(u || null));
-    window.auth.onChange(u => setUser(u || null));
+    window.auth.onChange(u => {
+      setUser(u || null);
+      // Limpiar estado al cambiar de usuario
+      if (!u) {
+        setObras([]);
+        setObraActiva(null);
+        setNav('alertas');
+      }
+    });
   }, []);
 
   // Cargar obras cuando hay usuario
