@@ -5452,7 +5452,8 @@ export default function App() {
   // ── Guardar obra: solo la parte que cambió ─────────────────────────────────
   async function saveUnaObra(obra, lista) {
     if (!window.db || !user) return;
-    ignorarRealtime.current = true; // ignorar el evento Realtime que generará este guardado
+    // Ignorar eventos Realtime durante 3s (múltiples upserts generan múltiples eventos)
+    ignorarRealtimeHasta.current = Date.now() + 3000;
     try {
       const userId = user.id || user.sub;
       // Datos generales de la obra
@@ -5556,14 +5557,14 @@ export default function App() {
     return unsub;
   }, [user]);
 
-  const ignorarRealtime = useRef(false);
+  const ignorarRealtimeHasta = useRef(0);
 
   useEffect(() => {
     if (!obraActiva || !user || !window.db) return;
     const userId = user.id || user.sub;
     const unsub = window.db.subscribeObra(obraActiva.id, async (tabla) => {
-      // Ignorar eventos que acabamos de generar nosotros mismos
-      if (ignorarRealtime.current) { ignorarRealtime.current = false; return; }
+      // Ignorar eventos durante 3s después de que nosotros hayamos guardado
+      if (Date.now() < ignorarRealtimeHasta.current) return;
       const rows = await window.db.getObras();
       const row = rows.find(r => r.id === obraActiva.id);
       if (!row) return;
