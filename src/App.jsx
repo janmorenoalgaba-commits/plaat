@@ -5380,71 +5380,8 @@ export default function App() {
 
   // ── Migración automática: storage antiguo → tablas nuevas ─────────────────
   async function migrarSiNecesario(userId) {
-    try {
-      // ¿Ya hay datos en la tabla nueva?
-      const existentes = await window.db.getObras(userId);
-      if (existentes.length > 0) return false; // ya migrado
-
-      // Lee obras del storage antiguo
-      const T = ms => new Promise((_,r) => setTimeout(() => r(new Error('timeout')), ms));
-      if (!window.storage) return false;
-
-      let listaObras = [];
-      const idxR = await Promise.race([window.storage.get(SK_IDX, true), T(8000)]).catch(() => null);
-      if (idxR?.value) {
-        const ids = JSON.parse(idxR.value);
-        const res = await Promise.all(ids.map(id =>
-          Promise.race([window.storage.get(SK_OBR(id), true), T(8000)])
-            .then(r => r?.value ? JSON.parse(r.value) : null).catch(() => null)
-        ));
-        listaObras = res.filter(Boolean);
-      } else {
-        const viejoR = await Promise.race([window.storage.get(SK, true), T(8000)]).catch(() => null);
-        if (viejoR?.value) listaObras = JSON.parse(viejoR.value);
-      }
-
-      if (!listaObras.length) return false;
-
-      // Migra cada obra a sus tablas
-      for (const o of listaObras) {
-        await window.db.crearObraConOwner(o.id, {
-          nombre: o.nombre, cliente: o.cliente, direccion: o.direccion,
-          responsable: o.responsable, estado: o.estado, tipo: o.tipo,
-          diasVisita: o.diasVisita, emplazamiento: o.emplazamiento,
-          propiedad: o.propiedad, proyectista: o.proyectista,
-          direccionObra: o.direccionObra, constructora: o.constructora,
-          deoFirmante: o.deoFirmante, numActaSeq: o.numActaSeq,
-          fases: o.fases, disciplinas: o.disciplinas, lotes: o.lotes,
-          creadaEn: o.creadaEn,
-        }).catch(() => null);
-        if (o.incidencias?.length) {
-          for (const inc of o.incidencias) {
-            await window.db.upsertModulo('incidencias', { id: inc.id, obra_id: o.id, data: inc, updated_at: now() });
-          }
-        }
-        if (o.actaVO) {
-          await window.db.upsertModulo('actas_vo', { id: o.id + '_vo', obra_id: o.id, data: o.actaVO, updated_at: now() });
-        }
-        if (o.actasInsp?.length) {
-          for (const acta of o.actasInsp) {
-            await window.db.upsertModulo('actas_insp', { id: acta.id, obra_id: o.id, data: acta, updated_at: now() });
-          }
-        }
-        if (o.apuntes?.length) {
-          for (const nota of o.apuntes) {
-            await window.db.upsertModulo('notas', { id: nota.id, obra_id: o.id, data: nota, updated_at: now() });
-          }
-        }
-        if (o.materiales?.length || o.seguimientoCQ?.length) {
-          await window.db.upsertModulo('calidad', { id: o.id + '_cal', obra_id: o.id, data: { materiales: o.materiales || [], seguimientoCQ: o.seguimientoCQ || [] }, updated_at: now() });
-        }
-      }
-      console.log('Migración completada:', listaObras.length, 'obras');
-      return true;
-    } catch (e) {
-      console.error('Error en migración:', e);
-      return false;
-    }
+    // Migración desactivada — los datos ya están en Supabase.
+    return false;
   }
 
   // ── Cargar todas las obras del usuario ────────────────────────────────────
