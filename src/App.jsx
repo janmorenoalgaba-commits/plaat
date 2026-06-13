@@ -1759,7 +1759,7 @@ function IncCard({ inc, esVisitaHoy, onClick, onRevisar }) {
 }
 
 // ── Formulario nueva incidencia ───────────────────────────────────────────────
-function FormNuevaIncidencia({ onClose, onCrear }) {
+function FormNuevaIncidencia({ onClose, onCrear, obraId }) {
   const [fotos,  setFotos]  = useState([]);
   const [titulo, setTitulo] = useState('');
   const [nota,   setNota]   = useState('');
@@ -1791,7 +1791,7 @@ function FormNuevaIncidencia({ onClose, onCrear }) {
               <button onClick={() => setFotos(p => p.filter(x => x.id !== f.id))} style={{ position: 'absolute', top: -5, right: -5, width: 16, height: 16, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
             </div>
           ))}
-          <button onClick={() => pickFiles('image/*', f => setFotos(p => [...p, f]), obra?.id)} style={{ width: 70, height: 56, borderRadius: 7, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 20, color: '#A5A5A0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📷</button>
+          <button onClick={() => pickFiles('image/*', f => setFotos(p => [...p, f]), obraId)} style={{ width: 70, height: 56, borderRadius: 7, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 20, color: '#A5A5A0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📷</button>
         </div>
       </div>
 
@@ -1828,7 +1828,7 @@ function FormNuevaIncidencia({ onClose, onCrear }) {
 }
 
 // ── Detalle de incidencia ─────────────────────────────────────────────────────
-function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar }) {
+function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar, obraId }) {
   const [nota,     setNota]     = useState('');
   const [adjuntos, setAdjuntos] = useState([]);
   const [estado,   setEstado]   = useState(inc.estado);
@@ -1960,7 +1960,7 @@ function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar }) {
           )}
 
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obra?.id)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
+            <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obraId)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
             <Btn primary full onClick={guardar} disabled={!nota.trim() && adjuntos.length === 0 && estado === inc.estado}>Guardar</Btn>
           </div>
         </div>
@@ -1980,7 +1980,7 @@ function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar }) {
 }
 
 // ── Modal de revisión en visita ───────────────────────────────────────────────
-function ModalRevision({ inc, onSinCambios, onConCambios, onClose }) {
+function ModalRevision({ inc, onSinCambios, onConCambios, onClose, obraId }) {
   const [fase,     setFase]     = useState('pregunta'); // pregunta | cambios
   const [estado,   setEstado]   = useState(inc.estado);
   const [comentario, setComentario] = useState('');
@@ -2051,7 +2051,7 @@ function ModalRevision({ inc, onSinCambios, onConCambios, onClose }) {
                 </div>
               )}
 
-              <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obra?.id)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#6B6B66', marginBottom: 14 }}>📎 Adjuntar foto o documento</button>
+              <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obraId)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#6B6B66', marginBottom: 14 }}>📎 Adjuntar foto o documento</button>
 
               <div style={{ display: 'flex', gap: 8 }}>
                 <Btn onClick={() => setFase('pregunta')} full>← Atrás</Btn>
@@ -2142,6 +2142,7 @@ function ModuloIncidencias({ obra, onSave }) {
           onClose={() => setIncActiva(null)}
           onActualizar={updated => { actualizarInc(updated); }}
           onEliminar={() => borrarInc(incDetalle.id)}
+          obraId={obra.id}
         />
       </div>
     );
@@ -2216,7 +2217,7 @@ function ModuloIncidencias({ obra, onSave }) {
       </div>
 
       {/* Form nueva */}
-      {showNueva && <FormNuevaIncidencia onClose={() => setShowNueva(false)} onCrear={crearInc} />}
+      {showNueva && <FormNuevaIncidencia onClose={() => setShowNueva(false)} onCrear={crearInc} obraId={obra.id} />}
 
       {/* Lista */}
       {mostradas.length === 0 ? (
@@ -2248,6 +2249,7 @@ function ModuloIncidencias({ obra, onSave }) {
           onSinCambios={revisarSinCambios}
           onConCambios={revisarConCambios}
           onClose={() => setRevisando(null)}
+          obraId={obra.id}
         />
       )}
     </div>
@@ -2858,7 +2860,7 @@ function UnidadesNombradas({ ensayo, onUpdate, onPreview }) {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obra?.id)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
+                  <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obraId)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar</button>
                   {u.marca && <Btn danger onClick={() => quitar(u.id)}>Desmarcar</Btn>}
                   <div style={{ flex: 1 }} />
                   <Btn onClick={() => setEditId(null)}>Cancelar</Btn>
@@ -2974,7 +2976,7 @@ function RegistrosLibres({ ensayo, onUpdate, onPreview }) {
             </div>
           )}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obra?.id)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar acta</button>
+            <button onClick={() => pickFiles('image/*,.pdf,.doc,.docx', f => setAdjuntos(p => [...p, f]), obraId)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📎 Adjuntar acta</button>
             <Btn onClick={() => setShow(false)} full>Cancelar</Btn>
             <Btn primary full onClick={guardar}>Guardar</Btn>
           </div>
