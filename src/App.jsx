@@ -4667,7 +4667,7 @@ function VistaSeguimiento({ obras, isMobile }) {
 
   if (showForm || editando) {
     return isMobile ? (
-      <div style={{ position: 'fixed', inset: 0, zIndex: 500 }}>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#F7F6F3' }}>
         <FormSeguimiento
           punto={editando}
           obras={obras}
