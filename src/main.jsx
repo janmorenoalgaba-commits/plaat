@@ -94,6 +94,35 @@ window.db = {
     return data?.rol || null
   },
 
+  // ─ Fotos en Storage ──────────────────────────────────────────────────────
+  async subirFoto(obraId, fotoId, base64) {
+    // Extraer tipo y datos del base64
+    const [meta, data] = base64.split(',');
+    const mime = meta.match(/:(.*?);/)[1];
+    const ext  = mime.split('/')[1] || 'jpg';
+    const path = `${obraId}/${fotoId}.${ext}`;
+    // Convertir base64 a Blob
+    const bytes = atob(data);
+    const arr   = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob  = new Blob([arr], { type: mime });
+    const { error } = await supabase.storage.from('plaat-fotos').upload(path, blob, { upsert: true, contentType: mime });
+    if (error) throw error;
+    // Devolver URL firmada (válida 1 año)
+    const { data: urlData } = await supabase.storage.from('plaat-fotos').createSignedUrl(path, 60 * 60 * 24 * 365);
+    return { path, url: urlData?.signedUrl };
+  },
+
+  async getFotoUrl(path) {
+    const { data } = await supabase.storage.from('plaat-fotos').createSignedUrl(path, 60 * 60 * 24 * 365);
+    return data?.signedUrl;
+  },
+
+  async eliminarFoto(path) {
+    const { error } = await supabase.storage.from('plaat-fotos').remove([path]);
+    if (error) console.error('Error eliminando foto:', error);
+  },
+
   // ─ Perfiles de usuario ───────────────────────────────────────────────────
   async getPerfiles() {
     const { data, error } = await supabase.from('perfiles').select('user_id, nombre');
