@@ -1286,15 +1286,11 @@ async function generarActaInspeccion(obra, acta) {
   const total = doc.getNumberOfPages();
   for (let p = 1; p <= total; p++) { doc.setPage(p); pie(); }
 
-  // Descarga compatible con iOS Safari
+  // iOS Safari no permite descargas programáticas — abrir en nueva pestaña
   const pdfBlob = doc.output('blob');
   const url = URL.createObjectURL(pdfBlob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Acta_Inspeccion_${num}_${(obra.nombre || 'obra').replace(/\s+/g, '_')}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 
@@ -3954,16 +3950,13 @@ function ModuloActaVO({ obra, onSave }) {
   async function exportar(idioma) {
     setShowIdioma(false);
     setGenerando(true);
+    // Guardar ANTES de generar el PDF para que siempre se actualice
+    const nuevoNum = vo.num + 1;
+    guardarVO({ ...vo, num: nuevoNum });
     try {
-      await generarActaVO(obra, vo, idioma);
-      // Guardar número de acta solo si el PDF se generó correctamente
-      guardarVO({ ...vo, num: vo.num + 1 });
+      await generarActaVO(obra, { ...vo, num: vo.num }, idioma);
     } catch (e) {
-      // En iOS Safari "Load failed" puede ser solo la descarga, no un error real
-      // Si el error es de red/descarga, igual incrementamos el número
-      if (e.message && (e.message.includes('Load failed') || e.message.includes('fetch'))) {
-        guardarVO({ ...vo, num: vo.num + 1 });
-      } else {
+      if (!e.message?.includes('Load failed') && !e.message?.includes('fetch')) {
         alert('Error al exportar: ' + e.message);
       }
     }
@@ -4535,15 +4528,11 @@ async function generarActaVO(obra, vo, idioma = 'ca') {
   const total=doc.getNumberOfPages();
   for(let p=1;p<=total;p++){doc.setPage(p);pie();}
   const lang=idioma==='ca'?'Cat':'Cast';
-  // Descarga compatible con iOS Safari
+  // iOS Safari no permite descargas programáticas — abrir en nueva pestaña
   const pdfBlob = doc.output('blob');
   const url = URL.createObjectURL(pdfBlob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Acta_VO_${num}_${lang}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 
