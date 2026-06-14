@@ -1237,7 +1237,7 @@ async function generarActaInspeccion(obra, acta) {
         const startX = M + (CW - totalW) / 2;
         pair.forEach((f, pi) => {
           try {
-            const pr = doc.getImageProperties(f.data);
+            const pr = doc.getImageProperties(f.url||f.data);
             const ratio = pr.width / pr.height;
             let iw = FOTO_W, ih = FOTO_H;
             if (ratio > FOTO_W / FOTO_H) ih = FOTO_W / ratio;
@@ -4412,9 +4412,9 @@ async function generarActaVO(obra, vo, idioma = 'ca') {
     const fotos=eo.fotos||[], fW=(CW-4)/2;
     for(let fi=0;fi<fotos.length;fi+=2){
       const pair=[fotos[fi],fotos[fi+1]].filter(Boolean);
-      const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.data);const r=pr.height/pr.width;const h=Math.min(fW*r,72);return{w:h/r,h};}catch(e){return{w:fW,h:56};}});
+      const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.url||f.data);const r=pr.height/pr.width;const h=Math.min(fW*r,72);return{w:h/r,h};}catch(e){return{w:fW,h:56};}});
       const rh=Math.max(...dims.map(d=>d.h)); checkPage(rh+4);
-      pair.forEach((f,pi)=>doc.addImage(f.data,'JPEG',M+pi*(fW+4),y,dims[pi].w,dims[pi].h));
+      pair.forEach((f,pi)=>doc.addImage(f.url||f.data,'JPEG',M+pi*(fW+4),y,dims[pi].w,dims[pi].h));
       y+=rh+4;
     } y+=4;
   }
@@ -4454,7 +4454,7 @@ async function generarActaVO(obra, vo, idioma = 'ca') {
         const fotos=en.fotos||[]; const fotoRows=[]; let fotosH=0;
         for(let i=0;i<fotos.length;i+=2){
           const pair=[fotos[i],fotos[i+1]].filter(Boolean);
-          const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.data);const r=pr.height/pr.width;const h=Math.min(fW2*r,38);return{w:h/r,h};}catch(e){return{w:fW2,h:30};}});
+          const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.url||f.data);const r=pr.height/pr.width;const h=Math.min(fW2*r,38);return{w:h/r,h};}catch(e){return{w:fW2,h:30};}});
           const rh=Math.max(...dims.map(d=>d.h));
           fotoRows.push({pair,dims,rh}); fotosH+=rh+2;
         }
@@ -4479,7 +4479,7 @@ async function generarActaVO(obra, vo, idioma = 'ca') {
         let ty=ey+3+8*0.352645;
         e.lines.forEach(l=>{doc.text(l,M+cN+2,ty);ty+=8*0.352645+0.5;});
         let fy=ey+e.textH;
-        e.fotoRows.forEach(row=>{row.pair.forEach((f,pi)=>doc.addImage(f.data,'JPEG',M+cN+2+pi*(fW2+1),fy,row.dims[pi].w,row.dims[pi].h));fy+=row.rh+2;});
+        e.fotoRows.forEach(row=>{row.pair.forEach((f,pi)=>{const src=f.url||f.data;if(src)try{doc.addImage(src,'JPEG',M+cN+2+pi*(fW2+1),fy,row.dims[pi].w,row.dims[pi].h);}catch(e){}});fy+=row.rh+2;});
         const midY=ey+Math.min(e.h,e.textH)/2+1.2;
         doc.setFont('helvetica','bold'); doc.setFontSize(8);
         doc.text(e.estado,M+cN+cD+cE/2,midY,{align:'center'});
