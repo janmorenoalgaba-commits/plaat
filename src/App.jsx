@@ -1286,7 +1286,15 @@ async function generarActaInspeccion(obra, acta) {
   const total = doc.getNumberOfPages();
   for (let p = 1; p <= total; p++) { doc.setPage(p); pie(); }
 
-  doc.save(`Acta_Inspeccion_${num}_${(obra.nombre || 'obra').replace(/\s+/g, '_')}.pdf`);
+  // Descarga compatible con iOS Safari
+  const pdfBlob = doc.output('blob');
+  const url = URL.createObjectURL(pdfBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Acta_Inspeccion_${num}_${(obra.nombre || 'obra').replace(/\s+/g, '_')}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
 }
 
 
@@ -4527,7 +4535,15 @@ async function generarActaVO(obra, vo, idioma = 'ca') {
   const total=doc.getNumberOfPages();
   for(let p=1;p<=total;p++){doc.setPage(p);pie();}
   const lang=idioma==='ca'?'Cat':'Cast';
-  doc.save(`Acta_VO_${num}_${lang}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`);
+  // Descarga compatible con iOS Safari
+  const pdfBlob = doc.output('blob');
+  const url = URL.createObjectURL(pdfBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Acta_VO_${num}_${lang}_${(obra.nombre||'obra').replace(/\s+/g,'_')}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
 }
 
 
