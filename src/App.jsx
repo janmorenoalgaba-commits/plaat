@@ -3946,8 +3946,19 @@ function ModuloActaVO({ obra, onSave }) {
   async function exportar(idioma) {
     setShowIdioma(false);
     setGenerando(true);
-    try { await generarActaVO(obra, vo, idioma); guardarVO({ ...vo, num: vo.num + 1 }); }
-    catch (e) { alert('Error al exportar: ' + e.message); }
+    try {
+      await generarActaVO(obra, vo, idioma);
+      // Guardar número de acta solo si el PDF se generó correctamente
+      guardarVO({ ...vo, num: vo.num + 1 });
+    } catch (e) {
+      // En iOS Safari "Load failed" puede ser solo la descarga, no un error real
+      // Si el error es de red/descarga, igual incrementamos el número
+      if (e.message && (e.message.includes('Load failed') || e.message.includes('fetch'))) {
+        guardarVO({ ...vo, num: vo.num + 1 });
+      } else {
+        alert('Error al exportar: ' + e.message);
+      }
+    }
     setGenerando(false);
   }
 
