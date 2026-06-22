@@ -4120,7 +4120,7 @@ function ModuloActaVO({ obra, onSave }) {
                   <Btn sm onClick={() => { reabrirTema(t._secId, t.id); }}>Reabrir</Btn>
                   <span style={{ fontSize: 11, color: '#A5A5A0', marginLeft: 'auto' }}>Acta {String(t.resueltoEnActa||'—').padStart(2,'0')}</span>
                 </div>
-                <div style={{ fontSize: 13, color: '#18180F', lineHeight: 1.5 }}>{t.entradas[t.entradas.length-1].texto}</div>
+                <div style={{ fontSize: 13, color: '#18180F', lineHeight: 1.5 }}>{t.entradas[t.entradas.length-1]?.texto || ''}</div>
               </div>
             ))}
         </Modal>
@@ -4144,7 +4144,7 @@ function TemaVO({ t, est, secId, voNum, onUpdEntrada, onUpdTema, onAddEntrada, o
   const [editEnt, setEditEnt] = useState(null); // id entrada en edición
   const [txtEdit, setTxtEdit] = useState('');
   const [confirmFoto, setConfirmFoto] = useState(null);
-  const ult = t.entradas[t.entradas.length - 1];
+  const ult = t.entradas[t.entradas.length - 1] || { texto: '', actaNum: null, estado: 'P' };
   const ultEsNueva = ult.actaNum === voNum;
   return (
     <div style={{ border: `1px solid ${abierto ? '#C5C4BE' : '#E8E7E1'}`, borderRadius: 9, marginBottom: 6, overflow: 'hidden' }}>
