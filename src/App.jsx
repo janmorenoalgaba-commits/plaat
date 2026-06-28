@@ -960,7 +960,7 @@ function FormActaInspeccion({ obra, acta, onGuardar, onCerrar, onExportar }) {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
                 {(t.fotos||[]).map(ft => (
                   <div key={ft.id} style={{ position: 'relative', width: 80, height: 60 }}>
-                    <img src={ft.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 9, display: 'block' }} />
+                    <img src={fotoSrc(ft)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 9, display: 'block' }} />
                     <button onClick={() => delFoto(t.id, ft.id)} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                   </div>
                 ))}
@@ -1881,7 +1881,10 @@ function DetalleIncidencia({ inc, onClose, onActualizar, onEliminar, obraId }) {
         {editTitulo ? (
           <input value={titulo} onChange={e => setTitulo(e.target.value)} onBlur={guardarTitulo} onKeyDown={e => e.key === 'Enter' && guardarTitulo()} autoFocus style={{ flex: 1, fontWeight: 500, fontSize: 13 }} />
         ) : (
-          <span onClick={() => setEditTitulo(true)} title="Clic para editar" style={{ fontSize: 13, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text', borderBottom: '1px dashed #D4D3CE' }}>{inc.titulo}</span>
+          <>
+            <span style={{ fontSize: 13, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.titulo}</span>
+            <button onClick={() => setEditTitulo(true)} title="Editar título" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 13, padding: '0 2px', flexShrink: 0 }}>✏️</button>
+          </>
         )}
         <Pill label={est.label} bg={est.bg} color={est.color} />
         <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -2098,7 +2101,7 @@ function ModalRevision({ inc, onSinCambios, onConCambios, onClose, obraId }) {
                   {adjuntos.map(a => (
                     <div key={a.id} style={{ position: 'relative' }}>
                       {a.tipo === 'imagen'
-                        ? <img src={a.data} alt="" style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9' }} />
+                        ? <img src={fotoSrc(a)} alt="" style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9' }} />
                         : <div style={{ fontSize: 11, padding: '4px 8px', background: '#F5F4F0', border: '1px solid #E0DFD9', borderRadius: 6 }}>📄 {a.nombre}</div>}
                       <button onClick={() => setAdjuntos(p => p.filter(x => x.id !== a.id))} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 9 }}>×</button>
                     </div>
@@ -2348,8 +2351,9 @@ function ModuloApuntes({ obra, onSave }) {
     onSave({ ...obra, apuntes: apuntes.map(a => a.id === id ? { ...a, hecha: !a.hecha } : a) });
   }
 
-  function eliminar(id) {
+  async function eliminar(id) {
     onSave({ ...obra, apuntes: apuntes.filter(a => a.id !== id) });
+    try { await window.db.deleteModulo('notas', id); } catch(e) { console.error('Error borrando nota:', e); }
   }
   function editarTexto(id, texto) {
     onSave({ ...obra, apuntes: apuntes.map(a => a.id === id ? { ...a, texto } : a) });
@@ -2508,8 +2512,11 @@ function ApunteItem({ item, vencida, onToggleHecha, onEditarTexto, onAddComentar
               </div>
             </div>
           ) : (
-            <div onClick={() => setEditando(true)} style={{ fontSize: 13, color: item.hecha ? '#A5A5A0' : '#18180F', textDecoration: item.hecha ? 'line-through' : 'none', lineHeight: 1.4, marginBottom: 5, cursor: 'text' }}>
-              {item.texto}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 5 }}>
+              <div style={{ flex: 1, fontSize: 13, color: item.hecha ? '#A5A5A0' : '#18180F', textDecoration: item.hecha ? 'line-through' : 'none', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
+                {item.texto}
+              </div>
+              <button onClick={() => setEditando(true)} title="Editar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C3BE', fontSize: 13, padding: '0 2px', flexShrink: 0, marginTop: 1 }}>✏️</button>
             </div>
           )}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -2797,7 +2804,7 @@ function ModuloEnsayos({ obra, onSave }) {
       {/* Lightbox */}
       {preview && (
         <div onClick={() => setPreview(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 30, cursor: 'zoom-out' }}>
-          <img src={preview.data} alt={preview.nombre} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6 }} />
+          <img src={fotoSrc(preview)} alt={preview.nombre} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6 }} />
           <button onClick={() => setPreview(null)} style={{ position: 'absolute', top: 20, right: 24, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 24, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
       )}
@@ -2913,7 +2920,7 @@ function UnidadesNombradas({ ensayo, onUpdate, onPreview }) {
                     {adjuntos.map(a => (
                       <div key={a.id} style={{ position: 'relative' }}>
                         {a.tipo === 'imagen'
-                          ? <img src={a.data} alt="" onClick={() => onPreview(a)} style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9', cursor: 'zoom-in' }} />
+                          ? <img src={fotoSrc(a)} alt="" onClick={() => onPreview(a)} style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9', cursor: 'zoom-in' }} />
                           : <div style={{ fontSize: 11, padding: '4px 8px', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 6 }}>📄 {a.nombre}</div>}
                         <button onClick={() => setAdjuntos(p => p.filter(x => x.id !== a.id))} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 9 }}>×</button>
                       </div>
@@ -3004,8 +3011,8 @@ function RegistrosLibres({ ensayo, onUpdate, onPreview }) {
                 {r.adjuntos?.length > 0 && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {r.adjuntos.map(a => a.tipo === 'imagen'
-                      ? <img key={a.id} src={a.data} alt={a.nombre} onClick={() => onPreview(a)} style={{ width: 120, height: 92, objectFit: 'cover', borderRadius: 8, border: '1px solid #E0DFD9', cursor: 'zoom-in' }} />
-                      : <a key={a.id} href={a.data} download={a.nombre} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, padding: '4px 9px', borderRadius: 7, background: '#F5F4F0', border: '1px solid #E0DFD9', color: '#18180F', textDecoration: 'none' }}>📄 {a.nombre}</a>
+                      ? <img key={a.id} src={fotoSrc(a)} alt={a.nombre} onClick={() => onPreview(a)} style={{ width: 120, height: 92, objectFit: 'cover', borderRadius: 8, border: '1px solid #E0DFD9', cursor: 'zoom-in' }} />
+                      : <a key={a.id} href={fotoSrc(a)} download={a.nombre} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, padding: '4px 9px', borderRadius: 7, background: '#F5F4F0', border: '1px solid #E0DFD9', color: '#18180F', textDecoration: 'none' }}>📄 {a.nombre}</a>
                     )}
                   </div>
                 )}
@@ -3029,7 +3036,7 @@ function RegistrosLibres({ ensayo, onUpdate, onPreview }) {
               {adjuntos.map(a => (
                 <div key={a.id} style={{ position: 'relative' }}>
                   {a.tipo === 'imagen'
-                    ? <img src={a.data} alt="" onClick={() => onPreview(a)} style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9', cursor: 'zoom-in' }} />
+                    ? <img src={fotoSrc(a)} alt="" onClick={() => onPreview(a)} style={{ width: 60, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #E0DFD9', cursor: 'zoom-in' }} />
                     : <div style={{ fontSize: 11, padding: '4px 8px', background: '#fff', border: '1px solid #E0DFD9', borderRadius: 6 }}>📄 {a.nombre}</div>}
                   <button onClick={() => setAdjuntos(p => p.filter(x => x.id !== a.id))} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#8A1F1F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 9 }}>×</button>
                 </div>
@@ -3413,7 +3420,7 @@ function SeguimientoCQ({ obra, onSave }) {
                         {i.codigo && <span style={{ fontSize: 11, fontWeight: 600, color: '#A5A5A0', flexShrink: 0 }}>{i.codigo}</span>}
                         {editItem === i.id
                           ? <input autoFocus value={i.nombre} onChange={e => setNombre(c.id, i.id, e.target.value)} onBlur={() => setEditItem(null)} style={{ flex: 1, fontSize: 13, padding: '3px 7px' }} />
-                          : <span onClick={() => setEditItem(i.id)} style={{ flex: 1, fontSize: 13, color: '#18180F', cursor: 'text' }}>{i.nombre}</span>}
+                          : <><span style={{ flex: 1, fontSize: 13, color: '#18180F' }}>{i.nombre}</span><button onClick={() => setEditItem(i.id)} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'0 2px', flexShrink:0 }}>✏️</button></>}
                         <button onClick={() => setConfirmacion({ titulo: 'Eliminar elemento', texto: `Vas a eliminar "${i.nombre}".`, onSi: () => delItem(c.id, i.id) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, flexShrink: 0 }}>×</button>
                       </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -3937,6 +3944,34 @@ function ModuloActaVO({ obra, onSave }) {
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.filter(t => t.id !== temaId) }) });
     setBorrar(null);
   }
+  function moverTema(secOrigenId, temaId, secDestinoId) {
+    if (secOrigenId === secDestinoId) return;
+    const secOrigen = vo.secciones.find(s => s.id === secOrigenId);
+    const tema = secOrigen?.temas.find(t => t.id === temaId);
+    if (!tema) return;
+    guardarVO({
+      ...vo,
+      secciones: vo.secciones.map(s => {
+        if (s.id === secOrigenId) return { ...s, temas: s.temas.filter(t => t.id !== temaId) };
+        if (s.id === secDestinoId) return { ...s, temas: [...s.temas, tema] };
+        return s;
+      }),
+    });
+  }
+  function reordenarTema(secId, temaId, direccion) {
+    guardarVO({
+      ...vo,
+      secciones: vo.secciones.map(s => {
+        if (s.id !== secId) return s;
+        const idx = s.temas.findIndex(t => t.id === temaId);
+        const nuevoIdx = idx + direccion;
+        if (nuevoIdx < 0 || nuevoIdx >= s.temas.length) return s;
+        const temas = [...s.temas];
+        [temas[idx], temas[nuevoIdx]] = [temas[nuevoIdx], temas[idx]];
+        return { ...s, temas };
+      }),
+    });
+  }
 
   // Estado de obra
   function updEstado(campo, val) { guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), [campo]: val } }); }
@@ -4080,7 +4115,7 @@ function ModuloActaVO({ obra, onSave }) {
               <span style={{ fontSize: 11, fontWeight: 700, color: '#52524E', flexShrink: 0 }}>{sec.codigo}</span>
               {editandoSec === sec.id
                 ? <input autoFocus value={sec.titulo} onChange={e => updSeccion(sec.id, 'titulo', e.target.value)} onBlur={() => setEditandoSec(null)} style={{ flex: 1, fontSize: 12, fontWeight: 600 }} />
-                : <span onClick={() => setEditandoSec(sec.id)} style={{ fontSize: 12, fontWeight: 600, color: '#141412', cursor: 'text', flex: 1 }}>{sec.titulo}</span>}
+                : <><span style={{ fontSize: 12, fontWeight: 600, color: '#141412', flex: 1 }}>{sec.titulo}</span><button onClick={() => setEditandoSec(sec.id)} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'0 2px', flexShrink:0 }}>✏️</button></>}
               <span style={{ fontSize: 11, color: '#A5A5A0' }}>{activos.length}</span>
               <button onClick={() => setBorrar({ tipo: 'seccion', id: sec.id, label: sec.titulo })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
             </div>
@@ -4093,12 +4128,15 @@ function ModuloActaVO({ obra, onSave }) {
               const est = ESTADOS_VO[estKey];
               return (
                 <TemaVO key={t.id} t={t} est={est} secId={sec.id} voNum={vo.num}
+                  secciones={vo.secciones}
                   onUpdEntrada={(tId,eId,campo,val) => updEntrada(sec.id, tId, eId, campo, val)}
                   onUpdTema={(tId,campo,val) => updTema(sec.id, tId, campo, val)}
                   onAddEntrada={(tId,txt) => addEntrada(sec.id, tId, txt)}
                   onAddFoto={(tId,eId) => addFotoEntrada(sec.id, tId, eId)}
                   onDelFoto={(tId,eId,fId) => delFotoEntrada(sec.id, tId, eId, fId)}
                   onDelEntrada={(tId,eId) => delEntrada(sec.id, tId, eId)}
+                  onMover={(secDestId) => moverTema(sec.id, t.id, secDestId)}
+                  onReordenar={(dir) => reordenarTema(sec.id, t.id, dir)}
                   onDel={() => setBorrar({ tipo: 'tema', secId: sec.id, id: t.id, label: t.num })} />
               );
             })}
@@ -4138,7 +4176,7 @@ function ModuloActaVO({ obra, onSave }) {
 }
 
 // Componente de un tema (para evitar closures stale en los selects)
-function TemaVO({ t, est, secId, voNum, onUpdEntrada, onUpdTema, onAddEntrada, onAddFoto, onDelFoto, onDelEntrada, onDel }) {
+function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAddEntrada, onAddFoto, onDelFoto, onDelEntrada, onMover, onReordenar, onDel }) {
   const [abierto, setAbierto] = useState(false);
   const [editNum, setEditNum] = useState(false);
   const [editEnt, setEditEnt] = useState(null); // id entrada en edición
@@ -4158,12 +4196,26 @@ function TemaVO({ t, est, secId, voNum, onUpdEntrada, onUpdTema, onAddEntrada, o
       {abierto && (
         <div className="fade" style={{ padding: '4px 12px 12px', borderTop: '1px solid #F2F1ED' }}>
           {/* Editar número de tema */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, paddingTop: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, paddingTop: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: '#9B9B97' }}>Nº tema:</span>
             {editNum
               ? <input autoFocus value={t.num} onChange={e => onUpdTema(t.id, 'num', e.target.value)} onBlur={() => setEditNum(false)}
                   style={{ width: 70, fontSize: 12, padding: '3px 6px' }} />
-              : <span onClick={() => setEditNum(true)} style={{ fontSize: 12, fontWeight: 600, color: '#141412', cursor: 'text', padding: '2px 6px', borderRadius: 5, border: '1px dashed #E0DFD9' }}>{t.num}</span>}
+              : <><span style={{ fontSize: 12, fontWeight: 600, color: '#141412', padding: '2px 6px', borderRadius: 5, border: '1px solid #E0DFD9' }}>{t.num}</span><button onClick={() => setEditNum(true)} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:11, padding:'0 2px' }}>✏️</button></>}
+
+            {/* Reordenar dentro de la sección */}
+            <button onClick={() => onReordenar(-1)} title="Subir" style={{ background:'none', border:'1px solid #E0DFD9', borderRadius:6, cursor:'pointer', color:'#6B6B66', fontSize:12, padding:'2px 7px', marginLeft:8 }}>↑</button>
+            <button onClick={() => onReordenar(1)} title="Bajar" style={{ background:'none', border:'1px solid #E0DFD9', borderRadius:6, cursor:'pointer', color:'#6B6B66', fontSize:12, padding:'2px 7px' }}>↓</button>
+
+            {/* Mover a otra sección */}
+            {secciones && secciones.length > 1 && (
+              <>
+                <span style={{ fontSize: 11, color: '#9B9B97', marginLeft: 10 }}>Mover a:</span>
+                <select value={secId} onChange={e => onMover(e.target.value)} style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6 }}>
+                  {secciones.map(s => <option key={s.id} value={s.id}>{s.codigo} {s.titulo}</option>)}
+                </select>
+              </>
+            )}
           </div>
 
           {t.entradas.map(en => {
@@ -4182,7 +4234,10 @@ function TemaVO({ t, est, secId, voNum, onUpdEntrada, onUpdTema, onAddEntrada, o
                             <Btn sm onClick={() => setEditEnt(null)}>✕</Btn>
                           </div>
                         </div>
-                      : <div onClick={() => { setEditEnt(en.id); setTxtEdit(en.texto); }} style={{ fontSize: 13, color: '#18180F', lineHeight: 1.5, marginBottom: 5, cursor: 'text' }}>{en.texto}</div>}
+                      : <div style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginBottom: 5 }}>
+                          <div style={{ flex: 1, fontSize: 13, color: '#18180F', lineHeight: 1.5 }}>{en.texto}</div>
+                          <button onClick={() => { setEditEnt(en.id); setTxtEdit(en.texto); }} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'0 2px', flexShrink:0, marginTop:1 }}>✏️</button>
+                        </div>}
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                       {esNueva && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, background: '#F2F1ED', color: '#52524E', fontWeight: 700, border: '1px solid #E0DFD9' }}>N</span>}
                       <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
@@ -4200,7 +4255,7 @@ function TemaVO({ t, est, secId, voNum, onUpdEntrada, onUpdTema, onAddEntrada, o
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                       {(en.fotos||[]).map(ft => (
                         <div key={ft.id} style={{ position: 'relative', width: 64, height: 48 }}>
-                          <img src={ft.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                          <img src={fotoSrc(ft)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
                           <button onClick={() => setConfirmFoto({ eId: en.id, fId: ft.id })} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 16, height: 16, cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
                         </div>
                       ))}
@@ -5427,14 +5482,14 @@ export default function App() {
       await migrarSiNecesario(userId);
       const rows = await window.db.getObras();
       const obrasCompletas = await Promise.all(rows.map(async row => {
-        const [incs, vos, insps, notas, cal] = await Promise.all([
+        const [incs, vos, insps, notas, cal, rol] = await Promise.all([
           window.db.getModulo('incidencias', row.id),
           window.db.getModulo('actas_vo', row.id),
           window.db.getModulo('actas_insp', row.id),
           window.db.getModulo('notas', row.id),
           window.db.getModulo('calidad', row.id),
+          window.db.getRolUsuario(row.id, userId),
         ]);
-        const rol = await window.db.getRolUsuario(row.id, userId);
         return { ...rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal }), _rol: rol };
       }));
       setObras(obrasCompletas);
@@ -5517,34 +5572,57 @@ export default function App() {
   }
 
   // ── Guardar obra: solo la parte que cambió ─────────────────────────────────
-  async function saveUnaObra(obra, lista) {
+  async function saveUnaObra(obra, lista, anterior) {
     if (!window.db || !user) return;
     try {
       const userId = user.id || user.sub;
-      // Datos generales de la obra
+      // Datos generales de la obra — siempre se guarda (es ligero, sin módulos)
       await window.db.upsertObra(obraRow(obra, userId));
-      // Módulos independientes
-      // Incidencias
+
+      // Si no hay referencia "anterior", guardamos todo (compatibilidad)
+      const prev = anterior || {};
+
+      // Incidencias: solo las que cambiaron (comparación por referencia)
       const incActuales = obra.incidencias || [];
-      for (const inc of incActuales) {
+      const incAnteriores = prev.incidencias || [];
+      const incCambiadas = incActuales.filter(inc => {
+        const old = incAnteriores.find(i => i.id === inc.id);
+        return !old || old !== inc;
+      });
+      for (const inc of incCambiadas) {
         await window.db.upsertModulo('incidencias', { id: inc.id, obra_id: obra.id, data: inc, updated_at: now() });
       }
-      // Acta VO
-      if (obra.actaVO !== undefined) {
+
+      // Acta VO: solo si cambió respecto a la anterior
+      if (obra.actaVO !== undefined && obra.actaVO !== prev.actaVO) {
         await window.db.upsertModulo('actas_vo', { id: obra.id + '_vo', obra_id: obra.id, data: obra.actaVO || {}, updated_at: now() });
       }
-      // Actas Inspección
+
+      // Actas Inspección: solo las que cambiaron
       const actasInsp = obra.actasInsp || [];
-      for (const acta of actasInsp) {
+      const actasAnteriores = prev.actasInsp || [];
+      const actasCambiadas = actasInsp.filter(acta => {
+        const old = actasAnteriores.find(a => a.id === acta.id);
+        return !old || old !== acta;
+      });
+      for (const acta of actasCambiadas) {
         await window.db.upsertModulo('actas_insp', { id: acta.id, obra_id: obra.id, data: acta, updated_at: now() });
       }
-      // Notas/Apuntes
+
+      // Notas/Apuntes: solo las que cambiaron
       const apuntes = obra.apuntes || [];
-      for (const nota of apuntes) {
+      const apuntesAnteriores = prev.apuntes || [];
+      const apuntesCambiados = apuntes.filter(nota => {
+        const old = apuntesAnteriores.find(n => n.id === nota.id);
+        return !old || old !== nota;
+      });
+      for (const nota of apuntesCambiados) {
         await window.db.upsertModulo('notas', { id: nota.id, obra_id: obra.id, data: nota, updated_at: now() });
       }
-      // Calidad
-      if (obra.materiales !== undefined || obra.seguimientoCQ !== undefined) {
+
+      // Calidad: solo si cambió
+      const calCambio = obra.materiales !== prev.materiales || obra.seguimientoCQ !== prev.seguimientoCQ;
+      if (calCambio && (obra.materiales !== undefined || obra.seguimientoCQ !== undefined)) {
         await window.db.upsertModulo('calidad', { id: obra.id + '_cal', obra_id: obra.id, data: { materiales: obra.materiales || [], seguimientoCQ: obra.seguimientoCQ || [] }, updated_at: now() });
       }
     } catch (e) {
@@ -5594,17 +5672,19 @@ export default function App() {
   }
 
   async function actualizarObra(updated) {
+    const anterior = obras.find(o => o.id === updated.id);
     const lista = obras.map(o => o.id === updated.id ? updated : o);
     setObras(lista);
     setObraActiva(updated);
-    await saveUnaObra(updated, lista);
+    await saveUnaObra(updated, lista, anterior);
   }
 
   async function guardarEdicion(datos) {
     const updated = { ...obraEditar, ...datos };
+    const anterior = obraEditar;
     const lista = obras.map(o => o.id === obraEditar.id ? updated : o);
     setObras(lista);
-    await saveUnaObra(updated, lista);
+    await saveUnaObra(updated, lista, anterior);
     setObraEditar(null);
   }
 
