@@ -4676,7 +4676,13 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   const C_P = [255,246,215], C_R = [230,246,236], C_I = [235,243,255], C_A = [252,194,191];
 
   const num = String(vo.num).padStart(2,'0');
-  const dataAvui = new Date().toLocaleDateString('ca-ES', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const dataAvui = (() => {
+    const d = new Date();
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const yyyy = d.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  })();
   let y = 0;
   let pagActual = 1;
 
@@ -4792,10 +4798,9 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   dibuixarPeu();
 
   // ── FILA ACTA / DATA / LLOC / FASE ───────────────────────────────────────
-  // Alçada 0.3cm = 3mm. Tot en MAJÚSCULES. Sense línies verticals.
-  // Línies superior i inferior. FASE alineat a la dreta.
-  const filaH = 3;
-  setLW(0.4); doc.line(ML, y, ML+CW, y); // línia superior
+  // Alçada 0.5cm = 5mm. 0.5pt. MAJÚSCULES. FASE dreta.
+  const filaH = 5;
+  setLW(0.5); doc.line(ML, y, ML+CW, y); // línia superior 0.5pt
 
   const filaY = y + filaH/2;
   // Les tres primeres parelles s'escriuen des de l'esquerra
@@ -4825,13 +4830,13 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   doc.setFont('helvetica','bold');
   doc.text(T.fase.toUpperCase(), rfx, filaY, { baseline:'middle', align:'right' });
 
-  setLW(0.4); doc.line(ML, y + filaH, ML+CW, y + filaH); // línia inferior
+  setLW(0.5); doc.line(ML, y + filaH, ML+CW, y + filaH); // línia inferior 0.5pt
   y += filaH + 5;
 
   // ── TAULA EQUIP TÈCNIC — format Word exacte ──────────────────────────────
   // Columnes ajustades per evitar solapaments:
   // ROL: 52mm | EMP: 14mm | NOM: 28mm | EMAIL: 58mm | TEL: resta (~28mm)
-  const eRol=52, eEmp=14, eNom=28, eEmail=58, eTel=CW-eRol-eEmp-eNom-eEmail;
+  const eRol=50, eEmp=12, eNom=30, eEmail=63, eTel=CW-eRol-eEmp-eNom-eEmail;
   const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp, xEmail=ML+eRol+eEmp+eNom, xTel=ML+eRol+eEmp+eNom+eEmail;
   const equipRols = vo.equipo || [];
   const RH = 6; // alçada fila persona
@@ -4841,7 +4846,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // Títol "Equipo técnico y datos de contacto" — SENSE línia superior, SENSE fons
   doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
   doc.text(T.equip, ML + 2, y + 5, { baseline:'middle' });
-  y += 7;
+  y += 9; // +2mm espai extra sota el títol
 
   // Grups de rol: els detectem per nom
   const GRUP_PM  = (n) => n && n.toUpperCase().includes('PROJECT MANAGER');
@@ -4875,18 +4880,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       const isFirst = pi === 0;
       const mateixaEmpresa = pi > 0 && (p.empresa||'') === (persones[pi-1]?.empresa||'');
 
-      // Línia de separació parcial (seguint format Word)
-      setLW(0.25);
-      if (isFirst) {
-        // Primera persona: línia des del inici de l'empresa fins a la dreta
-        doc.line(xEmp, y, ML+CW, y);
-      } else if (mateixaEmpresa) {
-        // Mateixa empresa: línia des del nom fins a la dreta (sense arribar a empresa)
-        doc.line(xNom, y, ML+CW, y);
-      } else {
-        // Nova empresa dins el mateix rol: línia des d'empresa fins a la dreta
-        doc.line(xEmp, y, ML+CW, y);
-      }
+      // Sense línia SUPERIOR — la línia és INFERIOR (sota la fila)
+      // Es dibuixa al final de la iteració
 
       const midY = y + RH/2;
 
@@ -4902,7 +4897,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       // EMPRESA — primera persona o si és nova empresa
       if (isFirst || !mateixaEmpresa) {
         doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        doc.text(p.empresa||'', xEmp+2, midY, {baseline:'middle'});
+        doc.text(p.empresa||'', xEmp+1, midY, {baseline:'middle'});
       }
 
       // NOM
@@ -4924,6 +4919,13 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       // TEL
       doc.setFontSize(7.5);
       doc.text(p.tel||'', xTel+2, midY, {baseline:'middle'});
+
+      // Línia INFERIOR 0.5pt:
+      // Primera/nova empresa: des de xEmp fins a ML+CW
+      // Mateixa empresa persones addicionals: des de xNom fins a ML+CW
+      setLW(0.5);
+      const xIniLinia = (!isFirst && mateixaEmpresa) ? xNom : xEmp;
+      doc.line(xIniLinia, y + RH, ML+CW, y + RH);
 
       y += RH;
     });
@@ -4959,7 +4961,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   }
 
   // Línia inferior tanca la taula equip
-  setLW(0.4); doc.line(ML, y, ML+CW, y);
+  setLW(0.5); doc.line(ML, y, ML+CW, y);
   y += 6;
 
   // NOTA 48h + LLEGENDA
@@ -4969,7 +4971,41 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   const notaLines = doc.splitTextToSize(T.nota, CW);
   doc.text(notaLines, ML, y + 3); y += notaLines.length * 3.5 + 3;
   doc.setFont('helvetica','normal'); doc.setFontSize(7);
-  doc.text(T.llegenda, ML, y); y += 6;
+  // Llegenda amb paraules subratllades i colors brandbook
+  // Pendent RGB(255,246,215) | Resolt RGB(230,246,236) | Informatiu RGB(235,243,255)
+  const llegX = ML;
+  const llegY = y;
+  const prefixLleg = esCA ? 'Estat: (R) ' : 'Estado: (R) ';
+  const wordResolt = esCA ? 'Resolt' : 'Resuelto';
+  const sep1 = '; (P) ';
+  const wordPendent = esCA ? 'Pendent' : 'Pendiente';
+  const sep2 = '; (N) ' + (esCA ? 'Nou' : 'Nuevo') + '; (INF) ';
+  const wordInfo = esCA ? 'Informatiu' : 'Informativo';
+
+  doc.setTextColor(0,0,0);
+  let lx = llegX;
+  // Prefix
+  doc.setFont('helvetica','normal'); doc.text(prefixLleg, lx, llegY); lx += doc.getTextWidth(prefixLleg);
+  // Resolt — color verd RGB(44,94,16) subratllat
+  doc.setTextColor(44,94,16); doc.text(wordResolt, lx, llegY);
+  doc.setLineWidth(0.2); doc.setDrawColor(44,94,16);
+  doc.line(lx, llegY+0.5, lx+doc.getTextWidth(wordResolt), llegY+0.5);
+  lx += doc.getTextWidth(wordResolt);
+  // sep1
+  doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.text(sep1, lx, llegY); lx += doc.getTextWidth(sep1);
+  // Pendent — color ataronjat RGB(124,74,0) subratllat
+  doc.setTextColor(124,74,0); doc.text(wordPendent, lx, llegY);
+  doc.setLineWidth(0.2); doc.setDrawColor(124,74,0);
+  doc.line(lx, llegY+0.5, lx+doc.getTextWidth(wordPendent), llegY+0.5);
+  lx += doc.getTextWidth(wordPendent);
+  // sep2
+  doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.text(sep2, lx, llegY); lx += doc.getTextWidth(sep2);
+  // Informatiu — color blau RGB(12,68,124) subratllat
+  doc.setTextColor(12,68,124); doc.text(wordInfo, lx, llegY);
+  doc.setLineWidth(0.2); doc.setDrawColor(12,68,124);
+  doc.line(lx, llegY+0.5, lx+doc.getTextWidth(wordInfo), llegY+0.5);
+  doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0);
+  y += 6;
 
   // ── PÀGINA 2+: SECCIONS ───────────────────────────────────────────────────
   // Secció 0: Estat de l'obra
