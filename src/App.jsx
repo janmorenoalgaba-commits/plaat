@@ -4663,7 +4663,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     do_f:        esCA ? 'DIRECCIÓ D\'OBRA' : 'DIRECCIÓN DE OBRA',
     deo_f:       esCA ? 'DIRECCIÓ D\'EXECUCIÓ\nCOORDINADOR DE SEGURETAT' : 'DIRECCIÓN EJECUCIÓN OBRA\nCOORDINADOR DE SEGURIDAD',
     ec_f:        esCA ? 'CONTRACTISTA' : 'CONTRATISTA',
-    peu:         'Plaat Arquitectura Tècnica  I  Coordinació d\'Activitats Empresarials  I  Barcelona - Madrid  I  plaat.es',
+    peu:         'Plaat Arquitectura Tècnica  |  Barcelona - Madrid  |  plaat.es',
+    peuAlt:      esCA ? 'Acta de visita d\'obra' : 'Acta de visita de obra',
   };
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -4788,9 +4789,18 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // ── Peu de pàgina brandbook — SENSE línia superior ────────────────────────
   function dibuixarPeu() {
     const total = doc.getNumberOfPages();
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
-    doc.text(T.peu, ML, PH - MB + 1);
-    doc.text(`${pagActual} de ${total}`, PW - MR, PH - MB + 1, { align: 'right' });
+    const peuY = PH - MB + 1;
+    // Esquerra: "Plaat Arquitectura Tècnica" en bold + " | Barcelona - Madrid | plaat.es" normal
+    const boldPart = esCA ? 'Plaat Arquitectura Tècnica' : 'Plaat Arquitectura Técnica';
+    const normalPart = '  |  Barcelona - Madrid  |  plaat.es';
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+    doc.text(boldPart, ML, peuY);
+    const boldW = doc.getTextWidth(boldPart);
+    doc.setFont('helvetica','normal');
+    doc.text(normalPart, ML + boldW, peuY);
+    // Dreta: "Acta de visita de obra | 1 de X"
+    const peuDreta = `${T.peuAlt}  |  ${pagActual} de ${total}`;
+    doc.text(peuDreta, PW - MR, peuY, { align: 'right' });
   }
 
   // ── PÀGINA 1 ──────────────────────────────────────────────────────────────
@@ -4836,7 +4846,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // ── TAULA EQUIP TÈCNIC — format Word exacte ──────────────────────────────
   // Columnes ajustades per evitar solapaments:
   // ROL: 52mm | EMP: 14mm | NOM: 28mm | EMAIL: 58mm | TEL: resta (~28mm)
-  const eRol=50, eEmp=12, eNom=30, eEmail=63, eTel=CW-eRol-eEmp-eNom-eEmail;
+  const eRol=50, eEmp=27, eNom=28, eEmail=62, eTel=CW-eRol-eEmp-eNom-eEmail;
   const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp, xEmail=ML+eRol+eEmp+eNom, xTel=ML+eRol+eEmp+eNom+eEmail;
   const equipRols = vo.equipo || [];
   const RH = 6; // alçada fila persona
@@ -4967,44 +4977,41 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // NOTA 48h + LLEGENDA
   checkPage(10);
   setLW(0.3);
-  doc.setFont('helvetica','italic'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(0,0,0);
   const notaLines = doc.splitTextToSize(T.nota, CW);
   doc.text(notaLines, ML, y + 3); y += notaLines.length * 3.5 + 3;
   doc.setFont('helvetica','normal'); doc.setFontSize(7);
-  // Llegenda amb paraules subratllades i colors brandbook
-  // Pendent RGB(255,246,215) | Resolt RGB(230,246,236) | Informatiu RGB(235,243,255)
-  const llegX = ML;
-  const llegY = y;
-  const prefixLleg = esCA ? 'Estat: (R) ' : 'Estado: (R) ';
-  const wordResolt = esCA ? 'Resolt' : 'Resuelto';
-  const sep1 = '; (P) ';
-  const wordPendent = esCA ? 'Pendent' : 'Pendiente';
-  const sep2 = '; (N) ' + (esCA ? 'Nou' : 'Nuevo') + '; (INF) ';
-  const wordInfo = esCA ? 'Informatiu' : 'Informativo';
-
+  // Llegenda amb paraules subratllades com a SUBRAYADOR (fons de color)
+  // Colors brandbook: Pendent RGB(255,246,215) | Resolt RGB(230,246,236) | Informatiu RGB(235,243,255)
+  const llegY = y + 0.5;
+  const lh7 = 7 * 0.3528 + 0.3; // line height 7pt
+  const llegHigh = lh7 + 1; // alçada del subrayat
   doc.setTextColor(0,0,0);
-  let lx = llegX;
-  // Prefix
-  doc.setFont('helvetica','normal'); doc.text(prefixLleg, lx, llegY); lx += doc.getTextWidth(prefixLleg);
-  // Resolt — color verd RGB(44,94,16) subratllat
-  doc.setTextColor(44,94,16); doc.text(wordResolt, lx, llegY);
-  doc.setLineWidth(0.2); doc.setDrawColor(44,94,16);
-  doc.line(lx, llegY+0.5, lx+doc.getTextWidth(wordResolt), llegY+0.5);
-  lx += doc.getTextWidth(wordResolt);
-  // sep1
-  doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.text(sep1, lx, llegY); lx += doc.getTextWidth(sep1);
-  // Pendent — color ataronjat RGB(124,74,0) subratllat
-  doc.setTextColor(124,74,0); doc.text(wordPendent, lx, llegY);
-  doc.setLineWidth(0.2); doc.setDrawColor(124,74,0);
-  doc.line(lx, llegY+0.5, lx+doc.getTextWidth(wordPendent), llegY+0.5);
-  lx += doc.getTextWidth(wordPendent);
-  // sep2
-  doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.text(sep2, lx, llegY); lx += doc.getTextWidth(sep2);
-  // Informatiu — color blau RGB(12,68,124) subratllat
-  doc.setTextColor(12,68,124); doc.text(wordInfo, lx, llegY);
-  doc.setLineWidth(0.2); doc.setDrawColor(12,68,124);
-  doc.line(lx, llegY+0.5, lx+doc.getTextWidth(wordInfo), llegY+0.5);
-  doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0);
+  let lx = ML;
+
+  function subrayat(text, bgColor) {
+    const tw = doc.getTextWidth(text);
+    // Fons de color (subrayador)
+    doc.setFillColor(...bgColor); doc.rect(lx, llegY - lh7 + 0.5, tw, llegHigh, 'F');
+    // Text en negre per sobre
+    doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); doc.setFontSize(7);
+    doc.text(text, lx, llegY);
+    lx += tw;
+  }
+
+  const prefixLleg = esCA ? 'Estat: (R) ' : 'Estado: (R) ';
+  const wordResolt  = esCA ? 'Resolt'      : 'Resuelto';
+  const sep1        = '; (P) ';
+  const wordPendent = esCA ? 'Pendent'     : 'Pendiente';
+  const sep2        = '; (N) ' + (esCA ? 'Nou' : 'Nuevo') + '; (INF) ';
+  const wordInfo    = esCA ? 'Informatiu'  : 'Informativo';
+
+  doc.text(prefixLleg, lx, llegY); lx += doc.getTextWidth(prefixLleg);
+  subrayat(wordResolt, [230,246,236]);   // Resolt — verd brandbook
+  doc.text(sep1, lx, llegY); lx += doc.getTextWidth(sep1);
+  subrayat(wordPendent, [255,246,215]);  // Pendent — groc brandbook
+  doc.text(sep2, lx, llegY); lx += doc.getTextWidth(sep2);
+  subrayat(wordInfo, [235,243,255]);     // Informatiu — blau brandbook
   y += 6;
 
   // ── PÀGINA 2+: SECCIONS ───────────────────────────────────────────────────
