@@ -3981,21 +3981,25 @@ function ModuloActaVO({ obra, onSave }) {
   function delFotoEstado(id) { guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: (vo.estadoObra.fotos||[]).filter(f => f.id !== id) } }); }
 
   const [showIdioma, setShowIdioma] = useState(false);
+  const [versionExport, setVersionExport] = useState(null); // 'v1' | 'v2'
 
   async function exportar(idioma) {
     setShowIdioma(false);
     setGenerando(true);
-    // Guardar ANTES de generar el PDF para que siempre se actualice
-    const nuevoNum = vo.num + 1;
-    guardarVO({ ...vo, num: nuevoNum });
+    guardarVO({ ...vo, num: vo.num + 1 });
     try {
-      await generarActaVO(obra, { ...vo, num: vo.num }, idioma);
+      if (versionExport === 'v2') {
+        await generarActaVO_v2(obra, { ...vo, num: vo.num }, idioma);
+      } else {
+        await generarActaVO(obra, { ...vo, num: vo.num }, idioma);
+      }
     } catch (e) {
       if (!e.message?.includes('Load failed') && !e.message?.includes('fetch')) {
         alert('Error al exportar: ' + e.message);
       }
     }
     setGenerando(false);
+    setVersionExport(null);
   }
 
   // Activos = no resueltos en acta anterior; resueltos = para histórico
@@ -4018,12 +4022,28 @@ function ModuloActaVO({ obra, onSave }) {
         <Btn primary disabled={generando} onClick={() => setShowIdioma(true)}>{generando ? 'Generando...' : `↓ Exportar Acta Nº ${String(vo.num).padStart(2,'0')}`}</Btn>
       </div>
 
-      {showIdioma && (
-        <Modal title="Idioma del acta" onClose={() => setShowIdioma(false)} footer={<Btn onClick={() => setShowIdioma(false)}>Cancelar</Btn>}>
-          <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16 }}>Elige el idioma en el que quieres exportar el Acta Nº {String(vo.num).padStart(2,'0')}.</p>
+      {showIdioma && !versionExport && (
+        <Modal title="Format de l'acta" onClose={() => setShowIdioma(false)} footer={<Btn onClick={() => setShowIdioma(false)}>Cancel·lar</Btn>}>
+          <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16 }}>Tria el format per exportar l'Acta Nº {String(vo.num).padStart(2,'0')}.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div onClick={() => setVersionExport('v2')} style={{ padding: '14px 16px', borderRadius: 10, border: '1.5px solid #18180F', background: '#F5F4F0', cursor: 'pointer' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>✦ Format nou PLAAT 2026</div>
+              <div style={{ fontSize: 11, color: '#6B6B66', marginTop: 3 }}>Brandbook juny 2026 — Arial, banda negra, capçalera corporativa</div>
+            </div>
+            <div onClick={() => setVersionExport('v1')} style={{ padding: '14px 16px', borderRadius: 10, border: '1.5px solid #E0DFD9', background: '#fff', cursor: 'pointer' }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: '#6B6B66' }}>Format anterior</div>
+              <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 3 }}>Versió original de l'acta</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showIdioma && versionExport && (
+        <Modal title="Idioma de l'acta" onClose={() => { setShowIdioma(false); setVersionExport(null); }} footer={<Btn onClick={() => { setShowIdioma(false); setVersionExport(null); }}>Cancel·lar</Btn>}>
+          <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16 }}>Tria l'idioma per exportar l'Acta Nº {String(vo.num).padStart(2,'0')} en format {versionExport === 'v2' ? 'nou PLAAT 2026' : 'anterior'}.</p>
           <div style={{ display: 'flex', gap: 10 }}>
-            <Btn full onClick={() => exportar('ca')}>🇪🇸 Català</Btn>
-            <Btn primary full onClick={() => exportar('es')}>🇪🇸 Castellano</Btn>
+            <Btn full onClick={() => exportar('ca')}>Català</Btn>
+            <Btn primary full onClick={() => exportar('es')}>Castellano</Btn>
           </div>
         </Modal>
       )}
@@ -4595,6 +4615,452 @@ function fmtFechaCorta(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(2)}`;
+}
+
+// ── ACTA VO v2 — FORMAT PLAAT BRANDBOOK 2026 ─────────────────────────────────
+async function generarActaVO_v2(obra, vo, idioma = 'ca') {
+  if (!window.jspdf) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.onload = res; s.onerror = () => rej(new Error('No es pot carregar jsPDF'));
+      document.head.appendChild(s);
+    });
+  }
+  const { jsPDF } = window.jspdf;
+  const esCA = idioma === 'ca';
+
+  // ── Textos bilingues ──────────────────────────────────────────────────────
+  const T = {
+    tipusDoc:    esCA ? 'ACTA DE VISITA D\'OBRA' : 'ACTA DE VISITA DE OBRA',
+    acta:        esCA ? 'ACTA' : 'ACTA',
+    data:        esCA ? 'DATA' : 'FECHA',
+    lloc:        esCA ? 'LLOC' : 'LUGAR',
+    fase:        esCA ? 'FASE' : 'FASE',
+    equip:       esCA ? 'Equip tècnic i dades de contacte' : 'Equipo técnico y datos de contacto',
+    pm:          esCA ? 'PROJECT MANAGER (PM)' : 'PROJECT MANAGER (PM)',
+    do:          esCA ? 'DIRECCIÓ D\'OBRA (DO)' : 'DIRECCIÓN DE OBRA (DO)',
+    deo:         esCA ? 'DIRECCIÓ D\'EXECUCIÓ (DEO)' : 'DIRECCIÓN DE EJECUCIÓN (DEO)',
+    atEst:       esCA ? 'ASSISTÈNCIA TÈCNICA ESTRUCTURES' : 'ASISTENCIA TÉCNICA ESTRUCTURAS',
+    atInst:      esCA ? 'ASSISTÈNCIA TÈCNICA INSTAL·LACIONS' : 'ASISTENCIA TÉCNICA INSTALACIONES',
+    css:         esCA ? 'COORDINACIÓ DE SEGURETAT (CSS)' : 'COORDINACIÓN DE SEGURIDAD (CSS)',
+    ec:          esCA ? 'CONTRACTISTA (EC)' : 'CONTRATISTA (EC)',
+    estat0:      esCA ? 'ESTAT DE L\'OBRA (FOTOGRAFIES)' : 'ESTADO DE LA OBRA (FOTOGRAFÍAS)',
+    desc:        esCA ? 'DESCRIPCIÓ' : 'DESCRIPCIÓN',
+    es:          'ES',
+    inici:       esCA ? 'INICI' : 'INICIO',
+    fi:          esCA ? 'FI' : 'FIN',
+    res:         esCA ? 'RES.' : 'RES.',
+    nota:        esCA
+      ? 'NOTA: La present acta s\'entendrà com a conforme en cas de no manifestar comentaris en el termini de 48 hores després de la seva difusió.'
+      : 'NOTA: La presente acta se entenderá como conforme en caso de no manifestar comentarios en el plazo de 48 horas tras su difusión.',
+    llegenda:    esCA
+      ? 'Estat: (R) Resolt; (P) Pendent; (N) Nou; (INF) Informatiu'
+      : 'Estado: (R) Resuelto; (P) Pendiente; (N) Nuevo; (INF) Informativo',
+    conforme:    esCA ? 'Conforme, signatura i data' : 'Conforme, firma y fecha',
+    promotor:    esCA ? 'PROMOTOR' : 'PROMOTOR',
+    pm_f:        esCA ? 'PROJECT MANAGER' : 'PROJECT MANAGER',
+    do_f:        esCA ? 'DIRECCIÓ D\'OBRA' : 'DIRECCIÓN DE OBRA',
+    deo_f:       esCA ? 'DIRECCIÓ D\'EXECUCIÓ\nCOORDINADOR DE SEGURETAT' : 'DIRECCIÓN EJECUCIÓN OBRA\nCOORDINADOR DE SEGURIDAD',
+    ec_f:        esCA ? 'CONTRACTISTA' : 'CONTRATISTA',
+    peu:         'Plaat Arquitectura Tècnica  I  Coordinació d\'Activitats Empresarials  I  Barcelona - Madrid  I  plaat.es',
+  };
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  // ── Mides brandbook ───────────────────────────────────────────────────────
+  const PW = 210, PH = 297;
+  const ML = 15, MR = 15, MT = 12.5, MB = 15;
+  const CW = PW - ML - MR; // 180mm
+  const NEGRO = [0,0,0], BLANC = [255,255,255], GRIS15 = [217,217,217];
+  const C_P = [255,246,215], C_R = [230,246,236], C_I = [235,243,255], C_A = [252,194,191];
+
+  const num = String(vo.num).padStart(2,'0');
+  const dataAvui = new Date().toLocaleDateString('ca-ES', { day:'2-digit', month:'2-digit', year:'numeric' });
+  let y = 0;
+  let pagActual = 1;
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const LW = 0.3;
+  function setLW(w) { doc.setLineWidth(w || LW); doc.setDrawColor(0,0,0); }
+
+  function text(x, yy, txt, opts = {}) {
+    if (txt === null || txt === undefined || txt === '') return;
+    doc.setFont('helvetica', opts.bold ? 'bold' : opts.italic ? 'italic' : 'normal');
+    doc.setFontSize(opts.size || 9);
+    doc.setTextColor(0,0,0);
+    doc.text(String(txt), x, yy, { align: opts.align || 'left', baseline: 'middle' });
+  }
+
+  function wrappedH(txt, w, sz) {
+    if (!txt) return 0;
+    doc.setFontSize(sz || 8.5);
+    return doc.splitTextToSize(String(txt), w - 3).length * ((sz || 8.5) * 0.3528 + 0.6);
+  }
+
+  function wrappedText(x, yy, w, h, txt, opts = {}) {
+    if (!txt) return;
+    doc.setFont('helvetica', opts.bold ? 'bold' : opts.italic ? 'italic' : 'normal');
+    doc.setFontSize(opts.size || 8.5);
+    doc.setTextColor(0,0,0);
+    const lines = doc.splitTextToSize(String(txt), w - 3);
+    const lh = (opts.size || 8.5) * 0.3528 + 0.6;
+    const totalH = lines.length * lh;
+    if (opts.center) {
+      let ty = yy + h/2 - totalH/2 + lh * 0.8;
+      lines.forEach(l => { doc.text(l, x + w/2, ty, { align: 'center', baseline: 'middle' }); ty += lh; });
+    } else {
+      let ty = yy + Math.max(3, h/2 - totalH/2) + lh * 0.8;
+      lines.forEach(l => { doc.text(l, x + 2, ty, { baseline: 'middle' }); ty += lh; });
+    }
+  }
+
+  function fillRect(x, yy, w, h, fill) {
+    if (fill) { doc.setFillColor(...fill); doc.rect(x, yy, w, h, 'F'); }
+    setLW(); doc.rect(x, yy, w, h, 'S');
+  }
+
+  function hLine(yy) { setLW(); doc.line(ML, yy, ML + CW, yy); }
+
+  function checkPage(h) {
+    if (y + h > PH - MB - 12) {
+      doc.addPage();
+      pagActual++;
+      dibuixarCapçalera(false);
+      dibuixarPeu();
+      y = MT + 14;
+    }
+  }
+
+  // ── Capçalera brandbook ──────────────────────────────────────────────────
+  // Nom projecte Arial 16p minúscules + localització/promotor Arial 7p MAJ + logo dreta
+  // Banda negra 180×8mm (TIPUS DE DOCUMENT) — SOLO PRIMERA PÀGINA
+  function dibuixarCapçalera(primeraPag = true) {
+    const nomObra = obra.nombre || '';
+    const localitzacio = (obra.emplazamiento || obra.direccion || '').toUpperCase();
+    const promotor = (obra.propiedad || obra.cliente || '').toUpperCase();
+
+    // Línea superior capçalera
+    setLW(0.5);
+    doc.line(ML, MT, ML + CW, MT);
+
+    // Nom obra
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(12);
+    doc.setTextColor(0,0,0);
+    doc.text(nomObra, ML, MT + 5.5);
+
+    // Localització i promotor (7p MAJ)
+    doc.setFontSize(6.5); doc.setFont('helvetica', 'normal');
+    doc.text(localitzacio, ML, MT + 9);
+    doc.text(promotor, ML, MT + 12);
+
+    // Logo Plaat. dreta
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+    doc.text('Plaat.', PW - MR, MT + 8, { align: 'right' });
+
+    // Línia separadora sota capçalera
+    setLW(0.5);
+    doc.line(ML, MT + 13.5, ML + CW, MT + 13.5);
+
+    // Banda negra TIPUS DOCUMENT — SOLO PÀGINA 1
+    if (primeraPag) {
+      doc.setFillColor(0,0,0);
+      doc.rect(ML, MT + 14.5, CW, 8, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+      doc.setTextColor(255,255,255);
+      doc.text(T.tipusDoc, ML + CW/2, MT + 14.5 + 4.8, { align: 'center' });
+      doc.setTextColor(0,0,0);
+      y = MT + 24;
+    } else {
+      y = MT + 16;
+    }
+  }
+
+  // ── Peu de pàgina brandbook ───────────────────────────────────────────────
+  function dibuixarPeu() {
+    const total = doc.getNumberOfPages();
+    setLW(0.3);
+    doc.line(ML, PH - MB - 4, ML + CW, PH - MB - 4);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+    doc.text(T.peu, ML, PH - MB - 1.5);
+    doc.text(`${pagActual} de ${total}`, PW - MR, PH - MB - 1.5, { align: 'right' });
+  }
+
+  // ── PÀGINA 1 ──────────────────────────────────────────────────────────────
+  dibuixarCapçalera(true);
+  dibuixarPeu();
+
+  // Fila dades acta: NÚM | DATA | LLOC | FASE
+  const dadesH = 8;
+  // NÚM
+  const cNW = 28, cDW = 36, cLW = 52, cFW = CW - cNW - cDW - cLW;
+  // Capçalera fila
+  doc.setFillColor(...GRIS15);
+  doc.rect(ML, y, CW, dadesH * 0.55, 'F');
+  setLW();
+  [[T.acta, ML, cNW], [T.data, ML+cNW, cDW], [T.lloc, ML+cNW+cDW, cLW], [T.fase, ML+cNW+cDW+cLW, cFW]].forEach(([t, x, w]) => {
+    doc.rect(x, y, w, dadesH * 0.55, 'S');
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+    doc.text(t, x + w/2, y + dadesH * 0.55/2 + 0.5, { align: 'center', baseline: 'middle' });
+  });
+  y += dadesH * 0.55;
+  // Valors
+  [[num, ML, cNW], [dataAvui, ML+cNW, cDW], [vo.lloc||'Obra', ML+cNW+cDW, cLW], [vo.fase||'', ML+cNW+cDW+cLW, cFW]].forEach(([v, x, w]) => {
+    setLW(); doc.rect(x, y, w, dadesH, 'S');
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+    doc.text(String(v), x + w/2, y + dadesH/2 + 0.5, { align: 'center', baseline: 'middle' });
+  });
+  y += dadesH + 4;
+
+  // ── TAULA EQUIP TÈCNIC ────────────────────────────────────────────────────
+  // Capçalera taula equip (fondo gris 15%)
+  checkPage(10);
+  doc.setFillColor(...GRIS15);
+  doc.rect(ML, y, CW, 7, 'F');
+  setLW(); doc.rect(ML, y, CW, 7, 'S');
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+  doc.text(T.equip, ML + 3, y + 4.5, { baseline: 'middle' });
+  y += 7;
+
+  // Columnes equip: ROL 46 | EMPRESA 18 | NOM 36 | EMAIL 50 | TEL 30
+  const eRol=46, eEmp=18, eNom=36, eEmail=50, eTel=CW-eRol-eEmp-eNom-eEmail;
+  const equipRols = vo.equipo || [];
+
+  equipRols.forEach(rol => {
+    const persones = (rol.personas && rol.personas.length) ? rol.personas : [{ empresa:'', nombre:'', email:'', tel:'', asistio: false }];
+    // Alçada per cada persona
+    const alçades = persones.map(p => Math.max(7, wrappedH(p.email, eEmail, 7.5) + 4));
+    const rolTotal = alçades.reduce((a,b) => a+b, 0);
+    checkPage(rolTotal);
+
+    // Rol (centrat vertical abarcant totes les persones)
+    doc.setFillColor(...GRIS15);
+    doc.rect(ML, y, eRol, rolTotal, 'F');
+    setLW(); doc.rect(ML, y, eRol, rolTotal, 'S');
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+    const rolLines = doc.splitTextToSize(rol.nombre || '', eRol - 3);
+    const rolLH = 7 * 0.3528 + 0.6;
+    let ry = y + rolTotal/2 - (rolLines.length * rolLH)/2 + rolLH * 0.8;
+    rolLines.forEach(l => { doc.text(l, ML + eRol/2, ry, { align:'center', baseline:'middle' }); ry += rolLH; });
+
+    // Empresa (span si igual)
+    let py = y, gi = 0;
+    while (gi < persones.length) {
+      let gj = gi;
+      while (gj+1 < persones.length && (persones[gj+1].empresa||'') === (persones[gi].empresa||'')) gj++;
+      const gh = alçades.slice(gi, gj+1).reduce((a,b)=>a+b, 0);
+      setLW(); doc.rect(ML+eRol, py, eEmp, gh, 'S');
+      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+      doc.text(persones[gi].empresa||'', ML+eRol+eEmp/2, py+gh/2, { align:'center', baseline:'middle' });
+      py += gh; gi = gj+1;
+    }
+
+    py = y;
+    persones.forEach((p, pi) => {
+      const rh = alçades[pi];
+      [
+        [ML+eRol+eEmp,       eNom,   p.nombre||''],
+        [ML+eRol+eEmp+eNom,  eEmail, p.email||''],
+        [ML+eRol+eEmp+eNom+eEmail, eTel, p.tel||''],
+      ].forEach(([x, w, v]) => {
+        setLW(); doc.rect(x, py, w, rh, 'S');
+        doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+        const ls = doc.splitTextToSize(String(v), w-3);
+        const lhh = 7.5 * 0.3528 + 0.6;
+        let ty = py + rh/2 - (ls.length*lhh)/2 + lhh*0.8;
+        ls.forEach(l => { doc.text(l, x+2, ty, { baseline:'middle' }); ty += lhh; });
+      });
+      py += rh;
+    });
+    y += rolTotal;
+  });
+
+  y += 5;
+
+  // NOTA 48h + LLEGENDA
+  checkPage(10);
+  setLW(0.3);
+  doc.setFont('helvetica','italic'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+  const notaLines = doc.splitTextToSize(T.nota, CW);
+  doc.text(notaLines, ML, y + 3); y += notaLines.length * 3.5 + 3;
+  doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.text(T.llegenda, ML, y); y += 6;
+
+  // ── PÀGINA 2+: SECCIONS ───────────────────────────────────────────────────
+  // Secció 0: Estat de l'obra
+  const eo = vo.estadoObra || {};
+  if (eo.descripcion || (eo.fotos||[]).length > 0) {
+    checkPage(20);
+    // Capçalera secció 0
+    doc.setFillColor(...GRIS15);
+    doc.rect(ML, y, 14, 8, 'F'); setLW(); doc.rect(ML, y, 14, 8, 'S');
+    doc.setFillColor(...GRIS15);
+    doc.rect(ML+14, y, CW-14, 8, 'F'); setLW(); doc.rect(ML+14, y, CW-14, 8, 'S');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text('0', ML+7, y+4.5, { align:'center', baseline:'middle' });
+    doc.text(T.estat0, ML+17, y+4.5, { baseline:'middle' });
+    y += 8;
+
+    if (eo.descripcion) {
+      doc.setFontSize(8.5);
+      const dl = doc.splitTextToSize(eo.descripcion, CW-4);
+      const dh = Math.max(10, dl.length*4.2+5);
+      checkPage(dh);
+      setLW(); doc.rect(ML, y, CW, dh, 'S');
+      doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+      doc.text(dl, ML+2, y+4);
+      y += dh + 2;
+    }
+    const fotos = eo.fotos||[], fW2=(CW-4)/2;
+    for (let fi=0; fi<fotos.length; fi+=2) {
+      const pair=[fotos[fi],fotos[fi+1]].filter(Boolean);
+      const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.url||f.data);const r=pr.height/pr.width;const h=Math.min(fW2*r,80);return{w:h/r,h};}catch(e){return{w:fW2,h:60};}});
+      const rh=Math.max(...dims.map(d=>d.h)); checkPage(rh+4);
+      pair.forEach((f,pi)=>{const src=f.url||f.data;if(src)try{doc.addImage(src,'JPEG',ML+pi*(fW2+4),y,dims[pi].w,dims[pi].h);}catch(e){}});
+      y+=rh+4;
+    }
+    y+=4;
+  }
+
+  // Seccions de temes tractats
+  const cNum=14, cEs=14, cIni=20, cFi=20, cRes=14, cDesc=CW-cNum-cEs-cIni-cFi-cRes;
+
+  (vo.secciones||[]).forEach(sec => {
+    const actius=(sec.temas||[]).filter(t=>!(t.resuelto&&t.resueltoEnActa&&t.resueltoEnActa<vo.num));
+    if (!actius.length) return;
+
+    checkPage(20);
+    // Capçalera secció: número + títol (fondo gris 15%)
+    doc.setFillColor(...GRIS15);
+    doc.rect(ML, y, cNum, 8, 'F'); setLW(); doc.rect(ML, y, cNum, 8, 'S');
+    doc.setFillColor(...GRIS15);
+    doc.rect(ML+cNum, y, CW-cNum, 8, 'F'); setLW(); doc.rect(ML+cNum, y, CW-cNum, 8, 'S');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text(sec.codigo||'', ML+cNum/2, y+4.5, { align:'center', baseline:'middle' });
+    doc.text(sec.titulo||'', ML+cNum+2, y+4.5, { baseline:'middle' });
+    y+=8;
+
+    // Sub-capçalera columnes (línies horitzontals 0.5p, sense verticals — brandbook)
+    const shH=5.5;
+    setLW(0.5); doc.line(ML, y, ML+CW, y);
+    [[ML, cNum, ''], [ML+cNum, cDesc, T.desc], [ML+cNum+cDesc, cEs, T.es],
+     [ML+cNum+cDesc+cEs, cIni, T.inici], [ML+cNum+cDesc+cEs+cIni, cFi, T.fi],
+     [ML+cNum+cDesc+cEs+cIni+cFi, cRes, T.res]].forEach(([x,w,t]) => {
+      doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+      if (t) doc.text(t, x+w/2, y+shH/2+0.5, { align:'center', baseline:'middle' });
+    });
+    y += shH;
+    setLW(0.5); doc.line(ML, y, ML+CW, y); setLW(LW);
+
+    actius.forEach(t => {
+      const fW3=(cDesc-5)/2;
+      const ed = (t.entradas||[]).map(en => {
+        const esNova = en.actaNum === vo.num;
+        const estat = esNova ? 'N' : (en.estado||'P');
+        const fill = esNova ? null : (estat==='R'?C_R:estat==='I'?C_I:estat==='A'?C_A:C_P);
+        doc.setFontSize(8.5);
+        const lines = doc.splitTextToSize(en.texto||'', cDesc-3);
+        const lh85 = 8.5*0.3528+0.6;
+        const textH = lines.length*lh85+5;
+        const fotos=en.fotos||[]; const fotoRows=[]; let fotosH=0;
+        for(let i=0;i<fotos.length;i+=2){
+          const pair=[fotos[i],fotos[i+1]].filter(Boolean);
+          const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.url||f.data);const r=pr.height/pr.width;const h=Math.min(fW3*r,42);return{w:h/r,h};}catch(e){return{w:fW3,h:32};}});
+          const rh=Math.max(...dims.map(d=>d.h));
+          fotoRows.push({pair,dims,rh}); fotosH+=rh+2;
+        }
+        const h=Math.max(8,textH+fotosH);
+        return{en,esNova,estat,fill,lines,textH,fotoRows,h,lh:lh85};
+      });
+
+      const temaH=ed.reduce((a,e)=>a+e.h,0);
+      checkPage(temaH);
+
+      // Fons de color per estat (brandbook)
+      let ey=y;
+      ed.forEach(e=>{
+        if(e.fill){doc.setFillColor(...e.fill);doc.rect(ML+cNum,ey,CW-cNum,e.h,'F');}
+        ey+=e.h;
+      });
+
+      // Número del tema (centrat en el bloc)
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+      doc.text(t.num||'', ML+cNum/2, y+temaH/2, { align:'center', baseline:'middle' });
+
+      ey=y;
+      ed.forEach(e=>{
+        // Text descripció
+        doc.setFont('helvetica', e.esNova?'bold':'normal');
+        doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+        let ty=ey+3+e.lh*0.8;
+        e.lines.forEach(l=>{doc.text(l,ML+cNum+2,ty,{baseline:'middle'});ty+=e.lh;});
+        // Fotos
+        let fy=ey+e.textH;
+        e.fotoRows.forEach(row=>{
+          row.pair.forEach((f,pi)=>{const src=f.url||f.data;if(src)try{doc.addImage(src,'JPEG',ML+cNum+2+pi*(fW3+1),fy,row.dims[pi].w,row.dims[pi].h);}catch(er){}});
+          fy+=row.rh+2;
+        });
+        // Valors columnes (centrats)
+        const midY=ey+e.h/2;
+        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+        doc.text(e.estat, ML+cNum+cDesc+cEs/2, midY, { align:'center', baseline:'middle' });
+        doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+        const isR=e.en.estado==='R'&&!e.esNova;
+        doc.text(isR?'':fmtFechaCorta(e.en.fecha), ML+cNum+cDesc+cEs+cIni/2, midY, { align:'center', baseline:'middle' });
+        doc.text(isR?fmtFechaCorta(e.en.fin||e.en.fecha):'', ML+cNum+cDesc+cEs+cIni+cFi/2, midY, { align:'center', baseline:'middle' });
+        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+        doc.text(e.en.resp||'', ML+cNum+cDesc+cEs+cIni+cFi+cRes/2, midY, { align:'center', baseline:'middle' });
+        ey+=e.h;
+      });
+
+      // Línies horitzontals separadores (brandbook: sense verticals en temes)
+      setLW(0.5); doc.line(ML, y, ML+CW, y); doc.line(ML, y+temaH, ML+CW, y+temaH); setLW(LW);
+      // Línies verticals de columnes (en taula complex de temes sí n'hi ha)
+      const vxs=[ML,ML+cNum,ML+cNum+cDesc,ML+cNum+cDesc+cEs,ML+cNum+cDesc+cEs+cIni,ML+cNum+cDesc+cEs+cIni+cFi,ML+CW];
+      vxs.forEach(x=>{ setLW(0.3); doc.line(x,y,x,y+temaH); });
+      y+=temaH;
+    });
+    y+=4;
+  });
+
+  // ── NOTA + TAULA FIRMES ────────────────────────────────────────────────────
+  checkPage(45);
+  y+=4;
+  doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+  const notaFirmes=doc.splitTextToSize(T.nota,CW);
+  doc.text(notaFirmes,ML,y); y+=notaFirmes.length*3.8+4;
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+  doc.text(T.conforme,ML,y); y+=8;
+
+  // 4 caselles de firma (brandbook: línies horitzontals 0.5p, sense verticals)
+  const fw=CW/4;
+  const firmesLabels=[T.promotor, T.pm_f, T.do_f, T.deo_f];
+  firmesLabels.forEach((f,i)=>{
+    setLW(0.5); doc.rect(ML+i*fw,y,fw,28,'S');
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+    const fl=doc.splitTextToSize(f,fw-4);
+    doc.text(fl,ML+i*fw+2,y+4);
+  });
+  y+=28+4;
+  // 5a casella: Contractista (ample mig)
+  checkPage(30);
+  setLW(0.5); doc.rect(ML,y,fw,28,'S');
+  doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+  doc.text(T.ec_f,ML+2,y+4);
+
+  // ── PEU FINAL TOTES LES PÀGINES ───────────────────────────────────────────
+  const totalPags = doc.getNumberOfPages();
+  for (let p=1; p<=totalPags; p++) {
+    doc.setPage(p);
+    pagActual = p;
+    dibuixarPeu();
+  }
+
+  // Obrir en nova pestanya (compatible iOS Safari)
+  const pdfBlob = doc.output('blob');
+  const url = URL.createObjectURL(pdfBlob);
+  window.open(url,'_blank');
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 
 
