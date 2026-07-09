@@ -4752,27 +4752,28 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     // Promotor Arial 7p MAJ
     doc.text(promotor, ML, MT + 12.5);
 
-    // Logo PNG real — dreta, alçada ~12mm
+    // Logo PNG real — 12mm alçada, 15mm marge dret
+    // Ratio PNG: 414×128 = 3.234375
     try {
-      const logoH = 12, logoW = logoH * (414/128); // ratio original del PNG
+      const logoH = 12;
+      const logoW = logoH * (414/128);
       doc.addImage(LOGO_B64, 'PNG', PW - MR - logoW, MT, logoW, logoH);
     } catch(e) {
-      // Fallback text si no carrega
       doc.setFont('helvetica','bold'); doc.setFontSize(18);
       doc.text('Plaat.', PW - MR, MT + 8, { align:'right' });
     }
 
     // Banda negra TIPUS DOCUMENT — SOLO PÀGINA 1
-    // 9mm des del final del contingut de capçalera (12mm alçada + 9mm = MT+21)
     if (primeraPag) {
-      const bandaY = MT + 12 + 9; // 12mm capçalera + 9mm separació
+      const bandaY = MT + 12 + 9;
       doc.setFillColor(0,0,0);
       doc.rect(ML, bandaY, CW, 8, 'F');
       doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
       doc.setTextColor(255,255,255);
-      doc.text(T.tipusDoc, ML + CW/2, bandaY + 4.8, { align: 'center', baseline: 'middle' });
+      // Centrat perfecte: mig de la banda
+      doc.text(T.tipusDoc, ML + CW/2, bandaY + 4, { align: 'center', baseline: 'middle' });
       doc.setTextColor(0,0,0);
-      y = bandaY + 8 + 4; // sota la banda + petit marge
+      y = bandaY + 8 + 4;
     } else {
       y = MT + 15;
     }
@@ -4781,7 +4782,6 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // ── Peu de pàgina brandbook — SENSE línia superior ────────────────────────
   function dibuixarPeu() {
     const total = doc.getNumberOfPages();
-    // Sense línia superior (eliminada per brandbook)
     doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
     doc.text(T.peu, ML, PH - MB + 1);
     doc.text(`${pagActual} de ${total}`, PW - MR, PH - MB + 1, { align: 'right' });
@@ -4791,92 +4791,181 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   dibuixarCapçalera(true);
   dibuixarPeu();
 
-  // Fila dades acta: NÚM | DATA | LLOC | FASE
-  const dadesH = 8;
-  // NÚM
-  const cNW = 28, cDW = 36, cLW = 52, cFW = CW - cNW - cDW - cLW;
-  // Capçalera fila
-  doc.setFillColor(...GRIS15);
-  doc.rect(ML, y, CW, dadesH * 0.55, 'F');
-  setLW();
-  [[T.acta, ML, cNW], [T.data, ML+cNW, cDW], [T.lloc, ML+cNW+cDW, cLW], [T.fase, ML+cNW+cDW+cLW, cFW]].forEach(([t, x, w]) => {
-    doc.rect(x, y, w, dadesH * 0.55, 'S');
-    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
-    doc.text(t, x + w/2, y + dadesH * 0.55/2 + 0.5, { align: 'center', baseline: 'middle' });
-  });
-  y += dadesH * 0.55;
-  // Valors
-  [[num, ML, cNW], [dataAvui, ML+cNW, cDW], [vo.lloc||'Obra', ML+cNW+cDW, cLW], [vo.fase||'', ML+cNW+cDW+cLW, cFW]].forEach(([v, x, w]) => {
-    setLW(); doc.rect(x, y, w, dadesH, 'S');
-    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-    doc.text(String(v), x + w/2, y + dadesH/2 + 0.5, { align: 'center', baseline: 'middle' });
-  });
-  y += dadesH + 4;
+  // ── FILA ACTA / DATA / LLOC / FASE ───────────────────────────────────────
+  // Una sola fila, etiquetes bold + valors normal, SOLO línea superior e inferior
+  // sense línies verticals, tot en una línia
+  const filaH = 8;
+  // Línia superior
+  setLW(0.4); doc.line(ML, y, ML + CW, y);
 
-  // ── TAULA EQUIP TÈCNIC ────────────────────────────────────────────────────
-  // Capçalera taula equip (fondo gris 15%)
-  checkPage(10);
-  doc.setFillColor(...GRIS15);
-  doc.rect(ML, y, CW, 7, 'F');
-  setLW(); doc.rect(ML, y, CW, 7, 'S');
-  doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-  doc.text(T.equip, ML + 3, y + 4.5, { baseline: 'middle' });
-  y += 7;
+  // Contingut: ACTA 17  FECHA 17-07-27  LUGAR Obra  FASE Enderroc
+  // Posicionem manualment cada parella etiqueta+valor
+  const filaY = y + filaH/2;
+  let fx = ML + 3;
+  const parelles = [
+    [T.acta, num],
+    [T.data, dataAvui],
+    [T.lloc, vo.lloc || 'Obra'],
+    [T.fase, vo.fase || ''],
+  ];
+  parelles.forEach(([label, val]) => {
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text(label, fx, filaY, { baseline:'middle' });
+    fx += doc.getTextWidth(label) + 2;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.text(String(val), fx, filaY, { baseline:'middle' });
+    fx += doc.getTextWidth(String(val)) + 10;
+  });
 
-  // Columnes equip: ROL 46 | EMPRESA 18 | NOM 36 | EMAIL 50 | TEL 30
-  const eRol=46, eEmp=18, eNom=36, eEmail=50, eTel=CW-eRol-eEmp-eNom-eEmail;
+  // Línia inferior
+  doc.line(ML, y + filaH, ML + CW, y + filaH);
+  y += filaH + 6;
+
+  // ── TAULA EQUIP TÈCNIC — seguint exactament el Word ──────────────────────
+  // ESTRUCTURA DEL WORD:
+  // Fila títol: "Equipo técnico y datos de contacto" (text normal, sense fons)
+  // Fila grup:  "PROJECT MANAGER" (bold, fons gris, span tot l'ample)
+  // Fila rol:   PROJECT MANAGER (PM) | PLAAT | Xavier Pla | email | tel
+  // Fila pers:  [buit] | [buit] | Alex Pla | email | tel
+  // ...
+
+  // Columnes (sense capçaleres de columna — el Word no en té):
+  // ROL: 55mm | EMP: 16mm | NOM: 30mm | EMAIL: 55mm | TEL: resta
+  const eRol=55, eEmp=16, eNom=30, eEmail=55, eTel=CW-eRol-eEmp-eNom-eEmail;
   const equipRols = vo.equipo || [];
+  const LH8 = 8 * 0.3528 + 0.6; // line height 8pt
 
-  equipRols.forEach(rol => {
-    const persones = (rol.personas && rol.personas.length) ? rol.personas : [{ empresa:'', nombre:'', email:'', tel:'', asistio: false }];
-    // Alçada per cada persona
-    const alçades = persones.map(p => Math.max(7, wrappedH(p.email, eEmail, 7.5) + 4));
-    const rolTotal = alçades.reduce((a,b) => a+b, 0);
-    checkPage(rolTotal);
+  checkPage(10);
 
-    // Rol (centrat vertical abarcant totes les persones)
+  // Fila títol "Equipo técnico y datos de contacto" (text, sense fons)
+  const titolH = 7;
+  setLW(0.4); doc.line(ML, y, ML+CW, y); // línia superior títol
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+  doc.text(T.equip, ML + 2, y + titolH/2, { baseline:'middle' });
+  y += titolH;
+
+  // Grups de rol del Word: primer hi ha una fila de grup (ex. "PROJECT MANAGER")
+  // i després les files de cada rol amb persones
+  // El vo.equipo té estructura: { nombre, personas[] }
+  // Detectem si hi ha "grups" (DO, PM, CONTRATISTA) o si es tracta directament de rols
+
+  // Per seguir el format del Word, agrupem per categories
+  const GRUPS_WORD = [
+    { grup: esCA ? 'DIRECCIÓ FACULTATIVA' : 'DIRECCIÓN FACULTATIVA',
+      rols: ['PROJECT MANAGER (PM)', 'DIRECCIÓN DE OBRA (DO)', 'DIRECCIÓN FACULTATIVA'] },
+    { grup: esCA ? 'DIRECCIÓ D\'EXECUCIÓ' : 'DIRECCIÓN DE EJECUCIÓN',
+      rols: ['DIRECCIÓN DE EJECUCIÓN (DEO)', 'ASISTENCIA TÉCNICA ESTRUCTURAS', 'ASISTENCIA TÉCNICA INSTALACIONES', 'COORDINACIÓN DE SEGURIDAD (CSS)'] },
+    { grup: esCA ? 'CONTRACTISTA' : 'CONTRATISTA',
+      rols: ['CONTRATISTA (EC)'] },
+  ];
+
+  function dibuixaFilaGrup(textGrup) {
+    checkPage(7);
+    const gh = 6;
     doc.setFillColor(...GRIS15);
-    doc.rect(ML, y, eRol, rolTotal, 'F');
-    setLW(); doc.rect(ML, y, eRol, rolTotal, 'S');
-    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
-    const rolLines = doc.splitTextToSize(rol.nombre || '', eRol - 3);
-    const rolLH = 7 * 0.3528 + 0.6;
-    let ry = y + rolTotal/2 - (rolLines.length * rolLH)/2 + rolLH * 0.8;
-    rolLines.forEach(l => { doc.text(l, ML + eRol/2, ry, { align:'center', baseline:'middle' }); ry += rolLH; });
+    doc.rect(ML, y, CW, gh, 'F');
+    setLW(0.3); doc.rect(ML, y, CW, gh, 'S');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text(textGrup.toUpperCase(), ML + 2, y + gh/2, { baseline:'middle' });
+    y += gh;
+  }
 
-    // Empresa (span si igual)
-    let py = y, gi = 0;
-    while (gi < persones.length) {
-      let gj = gi;
-      while (gj+1 < persones.length && (persones[gj+1].empresa||'') === (persones[gi].empresa||'')) gj++;
-      const gh = alçades.slice(gi, gj+1).reduce((a,b)=>a+b, 0);
-      setLW(); doc.rect(ML+eRol, py, eEmp, gh, 'S');
-      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(0,0,0);
-      doc.text(persones[gi].empresa||'', ML+eRol+eEmp/2, py+gh/2, { align:'center', baseline:'middle' });
-      py += gh; gi = gj+1;
+  function dibuixaFilaRol(rol, persones) {
+    persones.forEach((p, pi) => {
+      const rh = 6.5;
+      checkPage(rh);
+      const isFirst = pi === 0;
+
+      // Línia superior de cada fila de persona
+      setLW(0.3); doc.line(ML, y, ML+CW, y);
+
+      // Col ROL — bold, solo en la primera persona del rol
+      doc.setFont('helvetica', isFirst ? 'bold' : 'normal');
+      doc.setFontSize(8); doc.setTextColor(0,0,0);
+      const rolTxt = isFirst ? (rol.nombre || '') : '';
+      if (rolTxt) doc.text(rolTxt, ML + 2, y + rh/2, { baseline:'middle' });
+
+      // Col EMPRESA — solo primera persona
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      const empTxt = isFirst ? (p.empresa || '') : '';
+      if (empTxt) doc.text(empTxt, ML + eRol + 2, y + rh/2, { baseline:'middle' });
+
+      // Col NOM
+      doc.text(p.nombre || '', ML + eRol + eEmp + 2, y + rh/2, { baseline:'middle' });
+
+      // Col EMAIL
+      doc.setFontSize(7.5);
+      const emailLines = doc.splitTextToSize(p.email || '', eEmail - 3);
+      doc.text(emailLines, ML + eRol + eEmp + eNom + 2, y + rh/2, { baseline:'middle' });
+
+      // Col TEL
+      doc.setFontSize(8);
+      doc.text(p.tel || '', ML + eRol + eEmp + eNom + eEmail + 2, y + rh/2, { baseline:'middle' });
+
+      y += rh;
+    });
+  }
+
+  // Si hi ha equip configurat, el dibuixem seguint l'estructura del Word
+  if (equipRols.length > 0) {
+    // Detectem si cal dibuixar grups o simplement rols consecutius
+    // Agrupem: "PROJECT MANAGER" com a primer grup
+    let pmRols = equipRols.filter(r => r.nombre && r.nombre.toUpperCase().includes('PROJECT MANAGER'));
+    let dfRols = equipRols.filter(r => r.nombre && (
+      r.nombre.toUpperCase().includes('OBRA (DO)') ||
+      r.nombre.toUpperCase().includes('OBRA (DO') ||
+      r.nombre.toUpperCase().includes('DIRECCIÓN FACULTATIVA') ||
+      r.nombre.toUpperCase().includes('DIRECCIÓ FACULTATIVA')
+    ));
+    let deoRols = equipRols.filter(r => r.nombre && (
+      r.nombre.toUpperCase().includes('EJECUCIÓN') ||
+      r.nombre.toUpperCase().includes('EXECUCIÓ') ||
+      r.nombre.toUpperCase().includes('ESTRUCTURAS') ||
+      r.nombre.toUpperCase().includes('INSTALACIONES') ||
+      r.nombre.toUpperCase().includes('SEGURIDAD') ||
+      r.nombre.toUpperCase().includes('SEGURETAT')
+    ));
+    let ecRols = equipRols.filter(r => r.nombre && (
+      r.nombre.toUpperCase().includes('CONTRATISTA') ||
+      r.nombre.toUpperCase().includes('CONTRACTISTA')
+    ));
+    let altresRols = equipRols.filter(r => !pmRols.includes(r) && !dfRols.includes(r) && !deoRols.includes(r) && !ecRols.includes(r));
+
+    // Grup PROJECT MANAGER
+    if (pmRols.length > 0) {
+      dibuixaFilaGrup('PROJECT MANAGER');
+      pmRols.forEach(r => dibuixaFilaRol(r, r.personas && r.personas.length ? r.personas : [{}]));
     }
 
-    py = y;
-    persones.forEach((p, pi) => {
-      const rh = alçades[pi];
-      [
-        [ML+eRol+eEmp,       eNom,   p.nombre||''],
-        [ML+eRol+eEmp+eNom,  eEmail, p.email||''],
-        [ML+eRol+eEmp+eNom+eEmail, eTel, p.tel||''],
-      ].forEach(([x, w, v]) => {
-        setLW(); doc.rect(x, py, w, rh, 'S');
-        doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        const ls = doc.splitTextToSize(String(v), w-3);
-        const lhh = 7.5 * 0.3528 + 0.6;
-        let ty = py + rh/2 - (ls.length*lhh)/2 + lhh*0.8;
-        ls.forEach(l => { doc.text(l, x+2, ty, { baseline:'middle' }); ty += lhh; });
-      });
-      py += rh;
-    });
-    y += rolTotal;
-  });
+    // Grup DIRECCIÓN FACULTATIVA
+    if (dfRols.length > 0) {
+      dibuixaFilaGrup(esCA ? 'DIRECCIÓ FACULTATIVA' : 'DIRECCIÓN FACULTATIVA');
+      dfRols.forEach(r => dibuixaFilaRol(r, r.personas && r.personas.length ? r.personas : [{}]));
+    }
 
-  y += 5;
+    // Grup DIRECCIÓN DE EJECUCIÓN
+    if (deoRols.length > 0) {
+      dibuixaFilaGrup(esCA ? 'DIRECCIÓ D\'EXECUCIÓ' : 'DIRECCIÓN DE EJECUCIÓN');
+      deoRols.forEach(r => dibuixaFilaRol(r, r.personas && r.personas.length ? r.personas : [{}]));
+    }
+
+    // Altres rols sense grup
+    altresRols.forEach(r => dibuixaFilaRol(r, r.personas && r.personas.length ? r.personas : [{}]));
+
+    // Grup CONTRATISTA
+    if (ecRols.length > 0) {
+      dibuixaFilaGrup(esCA ? 'CONTRACTISTA' : 'CONTRATISTA');
+      ecRols.forEach(r => dibuixaFilaRol(r, r.personas && r.personas.length ? r.personas : [{}]));
+    }
+  } else {
+    // Sense equip configurat — fila buida
+    setLW(0.3); doc.line(ML, y, ML+CW, y);
+    y += 8;
+  }
+
+  // Línia inferior de la taula equip
+  setLW(0.4); doc.line(ML, y, ML+CW, y);
+  y += 6;
 
   // NOTA 48h + LLEGENDA
   checkPage(10);
