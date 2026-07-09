@@ -4788,19 +4788,19 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
   // ── Peu de pàgina brandbook — SENSE línia superior ────────────────────────
   function dibuixarPeu() {
-    const total = doc.getNumberOfPages();
     const peuY = PH - MB + 1;
-    // Esquerra: "Plaat Arquitectura Tècnica" en bold + " | Barcelona - Madrid | plaat.es" normal
     const boldPart = esCA ? 'Plaat Arquitectura Tècnica' : 'Plaat Arquitectura Técnica';
     const normalPart = '  |  Barcelona - Madrid  |  plaat.es';
     doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
     doc.text(boldPart, ML, peuY);
     const boldW = doc.getTextWidth(boldPart);
-    doc.setFont('helvetica','normal');
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
     doc.text(normalPart, ML + boldW, peuY);
-    // Dreta: "Acta de visita de obra | 1 de X"
-    const peuDreta = `${T.peuAlt}  |  ${pagActual} de ${total}`;
-    doc.text(peuDreta, PW - MR, peuY, { align: 'right' });
+    // Dreta: numeració correcta sense solapament
+    // S'escriu al final un cop el doc té totes les pàgines
+    // Per ara deixem un placeholder que s'actualitza al final
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
+    doc.text(`${T.peuAlt}  |  ${pagActual}`, PW - MR, peuY, { align: 'right' });
   }
 
   // ── PÀGINA 1 ──────────────────────────────────────────────────────────────
@@ -4846,7 +4846,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // ── TAULA EQUIP TÈCNIC — format Word exacte ──────────────────────────────
   // Columnes ajustades per evitar solapaments:
   // ROL: 52mm | EMP: 14mm | NOM: 28mm | EMAIL: 58mm | TEL: resta (~28mm)
-  const eRol=50, eEmp=27, eNom=28, eEmail=62, eTel=CW-eRol-eEmp-eNom-eEmail;
+  const eRol=50, eEmp=42, eNom=28, eEmail=47, eTel=CW-eRol-eEmp-eNom-eEmail;
   const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp, xEmail=ML+eRol+eEmp+eNom, xTel=ML+eRol+eEmp+eNom+eEmail;
   const equipRols = vo.equipo || [];
   const RH = 6; // alçada fila persona
@@ -4856,7 +4856,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // Títol "Equipo técnico y datos de contacto" — SENSE línia superior, SENSE fons
   doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
   doc.text(T.equip, ML + 2, y + 5, { baseline:'middle' });
-  y += 9; // +2mm espai extra sota el títol
+  y += 4; // espai reduït entre títol equip i taula
 
   // Grups de rol: els detectem per nom
   const GRUP_PM  = (n) => n && n.toUpperCase().includes('PROJECT MANAGER');
@@ -5014,40 +5014,60 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   subrayat(wordInfo, [235,243,255]);     // Informatiu — blau brandbook
   y += 6;
 
-  // ── PÀGINA 2+: SECCIONS ───────────────────────────────────────────────────
-  // Secció 0: Estat de l'obra
+  // ── SECCIÓ 0: ESTAT DE L'OBRA ─────────────────────────────────────────────
+  // Format Word: cabecera gris amb Nº | Títol, sense recuadres
+  // Fotos: 2 per fila, amb descripció de text
   const eo = vo.estadoObra || {};
   if (eo.descripcion || (eo.fotos||[]).length > 0) {
     checkPage(20);
-    // Capçalera secció 0
-    doc.setFillColor(...GRIS15);
-    doc.rect(ML, y, 14, 8, 'F'); setLW(); doc.rect(ML, y, 14, 8, 'S');
-    doc.setFillColor(...GRIS15);
-    doc.rect(ML+14, y, CW-14, 8, 'F'); setLW(); doc.rect(ML+14, y, CW-14, 8, 'S');
-    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
-    doc.text('0', ML+7, y+4.5, { align:'center', baseline:'middle' });
-    doc.text(T.estat0, ML+17, y+4.5, { baseline:'middle' });
-    y += 8;
 
+    // Capçalera secció 0 — format Word exacte
+    // Línia superior
+    setLW(0.5); doc.line(ML, y, ML+CW, y);
+    // Fons gris a tota la fila
+    doc.setFillColor(...GRIS15);
+    doc.rect(ML, y, CW, 7, 'F');
+    // Text: "0" en bold | "ESTAT DE L'OBRA (FOTOGRAFIES)"
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text('0', ML + 7, y + 3.8, { align:'center', baseline:'middle' });
+    doc.text(T.estat0, ML + 16, y + 3.8, { baseline:'middle' });
+    // Línia inferior capçalera
+    setLW(0.5); doc.line(ML, y + 7, ML+CW, y + 7);
+    y += 7;
+
+    // Text de descripció (si n'hi ha)
     if (eo.descripcion) {
-      doc.setFontSize(8.5);
-      const dl = doc.splitTextToSize(eo.descripcion, CW-4);
-      const dh = Math.max(10, dl.length*4.2+5);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+      const dl = doc.splitTextToSize(eo.descripcion, CW - 4);
+      const dh = Math.max(10, dl.length * 4.2 + 5);
       checkPage(dh);
-      setLW(); doc.rect(ML, y, CW, dh, 'S');
-      doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-      doc.text(dl, ML+2, y+4);
+      // Sense recuadre — format Word
+      doc.text(dl, ML + 16, y + 4); // alineat amb el títol ESTAT DE L'OBRA
       y += dh + 2;
     }
-    const fotos = eo.fotos||[], fW2=(CW-4)/2;
-    for (let fi=0; fi<fotos.length; fi+=2) {
-      const pair=[fotos[fi],fotos[fi+1]].filter(Boolean);
-      const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.url||f.data);const r=pr.height/pr.width;const h=Math.min(fW2*r,80);return{w:h/r,h};}catch(e){return{w:fW2,h:60};}});
-      const rh=Math.max(...dims.map(d=>d.h)); checkPage(rh+4);
-      pair.forEach((f,pi)=>{const src=f.url||f.data;if(src)try{doc.addImage(src,'JPEG',ML+pi*(fW2+4),y,dims[pi].w,dims[pi].h);}catch(e){}});
-      y+=rh+4;
+
+    // Fotos de 2 en 2 — SENSE salt de pàgina, han de quedar a la pàg 1
+    const fotos = eo.fotos || [];
+    const fW2 = (CW - 6) / 2;
+    for (let fi = 0; fi < fotos.length; fi += 2) {
+      const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
+      const dims = pair.map(f => {
+        try {
+          const pr = doc.getImageProperties(f.url||f.data);
+          const r = pr.height / pr.width;
+          const h = Math.min(fW2 * r, 75);
+          return { w: h/r, h };
+        } catch(e) { return { w: fW2, h: 55 }; }
+      });
+      const rh = Math.max(...dims.map(d => d.h));
+      // NO checkPage — les fotos han de quedar sempre a la mateixa pàgina
+      pair.forEach((f, pi) => {
+        const src = f.url || f.data;
+        if (src) try { doc.addImage(src, 'JPEG', ML + pi * (fW2 + 6), y, dims[pi].w, dims[pi].h); } catch(e) {}
+      });
+      y += rh + 3;
     }
-    y+=4;
+    y += 3; // espai sota les fotos, sense línia de tancament
   }
 
   // Seccions de temes tractats
@@ -5181,7 +5201,14 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   for (let p=1; p<=totalPags; p++) {
     doc.setPage(p);
     pagActual = p;
-    dibuixarPeu();
+    // Reescriure la part dreta del peu amb el total correcte (cobreix el placeholder)
+    const peuY2 = PH - MB + 1;
+    // Cobrir el text anterior amb blanc
+    doc.setFillColor(255,255,255);
+    doc.rect(PW/2, peuY2 - 4, PW/2 - MR, 6, 'F');
+    // Escriure numeració correcta
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+    doc.text(`${T.peuAlt}  |  ${p} de ${totalPags}`, PW - MR, peuY2, { align: 'right' });
   }
 
   // Obrir en nova pestanya (compatible iOS Safari)
