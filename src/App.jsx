@@ -730,6 +730,13 @@ function ObraCard({ obra, onClick, onEditar, onEliminar }) {
           </span>
         )}
       </div>
+      {/* Fecha CFO — sota el footer */}
+      {obra.fechaCFO && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderTop: '1px solid #F2F1ED', background: '#F9F8F5' }}>
+          <span style={{ fontSize: 10.5, color: '#A5A5A0', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>CFO</span>
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: '#52524E' }}>{fmtDate(obra.fechaCFO)}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -776,8 +783,8 @@ function DiasPicker({ value, onChange }) {
 function ModalNuevaObra({ onClose, onCreate, obra }) {
   const editando = !!obra;
   const [form, setForm] = useState(obra
-    ? { nombre: obra.nombre || '', cliente: obra.cliente || '', direccion: obra.direccion || '', responsable: obra.responsable || RESPONSABLES[0], diasVisita: obra.diasVisita || [], emplazamiento: obra.emplazamiento || '', propiedad: obra.propiedad || '', proyectista: obra.proyectista || '', direccionObra: obra.direccionObra || '', constructora: obra.constructora || '', deoFirmante: obra.deoFirmante || '' }
-    : { nombre: '', cliente: '', direccion: '', responsable: RESPONSABLES[0], diasVisita: [], emplazamiento: '', propiedad: '', proyectista: '', direccionObra: '', constructora: '', deoFirmante: '' });
+    ? { nombre: obra.nombre || '', cliente: obra.cliente || '', direccion: obra.direccion || '', responsable: obra.responsable || RESPONSABLES[0], diasVisita: obra.diasVisita || [], emplazamiento: obra.emplazamiento || '', propiedad: obra.propiedad || '', proyectista: obra.proyectista || '', direccionObra: obra.direccionObra || '', constructora: obra.constructora || '', deoFirmante: obra.deoFirmante || '', fechaCFO: obra.fechaCFO || '' }
+    : { nombre: '', cliente: '', direccion: '', responsable: RESPONSABLES[0], diasVisita: [], emplazamiento: '', propiedad: '', proyectista: '', direccionObra: '', constructora: '', deoFirmante: '', fechaCFO: '' });
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const footer = (
     <>
@@ -807,6 +814,7 @@ function ModalNuevaObra({ onClose, onCreate, obra }) {
         <Field label="Dirección de Obra (DO)"><input placeholder="BCRA Arquitectes Associats SLP" value={form.direccionObra} onChange={e => upd('direccionObra', e.target.value)} /></Field>
         <Field label="Constructora"><input placeholder="Certis" value={form.constructora} onChange={e => upd('constructora', e.target.value)} /></Field>
         <Field label="DEO firmante"><input placeholder="Nombre del director de ejecución" value={form.deoFirmante} onChange={e => upd('deoFirmante', e.target.value)} /></Field>
+        <Field label="Fecha CFO (Certificat Final d'Obra)"><input type="date" value={form.fechaCFO} onChange={e => upd('fechaCFO', e.target.value)} /></Field>
       </div>
     </Modal>
   );
@@ -6110,12 +6118,25 @@ export default function App() {
   }
 
   // ── Cargar todas las obras del usuario ────────────────────────────────────
+  // OPTIMIZADO: carga rápida en 2 fases
+  // Fase 1 (inmediata): metadatos de obras → mostrar tablero
+  // Fase 2 (segundo plano): módulos de cada obra → enriquecer cards
   async function cargarObras(userId) {
     if (!window.db) return;
     setLoading(true);
     try {
       await migrarSiNecesario(userId);
       const rows = await window.db.getObras();
+      // FASE 1: mostrar obras inmediatamente con datos básicos
+      const obrasParciales = rows.map(row => ({
+        ...rowToObra(row, {}),
+        _rol: 'deo',
+        _cargando: true,
+      }));
+      setObras(obrasParciales);
+      setLoading(false);
+
+      // FASE 2: enriquecer cada obra con sus módulos en paralelo (segundo plano)
       const obrasCompletas = await Promise.all(rows.map(async row => {
         const [incs, vos, insps, notas, cal, rol] = await Promise.all([
           window.db.getModulo('incidencias', row.id),
@@ -6128,10 +6149,8 @@ export default function App() {
         return { ...rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal }), _rol: rol };
       }));
       setObras(obrasCompletas);
-      // Migrar fotos antiguas en segundo plano (sin bloquear la UI)
       setTimeout(() => migrarFotosAntiguas(obrasCompletas), 2000);
-    } catch (e) { console.error('Error cargando obras:', e); }
-    setLoading(false);
+    } catch (e) { console.error('Error cargando obras:', e); setLoading(false); }
   }
 
   // ── Migración de fotos antiguas (base64 → Storage) en segundo plano ────────
@@ -6273,6 +6292,7 @@ export default function App() {
       emplazamiento: data.emplazamiento || '', propiedad: data.propiedad || '',
       proyectista: data.proyectista || '', direccionObra: data.direccionObra || '',
       constructora: data.constructora || '', deoFirmante: data.deoFirmante || '',
+      fechaCFO: data.fechaCFO || '',
       numActaSeq: 0, estado: 'en_curso',
       disciplinas: [], lotes: [], incidencias: [], apuntes: [],
       materiales: [], seguimientoCQ: [], actasInsp: [],
@@ -6292,6 +6312,7 @@ export default function App() {
           propiedad: obra.propiedad, proyectista: obra.proyectista,
           direccionObra: obra.direccionObra, constructora: obra.constructora,
           deoFirmante: obra.deoFirmante, numActaSeq: obra.numActaSeq,
+          fechaCFO: obra.fechaCFO || '',
           fases: obra.fases, disciplinas: obra.disciplinas, lotes: obra.lotes,
           creadaEn: obra.creadaEn,
         },
