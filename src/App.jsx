@@ -5906,6 +5906,29 @@ export default function App() {
   const [loading,    setLoading]    = useState(true);
   const [nav,        setNav]        = useState('alertas');
   const [obraActiva, setObraActiva] = useState(null);
+  const [newVersion, setNewVersion] = useState(false);
+
+  // Detectar nou deployment de la PWA
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(reg => {
+        reg.addEventListener('updatefound', () => {
+          const newSW = reg.installing;
+          if (newSW) {
+            newSW.addEventListener('statechange', () => {
+              if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                setNewVersion(true);
+              }
+            });
+          }
+        });
+        // Comprovar si ja hi ha una actualització pendent
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          setNewVersion(true);
+        }
+      });
+    }
+  }, []);
   const [showNueva,  setShowNueva]  = useState(false);
   const [obraEditar,   setObraEditar]   = useState(null);
   const [obraEliminar, setObraEliminar] = useState(null);
@@ -6083,6 +6106,7 @@ export default function App() {
         propiedad: o.propiedad, proyectista: o.proyectista,
         direccionObra: o.direccionObra, constructora: o.constructora,
         deoFirmante: o.deoFirmante, numActaSeq: o.numActaSeq,
+        fechaCFO: o.fechaCFO || '',
         fases: o.fases, disciplinas: o.disciplinas, lotes: o.lotes,
         creadaEn: o.creadaEn,
       },
@@ -6100,6 +6124,7 @@ export default function App() {
       propiedad: d.propiedad, proyectista: d.proyectista,
       direccionObra: d.direccionObra, constructora: d.constructora,
       deoFirmante: d.deoFirmante, numActaSeq: d.numActaSeq,
+      fechaCFO: d.fechaCFO || '',
       fases: d.fases || [], disciplinas: d.disciplinas || [],
       lotes: d.lotes || [], creadaEn: d.creadaEn,
       incidencias: (modulos?.incidencias || []).map(r => r.data),
@@ -6424,15 +6449,33 @@ export default function App() {
   }
 
   // Vista detalle de obra
+  const UpdateBanner = () => newVersion ? (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+      background: '#1C1C1A', color: '#fff', padding: '10px 18px',
+      display: 'flex', alignItems: 'center', gap: 12, fontSize: 13 }}>
+      <span style={{ flex: 1 }}>🔄 Nova versió de PLAAT disponible</span>
+      <button onClick={() => { setNewVersion(false); window.location.reload(); }}
+        style={{ background: '#fff', color: '#1C1C1A', border: 'none', borderRadius: 8,
+          padding: '5px 14px', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
+        Actualitzar ara
+      </button>
+      <button onClick={() => setNewVersion(false)}
+        style={{ background: 'none', border: 'none', color: '#A5A5A0', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+    </div>
+  ) : null;
+
   if (obraActiva) {
     const fresh = obras.find(o => o.id === obraActiva.id) || obraActiva;
+    // Si l'obra encara s'està carregant (Fase 1), mostrem un spinner lleuger
+    // fins que la Fase 2 la tingui completa amb tots els mòduls
     return (
       <>
         <style>{CSS}</style>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', overflow: 'hidden' }}>
           {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} onBackup={() => { setShowBackup(true); setBackupMsg(""); }} />}
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <DetalleObra obra={fresh} onBack={() => setObraActiva(null)} onSave={actualizarObra} isMobile={isMobile} user={user} />
+            <UpdateBanner />
+      <DetalleObra obra={fresh} onBack={() => setObraActiva(null)} onSave={actualizarObra} isMobile={isMobile} user={user} />
           </div>
         </div>
       </>
@@ -6446,7 +6489,8 @@ export default function App() {
         {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} onBackup={() => { setShowBackup(true); setBackupMsg(""); }} />}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
-          {nav === 'alertas'      && <VistaAlertas obras={obras} onIrObra={o => setObraActiva(o)} isMobile={isMobile} />}
+          <UpdateBanner />
+      {nav === 'alertas'      && <VistaAlertas obras={obras} onIrObra={o => setObraActiva(o)} isMobile={isMobile} />}
           {nav === 'seguimiento'  && <VistaSeguimiento obras={obras} isMobile={isMobile} />}
           {nav === 'tablero'   && (
             <>
@@ -6498,7 +6542,11 @@ export default function App() {
                       ))}
                     </div>
                     <div className="list-in" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {obras.map(o => <ObraCard key={o.id} obra={o} onClick={() => setObraActiva(o)} onEditar={setObraEditar} onEliminar={setObraEliminar} />)}
+                      {obras.map(o => <ObraCard key={o.id} obra={o} onClick={() => {
+                        // Si _cargando, espera Fase 2 — busca la versió completa
+                        const completa = obras.find(x => x.id === o.id && !x._cargando);
+                        setObraActiva(completa || o);
+                      }} onEditar={setObraEditar} onEliminar={setObraEliminar} />)}
                     </div>
                   </>
                 )}
