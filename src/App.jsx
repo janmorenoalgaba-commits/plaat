@@ -5222,25 +5222,26 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
   // Seccions de temes tractats
   const cNum=14, cEs=14, cIni=20, cFi=20, cRes=14, cDesc=CW-cNum-cEs-cIni-cFi-cRes;
+  const LW_THIN = 0.25; // línies horitzontals a la meitat de 0.5pt
 
   (vo.secciones||[]).forEach(sec => {
     const actius=(sec.temas||[]).filter(t=>!(t.resuelto&&t.resueltoEnActa&&t.resueltoEnActa<vo.num));
     if (!actius.length) return;
 
     checkPage(20);
-    // Capçalera secció: número + títol (fondo gris 15%)
+    // Capçalera secció — IGUAL format que Estat de l'obra (gris, sense bordes, font 8 bold)
+    const secH = 5.5;
     doc.setFillColor(...GRIS15);
-    doc.rect(ML, y, cNum, 8, 'F'); setLW(); doc.rect(ML, y, cNum, 8, 'S');
-    doc.setFillColor(...GRIS15);
-    doc.rect(ML+cNum, y, CW-cNum, 8, 'F'); setLW(); doc.rect(ML+cNum, y, CW-cNum, 8, 'S');
-    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,0,0);
-    doc.text(sec.codigo||'', ML+cNum/2, y+4.5, { align:'center', baseline:'middle' });
-    doc.text(sec.titulo||'', ML+cNum+2, y+4.5, { baseline:'middle' });
-    y+=8;
+    doc.rect(ML, y, CW, secH, 'F');
+    // SENSE rect de contorn ni línies — igual que DF/Contratista/Estat obra
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text(sec.codigo||'', ML + 2, y + secH/2, { baseline:'middle' });
+    doc.text(sec.titulo||'', ML + 2 + 3 + doc.getTextWidth(sec.codigo||''), y + secH/2, { baseline:'middle' });
+    y += secH;
 
-    // Sub-capçalera columnes (línies horitzontals 0.5p, sense verticals — brandbook)
+    // Sub-capçalera columnes — línies horitzontals fines (LW_THIN), SENSE verticals
     const shH=5.5;
-    setLW(0.5); doc.line(ML, y, ML+CW, y);
+    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
     [[ML, cNum, ''], [ML+cNum, cDesc, T.desc], [ML+cNum+cDesc, cEs, T.es],
      [ML+cNum+cDesc+cEs, cIni, T.inici], [ML+cNum+cDesc+cEs+cIni, cFi, T.fi],
      [ML+cNum+cDesc+cEs+cIni+cFi, cRes, T.res]].forEach(([x,w,t]) => {
@@ -5248,14 +5249,15 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       if (t) doc.text(t, x+w/2, y+shH/2+0.5, { align:'center', baseline:'middle' });
     });
     y += shH;
-    setLW(0.5); doc.line(ML, y, ML+CW, y); setLW(LW);
+    setLW(LW_THIN); doc.line(ML, y, ML+CW, y); setLW(LW);
 
     actius.forEach(t => {
       const fW3=(cDesc-5)/2;
       const ed = (t.entradas||[]).map(en => {
         const esNova = en.actaNum === vo.num;
         const estat = esNova ? 'N' : (en.estado||'P');
-        const fill = esNova ? null : (estat==='R'?C_R:estat==='I'?C_I:estat==='A'?C_A:C_P);
+        // Colors brandbook actualitzats: P=groc, R=verd, I=blau, N=sense fons, A=vermell
+        const fill = esNova ? null : (estat==='R'?C_R : estat==='I'||estat==='INF'?C_I : estat==='A'?C_A : C_P);
         doc.setFontSize(8.5);
         const lines = doc.splitTextToSize(en.texto||'', cDesc-3);
         const lh85 = 8.5*0.3528+0.6;
@@ -5300,8 +5302,12 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         });
         // Valors columnes (centrats)
         const midY=ey+e.h/2;
+        // Estat amb color de lletra segons brandbook
+        const colorEstat = e.estat==='R' ? [44,94,16] : e.estat==='I'||e.estat==='INF' ? [12,68,124] : e.estat==='N' ? [0,0,0] : [124,74,0];
         doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+        doc.setTextColor(...colorEstat);
         doc.text(e.estat, ML+cNum+cDesc+cEs/2, midY, { align:'center', baseline:'middle' });
+        doc.setTextColor(0,0,0);
         doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
         const isR=e.en.estado==='R'&&!e.esNova;
         doc.text(isR?'':fmtFechaCorta(e.en.fecha), ML+cNum+cDesc+cEs+cIni/2, midY, { align:'center', baseline:'middle' });
@@ -5311,11 +5317,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         ey+=e.h;
       });
 
-      // Línies horitzontals separadores (brandbook: sense verticals en temes)
-      setLW(0.5); doc.line(ML, y, ML+CW, y); doc.line(ML, y+temaH, ML+CW, y+temaH); setLW(LW);
-      // Línies verticals de columnes (en taula complex de temes sí n'hi ha)
-      const vxs=[ML,ML+cNum,ML+cNum+cDesc,ML+cNum+cDesc+cEs,ML+cNum+cDesc+cEs+cIni,ML+cNum+cDesc+cEs+cIni+cFi,ML+CW];
-      vxs.forEach(x=>{ setLW(0.3); doc.line(x,y,x,y+temaH); });
+      // SENSE línies verticals — sols línies horitzontals fines entre temes
+      setLW(LW_THIN); doc.line(ML, y, ML+CW, y); doc.line(ML, y+temaH, ML+CW, y+temaH);
       y+=temaH;
     });
     y+=4;
@@ -5324,7 +5327,10 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // ── NOTA + TAULA FIRMES ────────────────────────────────────────────────────
   checkPage(45);
   y+=4;
-  doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+  // Línia 0.5pt just sobre la nota (més gruixuda que les de les taules)
+  setLW(0.5); doc.line(ML, y, ML+CW, y); setLW(LW);
+  y+=3;
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
   const notaFirmes=doc.splitTextToSize(T.nota,CW);
   doc.text(notaFirmes,ML,y); y+=notaFirmes.length*3.8+4;
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
