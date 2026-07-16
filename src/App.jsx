@@ -3864,7 +3864,39 @@ function migrateVO(raw) {
 // ── ModuloActaVO ─────────────────────────────────────────────────────────────
 function ModuloActaVO({ obra, onSave }) {
   const isMobile = useIsMobile();
-  const vo = migrateVO(obra.actaVO);
+  const [voLocal, setVoLocal] = useState(null);
+  const [cargandoVO, setCargandoVO] = useState(false);
+
+  // Si obra.actaVO és null (Fase 1 o mòdul no carregat), el carrega directament de Supabase
+  useEffect(() => {
+    if (obra.actaVO !== null && obra.actaVO !== undefined) {
+      setVoLocal(migrateVO(obra.actaVO));
+    } else if (window.db && obra.id) {
+      setCargandoVO(true);
+      window.db.getModulo('actas_vo', obra.id).then(rows => {
+        const data = rows?.[0]?.data || null;
+        const migrated = migrateVO(data);
+        setVoLocal(migrated);
+        // Actualitzar l'obra al state global amb les dades reals
+        if (data) onSave({ ...obra, actaVO: data }, true); // true = silenciós, no guarda a Supabase
+        setCargandoVO(false);
+      }).catch(() => {
+        setVoLocal(migrateVO(null));
+        setCargandoVO(false);
+      });
+    } else {
+      setVoLocal(migrateVO(obra.actaVO));
+    }
+  }, [obra.id, obra.actaVO]);
+
+  // Sincronitzar quan obra.actaVO canvia des de fora (Fase 2)
+  useEffect(() => {
+    if (obra.actaVO !== null && obra.actaVO !== undefined) {
+      setVoLocal(migrateVO(obra.actaVO));
+    }
+  }, [obra.actaVO]);
+
+  const vo = voLocal || migrateVO(null);
   const [showEquipo,    setShowEquipo]    = useState(false);
   const [showHistorico, setShowHistorico] = useState(false);
   const [borrar,        setBorrar]        = useState(null);
@@ -3872,7 +3904,10 @@ function ModuloActaVO({ obra, onSave }) {
   const [editandoSec,   setEditandoSec]   = useState(null);
   const [confirmacion,  setConfirmacion]  = useState(null); // id sección editando nombre
 
-  function guardarVO(nuevo) { onSave({ ...obra, actaVO: nuevo }); }
+  function guardarVO(nuevo) {
+    setVoLocal(nuevo);
+    onSave({ ...obra, actaVO: nuevo });
+  }
 
   // Equipo
   function updRol(id, campo, val) {
@@ -4013,6 +4048,13 @@ function ModuloActaVO({ obra, onSave }) {
   // Activos = no resueltos en acta anterior; resueltos = para histórico
   const todosResueltos = vo.secciones.flatMap(s => (s.temas||[]).filter(t => t.resuelto).map(t => ({ ...t, _secId: s.id })));
   const activosPorSec = id => (vo.secciones.find(s => s.id === id)?.temas||[]).filter(t => !(t.resuelto && t.resueltoEnActa && t.resueltoEnActa < vo.num));
+
+  if (cargandoVO) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', flexDirection: 'column', gap: 12 }}>
+      <div style={{ width: 28, height: 28, border: '2.5px solid #E0DFD9', borderTopColor: '#1C1C1A', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+      <div style={{ fontSize: 13, color: '#A5A5A0' }}>Carregant acta...</div>
+    </div>
+  );
 
   return (
     <div>
