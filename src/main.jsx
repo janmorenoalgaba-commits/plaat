@@ -116,14 +116,15 @@ window.db = {
     const blob  = new Blob([arr], { type: mime });
     const { error } = await supabase.storage.from('plaat-fotos').upload(path, blob, { upsert: true, contentType: mime });
     if (error) throw error;
-    // Devolver URL firmada (válida 1 año)
-    const { data: urlData } = await supabase.storage.from('plaat-fotos').createSignedUrl(path, 60 * 60 * 24 * 365);
-    return { path, url: urlData?.signedUrl };
+    // URL pública — no caduca mai (el bucket plaat-fotos ha d'estar en mode públic)
+    const { data: urlData } = supabase.storage.from('plaat-fotos').getPublicUrl(path);
+    return { path, url: urlData?.publicUrl };
   },
 
   async getFotoUrl(path) {
-    const { data } = await supabase.storage.from('plaat-fotos').createSignedUrl(path, 60 * 60 * 24 * 365);
-    return data?.signedUrl;
+    // URL pública — no caduca mai
+    const { data } = supabase.storage.from('plaat-fotos').getPublicUrl(path);
+    return data?.publicUrl;
   },
 
   async eliminarFoto(path) {
