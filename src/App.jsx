@@ -3874,13 +3874,31 @@ function ModuloActaVO({ obra, onSave }) {
     } else if (window.db && obra.id) {
       setCargandoVO(true);
       window.db.getModulo('actas_vo', obra.id).then(rows => {
-        const data = rows?.[0]?.data || null;
-        const migrated = migrateVO(data);
-        setVoLocal(migrated);
-        // Actualitzar l'obra al state global amb les dades reals
-        if (data) onSave({ ...obra, actaVO: data }, true); // true = silenciós, no guarda a Supabase
+        const raw = rows?.[0]?.data || null;
+        if (raw) {
+          // Netejar fotos amb base64 antic (massa pesades) — conservar només path i url
+          const netejat = {
+            ...raw,
+            estadoObra: {
+              ...( raw.estadoObra || {} ),
+              fotos: (raw.estadoObra?.fotos || []).map(f => ({
+                id: f.id, path: f.path,
+                // Regenerar URL pública si té path, sinó conservar URL existent
+                url: f.path
+                  ? `${window._supabaseUrl}/storage/v1/object/public/plaat-fotos/${f.path}`
+                  : (f.url || ''),
+                // Eliminar el base64 (data) que pesa molt
+              })),
+            },
+          };
+          const migrated = migrateVO(netejat);
+          setVoLocal(migrated);
+        } else {
+          setVoLocal(migrateVO(null));
+        }
         setCargandoVO(false);
-      }).catch(() => {
+      }).catch(err => {
+        console.error('Error carregant actaVO:', err);
         setVoLocal(migrateVO(null));
         setCargandoVO(false);
       });
