@@ -4967,7 +4967,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // ── FILA ACTA / DATA / LLOC / FASE ───────────────────────────────────────
   // Alçada 0.5cm = 5mm. 0.5pt. MAJÚSCULES. FASE dreta.
   const filaH = 5;
-  setLW(0.5); doc.line(ML, y, ML+CW, y); // línia superior 0.5pt
+  setLW(LW); doc.line(ML, y, ML+CW, y); // línia superior fina 0.25pt
 
   const filaY = y + filaH/2;
   // Les tres primeres parelles s'escriuen des de l'esquerra
@@ -4997,7 +4997,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   doc.setFont('helvetica','bold');
   doc.text(T.fase.toUpperCase(), rfx, filaY, { baseline:'middle', align:'right' });
 
-  setLW(0.5); doc.line(ML, y + filaH, ML+CW, y + filaH); // línia inferior 0.5pt
+  setLW(LW); doc.line(ML, y + filaH, ML+CW, y + filaH); // línia inferior fina 0.25pt
   y += filaH + 5;
 
   // ── TAULA EQUIP TÈCNIC — format Word exacte ──────────────────────────────
@@ -5276,7 +5276,9 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
       // Fons de color per estat (brandbook) — inclou la columna del número
       // El color del fons del número és el de la primera entrada (o el predominant)
-      const fillNum = ed.find(e=>e.fill)?.fill || null;
+      // Color num: verd NOMÉS si TOTS els estats del tema estan resolts (R)
+      const totesResoltes = ed.every(e => e.estat === 'R');
+      const fillNum = totesResoltes ? C_R : (ed.find(e => e.estat !== 'R' && e.fill)?.fill || ed.find(e=>e.fill)?.fill || null);
       let ey=y;
       ed.forEach(e=>{
         // Fons columna número (mateix color que l'estat)
