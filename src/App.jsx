@@ -6248,6 +6248,12 @@ export default function App() {
   async function migrarFotosAntiguas(listaObras) {
     if (!window.db?.subirFoto) return;
     let hayActualizaciones = false;
+    const basePublic = `${window._supabaseUrl}/storage/v1/object/public/plaat-fotos/`;
+
+    // Helper: comprova si una URL és signada (caduca) o pública (no caduca)
+    const esUrlSignada = url => url && (url.includes('/sign/') || url.includes('token='));
+    // Helper: reconstrueix URL pública a partir del path
+    const urlPublica = path => path ? basePublic + path : null;
 
     for (const obra of listaObras) {
       let obraModificada = false;
@@ -6257,13 +6263,20 @@ export default function App() {
         let incModificada = false;
         const historialNuevo = await Promise.all((inc.historial || []).map(async h => {
           const adjuntosNuevos = await Promise.all((h.adjuntos || []).map(async a => {
-            // Si ya tiene path/url de Storage, no migrar
-            if (a.path || a.url || !a.data || !a.data.startsWith('data:image')) return a;
-            try {
-              const { path, url } = await window.db.subirFoto(obra.id, a.id || uid(), a.data);
+            // Si té path, actualitzar a URL pública
+            if (a.path && esUrlSignada(a.url || '')) {
               incModificada = true;
-              return { ...a, path, url, data: undefined }; // eliminar base64
-            } catch(e) { return a; } // si falla, mantener base64
+              return { ...a, url: urlPublica(a.path), data: undefined };
+            }
+            // Si té base64 però no path, pujar a Storage
+            if (!a.path && !a.url && a.data && a.data.startsWith('data:image')) {
+              try {
+                const { path, url } = await window.db.subirFoto(obra.id, a.id || uid(), a.data);
+                incModificada = true;
+                return { ...a, path, url, data: undefined };
+              } catch(e) { return a; }
+            }
+            return a;
           }));
           return incModificada ? { ...h, adjuntos: adjuntosNuevos } : h;
         }));
@@ -6278,28 +6291,43 @@ export default function App() {
         }
       }
 
-      // Migrar fotos de Acta VO
+      // Migrar fotos de Acta VO — regenerar URLs signades caducades
       if (obra.actaVO?.secciones) {
         let voModificado = false;
-        const seccionesNuevas = await Promise.all((obra.actaVO.secciones || []).map(async sec => {
-          const temasNuevos = await Promise.all((sec.temas || []).map(async t => {
-            const entradasNuevas = await Promise.all((t.entradas || []).map(async en => {
-              const fotosNuevas = await Promise.all((en.fotos || []).map(async f => {
-                if (f.path || f.url || !f.data || !f.data.startsWith('data:image')) return f;
-                try {
-                  const { path, url } = await window.db.subirFoto(obra.id, f.id || uid(), f.data);
+        const seccionesNuevas = (obra.actaVO.secciones || []).map(sec => ({
+          ...sec,
+          temas: (sec.temas || []).map(t => ({
+            ...t,
+            entradas: (t.entradas || []).map(en => ({
+              ...en,
+              fotos: (en.fotos || []).map(f => {
+                // Si té path i URL signada caducada → URL pública
+                if (f.path && esUrlSignada(f.url || '')) {
                   voModificado = true;
-                  return { ...f, path, url, data: undefined };
-                } catch(e) { return f; }
-              }));
-              return { ...en, fotos: fotosNuevas };
-            }));
-            return { ...t, entradas: entradasNuevas };
-          }));
-          return { ...sec, temas: temasNuevos };
+                  return { id: f.id, path: f.path, url: urlPublica(f.path) };
+                }
+                // Si té base64 però no path → marcar per pujar (ho ignorem ara, massa lent)
+                return f;
+              }),
+            })),
+          })),
         }));
+
+        // Migrar fotos d'estat de l'obra
+        const fotosEstat = (obra.actaVO.estadoObra?.fotos || []).map(f => {
+          if (f.path && esUrlSignada(f.url || '')) {
+            voModificado = true;
+            return { id: f.id, path: f.path, url: urlPublica(f.path) };
+          }
+          return f;
+        });
+
         if (voModificado) {
-          const voActualizado = { ...obra.actaVO, secciones: seccionesNuevas };
+          const voActualizado = {
+            ...obra.actaVO,
+            secciones: seccionesNuevas,
+            estadoObra: { ...(obra.actaVO.estadoObra || {}), fotos: fotosEstat },
+          };
           await window.db.upsertModulo('actas_vo', { id: obra.id + '_vo', obra_id: obra.id, data: voActualizado, updated_at: now() });
           obraModificada = true;
         }
@@ -6309,8 +6337,7 @@ export default function App() {
     }
 
     if (hayActualizaciones) {
-      console.log('Fotos antiguas migradas a Storage');
-      // Recargar obras para reflejar las URLs nuevas
+      console.log('URLs de fotos migrades a públiques OK');
       const userId = user?.id || user?.sub;
       if (userId) cargarObras(userId);
     }
