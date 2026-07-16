@@ -4144,39 +4144,57 @@ function ModuloActaVO({ obra, onSave }) {
                 ))}
               </div>
             )}
-            {(vo.equipo||[]).map(rol => (
-              <div key={rol.id} style={{ marginBottom: 10, border: '1px solid #F2F1ED', borderRadius: 8, overflow: 'hidden' }}>
-                {/* Nombre del rol — separado, fondo tenue */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: '#F5F4F0', borderBottom: '1px solid #ECEAE4' }}>
-                  <input value={rol.nombre} onChange={e => updRol(rol.id, 'nombre', e.target.value)} style={{ flex: 1, fontSize: 11, fontWeight: 600, background: 'transparent', border: 'none', padding: 0, boxShadow: 'none', color: '#141412' }} />
-                  <button onClick={() => setConfirmacion({ titulo: 'Eliminar rol', texto: `Vas a eliminar el rol "${rol.nombre}" y todas sus personas.`, onSi: () => { delRol(rol.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
-                </div>
-                {/* Filas de personas — mismo grid que el header */}
-                {(rol.personas||[]).map(p => (
-                  <div key={p.id} style={{
-                    display: isMobile ? 'flex' : 'grid',
-                    gridTemplateColumns: isMobile ? undefined : '2fr 1.4fr 1.6fr 1.8fr 1.3fr 50px 22px',
-                    flexDirection: isMobile ? 'column' : undefined,
-                    gap: 4, padding: '5px 8px',
-                    borderBottom: '1px solid #F9F8F5', alignItems: 'center'
-                  }}>
-                    {isMobile && <div style={{ fontSize: 10, color: '#A5A5A0', marginBottom: 3 }}>Empresa / Nombre / Email / Tel</div>}
-                    {/* Primera columna: vacía (el rol ya está arriba) */}
-                    {!isMobile && <div />}
-                    <input placeholder="Empresa" value={p.empresa||''} onChange={e => updPersona(rol.id, p.id, 'empresa', e.target.value)} style={{ fontSize: 12 }} />
-                    <input placeholder="Nombre" value={p.nombre||''} onChange={e => updPersona(rol.id, p.id, 'nombre', e.target.value)} style={{ fontSize: 12 }} />
-                    <input placeholder="Email" value={p.email||''} onChange={e => updPersona(rol.id, p.id, 'email', e.target.value)} style={{ fontSize: 12 }} />
-                    <input placeholder="Teléfono" value={p.tel||''} onChange={e => updPersona(rol.id, p.id, 'tel', e.target.value)} style={{ fontSize: 12 }} />
-                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', fontSize: 12, color: '#52524E' }}>
-                      <input type="checkbox" checked={!!p.asistio} onChange={e => updPersona(rol.id, p.id, 'asistio', e.target.checked)} style={{ width: 14, height: 14 }} />
-                      {isMobile ? 'Asistido' : ''}
-                    </label>
-                    <button onClick={() => setConfirmacion({ titulo: 'Eliminar persona', texto: `Vas a eliminar a "${p.nombre||'esta persona'}".`, onSi: () => { delPersona(rol.id, p.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, textAlign: 'center' }}>×</button>
+            {(() => {
+              // Detectar a quin grup pertany cada rol (igual que al PDF)
+              const GRUP_PM  = n => n && n.toUpperCase().includes('PROJECT MANAGER');
+              const GRUP_DF  = n => n && (n.toUpperCase().includes('OBRA (DO)') || n.toUpperCase().includes('FACULTATIVA'));
+              const GRUP_DEO = n => n && (n.toUpperCase().includes('EJECUCIÓN') || n.toUpperCase().includes('EXECUCIÓ') || n.toUpperCase().includes('ESTRUCTURA') || n.toUpperCase().includes('INSTALAC') || n.toUpperCase().includes('SEGURIDAD') || n.toUpperCase().includes('SEGURETAT') || n.toUpperCase().includes('CSS'));
+              const GRUP_EC  = n => n && (n.toUpperCase().includes('CONTRATISTA') || n.toUpperCase().includes('CONTRACTISTA'));
+
+              const equip = vo.equipo || [];
+              const pmRols  = equip.filter(r => GRUP_PM(r.nombre));
+              const dfRols  = equip.filter(r => GRUP_DF(r.nombre));
+              const deoRols = equip.filter(r => GRUP_DEO(r.nombre));
+              const ecRols  = equip.filter(r => GRUP_EC(r.nombre));
+              const altres  = equip.filter(r => !GRUP_PM(r.nombre) && !GRUP_DF(r.nombre) && !GRUP_DEO(r.nombre) && !GRUP_EC(r.nombre));
+
+              const RolRow = (rol) => (
+                <div key={rol.id} style={{ marginBottom: 6, border: '1px solid #F2F1ED', borderRadius: 8, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: '#F5F4F0', borderBottom: '1px solid #ECEAE4' }}>
+                    <input value={rol.nombre} onChange={e => updRol(rol.id, 'nombre', e.target.value)} style={{ flex: 1, fontSize: 11, fontWeight: 600, background: 'transparent', border: 'none', padding: 0, boxShadow: 'none', color: '#141412' }} />
+                    <button onClick={() => setConfirmacion({ titulo: 'Eliminar rol', texto: `Vas a eliminar el rol "${rol.nombre}" y todas sus personas.`, onSi: () => { delRol(rol.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
                   </div>
-                ))}
-                <button onClick={() => addPersona(rol.id)} style={{ width: '100%', padding: '5px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#9B9B97', borderTop: '1px dashed #E8E7E1' }}>+ Añadir persona</button>
-              </div>
-            ))}
+                  {(rol.personas||[]).map(p => (
+                    <div key={p.id} style={{ display: isMobile ? 'flex' : 'grid', gridTemplateColumns: isMobile ? undefined : '2fr 1.4fr 1.6fr 1.8fr 1.3fr 50px 22px', flexDirection: isMobile ? 'column' : undefined, gap: 4, padding: '5px 8px', borderBottom: '1px solid #F9F8F5', alignItems: 'center' }}>
+                      {isMobile && <div style={{ fontSize: 10, color: '#A5A5A0', marginBottom: 3 }}>Empresa / Nombre / Email / Tel</div>}
+                      {!isMobile && <div />}
+                      <input placeholder="Empresa" value={p.empresa||''} onChange={e => updPersona(rol.id, p.id, 'empresa', e.target.value)} style={{ fontSize: 12 }} />
+                      <input placeholder="Nombre" value={p.nombre||''} onChange={e => updPersona(rol.id, p.id, 'nombre', e.target.value)} style={{ fontSize: 12 }} />
+                      <input placeholder="Email" value={p.email||''} onChange={e => updPersona(rol.id, p.id, 'email', e.target.value)} style={{ fontSize: 12 }} />
+                      <input placeholder="Teléfono" value={p.tel||''} onChange={e => updPersona(rol.id, p.id, 'tel', e.target.value)} style={{ fontSize: 12 }} />
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', fontSize: 12, color: '#52524E' }}>
+                        <input type="checkbox" checked={!!p.asistio} onChange={e => updPersona(rol.id, p.id, 'asistio', e.target.checked)} style={{ width: 14, height: 14 }} />
+                        {isMobile ? 'Asistido' : ''}
+                      </label>
+                      <button onClick={() => setConfirmacion({ titulo: 'Eliminar persona', texto: `Vas a eliminar a "${p.nombre||'esta persona'}".`, onSi: () => { delPersona(rol.id, p.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, textAlign: 'center' }}>×</button>
+                    </div>
+                  ))}
+                  <button onClick={() => addPersona(rol.id)} style={{ width: '100%', padding: '5px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#9B9B97', borderTop: '1px dashed #E8E7E1' }}>+ Añadir persona</button>
+                </div>
+              );
+
+              const GrupHeader = (label) => (
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#6B6B66', textTransform: 'uppercase', letterSpacing: '0.08em', background: '#F0EFEA', padding: '4px 8px', borderRadius: 6, marginBottom: 4, marginTop: 8 }}>{label}</div>
+              );
+
+              return <>
+                {pmRols.length > 0 && <>{GrupHeader('Project Manager')}{pmRols.map(RolRow)}</>}
+                {dfRols.length > 0 && <>{GrupHeader('Dirección Facultativa')}{dfRols.map(RolRow)}</>}
+                {deoRols.length > 0 && <>{GrupHeader('Dirección de Ejecución')}{deoRols.map(RolRow)}</>}
+                {altres.map(RolRow)}
+                {ecRols.length > 0 && <>{GrupHeader('Contratista')}{ecRols.map(RolRow)}</>}
+              </>;
+            })()}
             <button onClick={addRol} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginTop: 4 }}>+ Añadir rol</button>
           </div>
         )}
@@ -4185,7 +4203,7 @@ function ModuloActaVO({ obra, onSave }) {
       {/* Sección 0 — Estado de la obra */}
       <div style={{ border: '1px solid #E8E7E1', borderRadius: 10, marginBottom: 14, padding: '12px 14px' }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#141412', letterSpacing: '0.02em', marginBottom: 8 }}>
-          <span style={{ color: '#52524E', marginRight: 6 }}>0</span>ESTADO DE LA OBRA
+          <span style={{ color: '#52524E', marginRight: 10 }}>0</span>ESTADO DE LA OBRA
         </div>
         <textarea placeholder="Describe brevemente el estado general de la obra en esta visita..." value={vo.estadoObra?.descripcion||''} onChange={e => updEstado('descripcion', e.target.value)} style={{ minHeight: 64, marginBottom: 10 }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
@@ -4923,7 +4941,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // ── TAULA EQUIP TÈCNIC — format Word exacte ──────────────────────────────
   // Columnes ajustades per evitar solapaments:
   // ROL: 52mm | EMP: 14mm | NOM: 28mm | EMAIL: 58mm | TEL: resta (~28mm)
-  const eRol=50, eEmp=22, eNom=28, eEmail=52, eTel=CW-eRol-eEmp-eNom-eEmail; // Tel=28mm OK
+  const eRol=50, eEmp=27, eNom=28, eEmail=47, eTel=CW-eRol-eEmp-eNom-eEmail; // eEmp+5mm, eTel=28mm
   const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp, xEmail=ML+eRol+eEmp+eNom, xTel=ML+eRol+eEmp+eNom+eEmail;
   const equipRols = vo.equipo || [];
   const RH = 6; // alçada fila persona
@@ -5119,7 +5137,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     // SENSE rect de contorn ni línies
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
     doc.text('0', ML + 2, y + eoH/2, { baseline:'middle' });
-    doc.text('  ' + T.estat0, ML + 2, y + eoH/2, { baseline:'middle' });
+    doc.text(T.estat0, ML + 2 + 3 + doc.getTextWidth('0'), y + eoH/2, { baseline:'middle' }); // 3mm separació
     y += eoH;
 
     // Text de descripció (si n'hi ha)
