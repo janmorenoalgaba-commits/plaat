@@ -4068,25 +4068,20 @@ function ModuloActaVO({ obra, onSave }) {
   function delFotoEstado(id) { guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: (vo.estadoObra.fotos||[]).filter(f => f.id !== id) } }); }
 
   const [showIdioma, setShowIdioma] = useState(false);
-  const [versionExport, setVersionExport] = useState(null); // 'v1' | 'v2'
 
   async function exportar(idioma) {
     setShowIdioma(false);
     setGenerando(true);
     guardarVO({ ...vo, num: vo.num + 1 });
     try {
-      if (versionExport === 'v2') {
-        await generarActaVO_v2(obra, { ...vo, num: vo.num }, idioma);
-      } else {
-        await generarActaVO(obra, { ...vo, num: vo.num }, idioma);
-      }
+      // Sempre format nou PLAAT 2026 (v2)
+      await generarActaVO_v2(obra, { ...vo, num: vo.num }, idioma);
     } catch (e) {
       if (!e.message?.includes('Load failed') && !e.message?.includes('fetch')) {
         alert('Error al exportar: ' + e.message);
       }
     }
     setGenerando(false);
-    setVersionExport(null);
   }
 
   // Activos = no resueltos en acta anterior; resueltos = para histórico
@@ -4116,25 +4111,9 @@ function ModuloActaVO({ obra, onSave }) {
         <Btn primary disabled={generando} onClick={() => setShowIdioma(true)}>{generando ? 'Generando...' : `↓ Exportar Acta Nº ${String(vo.num).padStart(2,'0')}`}</Btn>
       </div>
 
-      {showIdioma && !versionExport && (
-        <Modal title="Format de l'acta" onClose={() => setShowIdioma(false)} footer={<Btn onClick={() => setShowIdioma(false)}>Cancel·lar</Btn>}>
-          <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16 }}>Tria el format per exportar l'Acta Nº {String(vo.num).padStart(2,'0')}.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div onClick={() => setVersionExport('v2')} style={{ padding: '14px 16px', borderRadius: 10, border: '1.5px solid #18180F', background: '#F5F4F0', cursor: 'pointer' }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>✦ Format nou PLAAT 2026</div>
-              <div style={{ fontSize: 11, color: '#6B6B66', marginTop: 3 }}>Brandbook juny 2026 — Arial, banda negra, capçalera corporativa</div>
-            </div>
-            <div onClick={() => setVersionExport('v1')} style={{ padding: '14px 16px', borderRadius: 10, border: '1.5px solid #E0DFD9', background: '#fff', cursor: 'pointer' }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: '#6B6B66' }}>Format anterior</div>
-              <div style={{ fontSize: 11, color: '#A5A5A0', marginTop: 3 }}>Versió original de l'acta</div>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {showIdioma && versionExport && (
-        <Modal title="Idioma de l'acta" onClose={() => { setShowIdioma(false); setVersionExport(null); }} footer={<Btn onClick={() => { setShowIdioma(false); setVersionExport(null); }}>Cancel·lar</Btn>}>
-          <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16 }}>Tria l'idioma per exportar l'Acta Nº {String(vo.num).padStart(2,'0')} en format {versionExport === 'v2' ? 'nou PLAAT 2026' : 'anterior'}.</p>
+      {showIdioma && (
+        <Modal title="Idioma de l'acta" onClose={() => setShowIdioma(false)} footer={<Btn onClick={() => setShowIdioma(false)}>Cancel·lar</Btn>}>
+          <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16 }}>Tria l'idioma per exportar l'Acta Nº {String(vo.num).padStart(2,'0')}.</p>
           <div style={{ display: 'flex', gap: 10 }}>
             <Btn full onClick={() => exportar('ca')}>Català</Btn>
             <Btn primary full onClick={() => exportar('es')}>Castellano</Btn>
