@@ -3950,6 +3950,15 @@ function ModuloActaVO({ obra, onSave }) {
     guardarVO({ ...vo, equipo: [...vo.equipo, { id: uid(), nombre: 'NUEVO ROL', personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] }] });
   }
   function delRol(id) { guardarVO({ ...vo, equipo: vo.equipo.filter(r => r.id !== id) }); }
+  function moveRol(id, dir) {
+    const eq = [...(vo.equipo||[])];
+    const idx = eq.findIndex(r => r.id === id);
+    if (idx < 0) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= eq.length) return;
+    [eq[idx], eq[newIdx]] = [eq[newIdx], eq[idx]];
+    guardarVO({ ...vo, equipo: eq });
+  }
 
   // Secciones
   function addSeccion() {
@@ -4162,6 +4171,8 @@ function ModuloActaVO({ obra, onSave }) {
                 <div key={rol.id} style={{ marginBottom: 6, border: '1px solid #F2F1ED', borderRadius: 8, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: '#F5F4F0', borderBottom: '1px solid #ECEAE4' }}>
                     <input value={rol.nombre} onChange={e => updRol(rol.id, 'nombre', e.target.value)} style={{ flex: 1, fontSize: 11, fontWeight: 600, background: 'transparent', border: 'none', padding: 0, boxShadow: 'none', color: '#141412' }} />
+                    <button onClick={() => moveRol(rol.id, -1)} title="Mover arriba" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>↑</button>
+                    <button onClick={() => moveRol(rol.id, 1)} title="Mover abajo" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>↓</button>
                     <button onClick={() => setConfirmacion({ titulo: 'Eliminar rol', texto: `Vas a eliminar el rol "${rol.nombre}" y todas sus personas.`, onSi: () => { delRol(rol.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
                   </div>
                   {(rol.personas||[]).map(p => (
@@ -4586,7 +4597,28 @@ async function generarActaVO(obra, vo, idioma = 'ca') {
       doc.setFontSize(8.5); const dl=doc.splitTextToSize(eo.descripcion,CW-4);
       const dh=Math.max(10,dl.length*4.2+5); checkPage(dh);
       rectF(M,y,CW,dh,null);
-      doc.setFont('helvetica','normal'); doc.text(dl,M+2,y+5); y+=dh+2;
+      doc.setFont('helvetica','normal');
+      // Text justificat: cada línia excepte l'última s'estira fins a CW-4
+      dl.forEach((l, li) => {
+        const isLast = li === dl.length - 1;
+        if (isLast || l.trim() === '') {
+          doc.text(l, M+2, y+5 + li*(8.5*0.3528+0.5));
+        } else {
+          const words = l.split(' ');
+          if (words.length <= 1) { doc.text(l, M+2, y+5 + li*(8.5*0.3528+0.5)); }
+          else {
+            const totalW = CW-6;
+            const lineW = doc.getTextWidth(l);
+            const spaceExtra = (totalW - lineW) / (words.length - 1);
+            let cx = M+2;
+            words.forEach((w, wi) => {
+              doc.text(w, cx, y+5 + li*(8.5*0.3528+0.5));
+              cx += doc.getTextWidth(w) + doc.getTextWidth(' ') + spaceExtra;
+            });
+          }
+        }
+      });
+      y+=dh+2;
     }
     const fotos=eo.fotos||[], fW=(CW-4)/2;
     for(let fi=0;fi<fotos.length;fi+=2){
