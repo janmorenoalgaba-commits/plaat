@@ -6228,6 +6228,12 @@ export default function App() {
   // ── Guardar obra: solo la parte que cambió ─────────────────────────────────
   async function saveUnaObra(obra, lista, anterior) {
     if (!window.db || !user) return;
+    // PROTECCIÓ CRÍTICA: mai guardar si l'obra encara s'està carregant (Fase 1)
+    // En Fase 1 els mòduls són null/buits i sobreescriurien dades reals a Supabase
+    if (obra._cargando) {
+      console.warn('saveUnaObra bloquejat: obra en fase de càrrega', obra.id);
+      return;
+    }
     try {
       const userId = user.id || user.sub;
       // Datos generales de la obra — siempre se guarda (es ligero, sin módulos)
@@ -6248,8 +6254,10 @@ export default function App() {
       }
 
       // Acta VO: solo si cambió respecto a la anterior
-      if (obra.actaVO !== undefined && obra.actaVO !== prev.actaVO) {
-        await window.db.upsertModulo('actas_vo', { id: obra.id + '_vo', obra_id: obra.id, data: obra.actaVO || {}, updated_at: now() });
+      // PROTECCIÓ: mai guardar si l'obra està en fase de càrrega (_cargando)
+      // PROTECCIÓ: mai sobreescriure amb null/undefined (significaria que els mòduls no s'han carregat encara)
+      if (!obra._cargando && obra.actaVO !== undefined && obra.actaVO !== null && obra.actaVO !== prev.actaVO) {
+        await window.db.upsertModulo('actas_vo', { id: obra.id + '_vo', obra_id: obra.id, data: obra.actaVO, updated_at: now() });
       }
 
       // Actas Inspección: solo las que cambiaron
