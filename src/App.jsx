@@ -4842,7 +4842,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   let pagActual = 1;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  const LW = 0.3;
+  const LW = 0.25; // línies horitzontals taules: 0.25pt (la meitat de 0.5pt)
   function setLW(w) { doc.setLineWidth(w || LW); doc.setDrawColor(0,0,0); }
 
   function text(x, yy, txt, opts = {}) {
@@ -4939,7 +4939,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       doc.setTextColor(0,0,0);
       y = bandaY + 8 + 4;
     } else {
-      y = MT + 15;
+      y = MT + 12 + 9; // 12mm capçalera + 9mm separació (igual que pàg 1 sense banda negra)
     }
   }
 
@@ -5237,19 +5237,17 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
     doc.text(sec.codigo||'', ML + 2, y + secH/2, { baseline:'middle' });
     doc.text(sec.titulo||'', ML + 2 + 3 + doc.getTextWidth(sec.codigo||''), y + secH/2, { baseline:'middle' });
+    // Textos de columnes alineats a la dreta de la fila grisa (ES / INICI / FI / RES)
+    doc.setFontSize(6.5);
+    [[ML+cNum+cDesc, cEs, T.es], [ML+cNum+cDesc+cEs, cIni, T.inici],
+     [ML+cNum+cDesc+cEs+cIni, cFi, T.fi], [ML+cNum+cDesc+cEs+cIni+cFi, cRes, T.res]
+    ].forEach(([x,w,t]) => {
+      doc.text(t, x+w/2, y + secH/2, { align:'center', baseline:'middle' });
+    });
     y += secH;
 
-    // Sub-capçalera columnes — línies horitzontals fines (LW_THIN), SENSE verticals
-    const shH=5.5;
-    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
-    [[ML, cNum, ''], [ML+cNum, cDesc, T.desc], [ML+cNum+cDesc, cEs, T.es],
-     [ML+cNum+cDesc+cEs, cIni, T.inici], [ML+cNum+cDesc+cEs+cIni, cFi, T.fi],
-     [ML+cNum+cDesc+cEs+cIni+cFi, cRes, T.res]].forEach(([x,w,t]) => {
-      doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
-      if (t) doc.text(t, x+w/2, y+shH/2+0.5, { align:'center', baseline:'middle' });
-    });
-    y += shH;
-    setLW(LW_THIN); doc.line(ML, y, ML+CW, y); setLW(LW);
+    // Textos de columnes ES/INICI/FI/RES dins de la fila grisa (sense fila blanca separada)
+    // Ja s'han afegit a la fila grisa de secció anterior
 
     actius.forEach(t => {
       const fW3=(cDesc-5)/2;
@@ -5276,9 +5274,14 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       const temaH=ed.reduce((a,e)=>a+e.h,0);
       checkPage(temaH);
 
-      // Fons de color per estat (brandbook)
+      // Fons de color per estat (brandbook) — inclou la columna del número
+      // El color del fons del número és el de la primera entrada (o el predominant)
+      const fillNum = ed.find(e=>e.fill)?.fill || null;
       let ey=y;
       ed.forEach(e=>{
+        // Fons columna número (mateix color que l'estat)
+        if(fillNum){doc.setFillColor(...fillNum);doc.rect(ML,ey,cNum,e.h,'F');}
+        // Fons columna contingut
         if(e.fill){doc.setFillColor(...e.fill);doc.rect(ML+cNum,ey,CW-cNum,e.h,'F');}
         ey+=e.h;
       });
