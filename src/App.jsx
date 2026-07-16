@@ -4887,9 +4887,9 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     if (y + h > PH - MB - 12) {
       doc.addPage();
       pagActual++;
-      dibuixarCapçalera(false);
+      dibuixarCapçalera(false); // ja assigna y = MT + 12 + 9 internament
       dibuixarPeu();
-      y = MT + 14;
+      // NO sobreescriure y — dibuixarCapçalera(false) ja ha posat el valor correcte
     }
   }
 
@@ -5091,7 +5091,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       // Línia INFERIOR — NO si és l'última persona del grup (evita solapament amb fila grisa)
       const omitirLinia = isLastOfGroup && isLastPer;
       if (!omitirLinia) {
-        setLW(0.5);
+        setLW(LW); // línies fines 0.25pt, igual que la taula de temes
         const xIniLinia = (!isFirst && mateixaEmpresa) ? xNom : xEmp;
         doc.line(xIniLinia, y + RH, ML+CW, y + RH);
       }
@@ -5123,7 +5123,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     y += 8;
   }
 
-  // Línia inferior tanca la taula equip
+  // Línia inferior tanca la taula equip — 0.5pt per marcar el tancament
   setLW(0.5); doc.line(ML, y, ML+CW, y);
   y += 6;
 
