@@ -3867,6 +3867,12 @@ function ModuloActaVO({ obra, onSave }) {
   const [voLocal, setVoLocal] = useState(null);
   const [cargandoVO, setCargandoVO] = useState(false);
 
+  // DEBUG TEMPORAL — esborrar després
+  useEffect(() => {
+    console.log('[ActaVO] obra.id:', obra.id, 'obra.actaVO:', obra.actaVO ? `OK (num:${obra.actaVO.num}, seccions:${obra.actaVO.secciones?.length}, temes:${obra.actaVO.secciones?.reduce((a,s)=>a+(s.temas?.length||0),0)})` : 'NULL');
+    console.log('[ActaVO] voLocal:', voLocal ? `OK (num:${voLocal.num}, seccions:${voLocal.secciones?.length}, temes:${voLocal.secciones?.reduce((a,s)=>a+(s.temas?.length||0),0)})` : 'NULL');
+  }, [obra.actaVO, voLocal]);
+
   // Si obra.actaVO és null (Fase 1 o mòdul no carregat), el carrega directament de Supabase
   useEffect(() => {
     if (obra.actaVO !== null && obra.actaVO !== undefined) {
