@@ -3805,13 +3805,13 @@ function VistaAlertas({ obras, onIrObra, isMobile }) {
 
 function getDefaultEquipo() {
   return [
-    { id: uid(), nombre: 'PROJECT MANAGER',                    personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
-    { id: uid(), nombre: 'DIRECCIÓN DE OBRA (DO)',             personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
-    { id: uid(), nombre: 'DIRECCIÓN DE EJECUCIÓN (DEO)',       personas: [{ id: uid(), empresa: 'PLAAT', nombre: 'Xavier Pla', email: 'xpla@plaat.es', tel: '629 72 72 62', asistio: false }] },
-    { id: uid(), nombre: 'ING. ESTRUCTURAS',                   personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
-    { id: uid(), nombre: 'ING. INSTALACIONES',                 personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
-    { id: uid(), nombre: 'COORDINADOR DE SEGURIDAD (CSS)',     personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
-    { id: uid(), nombre: 'CONTRATISTA (EC)',                   personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'PROJECT MANAGER',                    grupo: 'PROJECT MANAGER',       personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'DIRECCIÓN DE OBRA (DO)',             grupo: 'DIRECCIÓN FACULTATIVA',  personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'DIRECCIÓN DE EJECUCIÓN (DEO)',       grupo: 'DIRECCIÓN DE EJECUCIÓN', personas: [{ id: uid(), empresa: 'PLAAT', nombre: 'Xavier Pla', email: 'xpla@plaat.es', tel: '629 72 72 62', asistio: false }] },
+    { id: uid(), nombre: 'ING. ESTRUCTURAS',                   grupo: 'DIRECCIÓN DE EJECUCIÓN', personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'ING. INSTALACIONES',                 grupo: 'DIRECCIÓN DE EJECUCIÓN', personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'COORDINADOR DE SEGURIDAD (CSS)',     grupo: 'DIRECCIÓN DE EJECUCIÓN', personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
+    { id: uid(), nombre: 'CONTRATISTA (EC)',                   grupo: 'CONTRATISTA',            personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] },
   ];
 }
 
@@ -3846,6 +3846,17 @@ function migrateVO(raw) {
     }
     vo.equipo = eq;
   }
+  // Afegir grup per defecte als rols antics que no el tinguin
+  vo.equipo = vo.equipo.map(r => {
+    if (r.grupo) return r;
+    const n = r.nombre.toUpperCase();
+    let grupo = '';
+    if (n.includes('PROJECT MANAGER')) grupo = 'PROJECT MANAGER';
+    else if (n.includes('OBRA (DO)') || n.includes('FACULTATIVA')) grupo = 'DIRECCIÓN FACULTATIVA';
+    else if (n.includes('CONTRATISTA') || n.includes('CONTRACTISTA')) grupo = 'CONTRATISTA';
+    else grupo = 'DIRECCIÓN DE EJECUCIÓN';
+    return { ...r, grupo };
+  });
   if (!Array.isArray(vo.secciones)) {
     const secs = getDefaultSecciones();
     if (Array.isArray(vo.temas)) {
@@ -4154,26 +4165,24 @@ function ModuloActaVO({ obra, onSave }) {
               </div>
             )}
             {(() => {
-              // Detectar a quin grup pertany cada rol (igual que al PDF)
-              const GRUP_PM  = n => n && n.toUpperCase().includes('PROJECT MANAGER');
-              const GRUP_DF  = n => n && (n.toUpperCase().includes('OBRA (DO)') || n.toUpperCase().includes('FACULTATIVA'));
-              const GRUP_DEO = n => n && (n.toUpperCase().includes('EJECUCIÓN') || n.toUpperCase().includes('EXECUCIÓ') || n.toUpperCase().includes('ESTRUCTURA') || n.toUpperCase().includes('INSTALAC') || n.toUpperCase().includes('SEGURIDAD') || n.toUpperCase().includes('SEGURETAT') || n.toUpperCase().includes('CSS'));
-              const GRUP_EC  = n => n && (n.toUpperCase().includes('CONTRATISTA') || n.toUpperCase().includes('CONTRACTISTA'));
-
               const equip = vo.equipo || [];
-              const pmRols  = equip.filter(r => GRUP_PM(r.nombre));
-              const dfRols  = equip.filter(r => GRUP_DF(r.nombre));
-              const deoRols = equip.filter(r => GRUP_DEO(r.nombre));
-              const ecRols  = equip.filter(r => GRUP_EC(r.nombre));
-              const altres  = equip.filter(r => !GRUP_PM(r.nombre) && !GRUP_DF(r.nombre) && !GRUP_DEO(r.nombre) && !GRUP_EC(r.nombre));
+              // Agrupar per rol.grupo mantenint l'ordre de la llista
+              const grups = [];
+              const grupVist = new Set();
+              equip.forEach(r => {
+                const g = r.grupo || '';
+                if (!grupVist.has(g)) { grupVist.add(g); grups.push(g); }
+              });
 
               const RolRow = (rol) => (
                 <div key={rol.id} style={{ marginBottom: 6, border: '1px solid #F2F1ED', borderRadius: 8, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: '#F5F4F0', borderBottom: '1px solid #ECEAE4' }}>
-                    <input value={rol.nombre} onChange={e => updRol(rol.id, 'nombre', e.target.value)} style={{ flex: 1, fontSize: 11, fontWeight: 600, background: 'transparent', border: 'none', padding: 0, boxShadow: 'none', color: '#141412' }} />
+                    <input value={rol.nombre} onChange={e => updRol(rol.id, 'nombre', e.target.value)}
+                      style={{ flex: 1, fontSize: 11, fontWeight: 600, background: 'transparent', border: 'none', padding: 0, boxShadow: 'none', color: '#141412' }} />
                     <button onClick={() => moveRol(rol.id, -1)} title="Mover arriba" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>↑</button>
                     <button onClick={() => moveRol(rol.id, 1)} title="Mover abajo" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>↓</button>
-                    <button onClick={() => setConfirmacion({ titulo: 'Eliminar rol', texto: `Vas a eliminar el rol "${rol.nombre}" y todas sus personas.`, onSi: () => { delRol(rol.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
+                    <button onClick={() => setConfirmacion({ titulo: 'Eliminar rol', texto: `Vas a eliminar el rol "${rol.nombre}" y todas sus personas.`, onSi: () => { delRol(rol.id); setConfirmacion(null); } })}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
                   </div>
                   {(rol.personas||[]).map(p => (
                     <div key={p.id} style={{ display: isMobile ? 'flex' : 'grid', gridTemplateColumns: isMobile ? undefined : '2fr 1.4fr 1.6fr 1.8fr 1.3fr 50px 22px', flexDirection: isMobile ? 'column' : undefined, gap: 4, padding: '5px 8px', borderBottom: '1px solid #F9F8F5', alignItems: 'center' }}>
@@ -4187,23 +4196,44 @@ function ModuloActaVO({ obra, onSave }) {
                         <input type="checkbox" checked={!!p.asistio} onChange={e => updPersona(rol.id, p.id, 'asistio', e.target.checked)} style={{ width: 14, height: 14 }} />
                         {isMobile ? 'Asistido' : ''}
                       </label>
-                      <button onClick={() => setConfirmacion({ titulo: 'Eliminar persona', texto: `Vas a eliminar a "${p.nombre||'esta persona'}".`, onSi: () => { delPersona(rol.id, p.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, textAlign: 'center' }}>×</button>
+                      <button onClick={() => setConfirmacion({ titulo: 'Eliminar persona', texto: `Vas a eliminar a "${p.nombre||'esta persona'}".`, onSi: () => { delPersona(rol.id, p.id); setConfirmacion(null); } })}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, textAlign: 'center' }}>×</button>
                     </div>
                   ))}
                   <button onClick={() => addPersona(rol.id)} style={{ width: '100%', padding: '5px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#9B9B97', borderTop: '1px dashed #E8E7E1' }}>+ Añadir persona</button>
                 </div>
               );
 
-              const GrupHeader = (label) => (
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#6B6B66', textTransform: 'uppercase', letterSpacing: '0.08em', background: '#F0EFEA', padding: '4px 8px', borderRadius: 6, marginBottom: 4, marginTop: 8 }}>{label}</div>
-              );
-
               return <>
-                {pmRols.length > 0 && <>{GrupHeader('Project Manager')}{pmRols.map(RolRow)}</>}
-                {dfRols.length > 0 && <>{GrupHeader('Dirección Facultativa')}{dfRols.map(RolRow)}</>}
-                {deoRols.length > 0 && <>{GrupHeader('Dirección de Ejecución')}{deoRols.map(RolRow)}</>}
-                {altres.map(RolRow)}
-                {ecRols.length > 0 && <>{GrupHeader('Contratista')}{ecRols.map(RolRow)}</>}
+                {grups.map(g => {
+                  const rols = equip.filter(r => (r.grupo||'') === g);
+                  return (
+                    <div key={g} style={{ marginBottom: 8 }}>
+                      {/* Capçalera de grup — editable */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F0EFEA', borderRadius: 6, padding: '4px 8px', marginBottom: 4 }}>
+                        <input
+                          value={g}
+                          onChange={e => {
+                            const nouGrup = e.target.value;
+                            guardarVO({ ...vo, equipo: vo.equipo.map(r => (r.grupo||'') === g ? { ...r, grupo: nouGrup } : r) });
+                          }}
+                          style={{ flex: 1, fontSize: 10, fontWeight: 700, color: '#6B6B66', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'transparent', border: 'none', padding: 0, boxShadow: 'none' }}
+                          placeholder="Nom del grup"
+                        />
+                        <button
+                          onClick={() => {
+                            const newGrupId = uid();
+                            const newGrup = 'NOU GRUP ' + newGrupId.slice(-3).toUpperCase();
+                            // Afegir un nou rol buit amb aquest grup
+                            guardarVO({ ...vo, equipo: [...vo.equipo, { id: uid(), nombre: 'NOU ROL', grupo: newGrup, personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] }] });
+                          }}
+                          title="Añadir rol a este grupo"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 13, lineHeight: 1 }}>+</button>
+                      </div>
+                      {rols.map(RolRow)}
+                    </div>
+                  );
+                })}
               </>;
             })()}
             <button onClick={addRol} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginTop: 4 }}>+ Añadir rol</button>
@@ -5070,43 +5100,25 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     });
   }
 
-  // Dibuixar tota la taula d'equip
+  // Dibuixar tota la taula d'equip — usant rol.grupo (editable)
   if (equipRols.length > 0) {
-    let pmRols  = equipRols.filter(r => GRUP_PM(r.nombre));
-    let dfRols  = equipRols.filter(r => GRUP_DF(r.nombre));
-    let deoRols = equipRols.filter(r => GRUP_DEO(r.nombre));
-    let ecRols  = equipRols.filter(r => GRUP_EC(r.nombre));
-    let altres  = equipRols.filter(r => !GRUP_PM(r.nombre) && !GRUP_DF(r.nombre) && !GRUP_DEO(r.nombre) && !GRUP_EC(r.nombre));
+    // Agrupar per rol.grupo mantenint l'ordre de la llista
+    const grups = [];
+    const grupVistPDF = new Set();
+    equipRols.forEach(r => {
+      const g = r.grupo || '';
+      if (!grupVistPDF.has(g)) { grupVistPDF.add(g); grups.push(g); }
+    });
 
-    const hiHaDF = dfRols.length > 0, hiHaDEO = deoRols.length > 0, hiHaEC = ecRols.length > 0;
-    if (pmRols.length > 0) {
-      dibuixaFilaGrup('PROJECT MANAGER');
-      pmRols.forEach((r, ri) => {
-        const isLast = ri === pmRols.length - 1 && (hiHaDF || hiHaDEO || hiHaEC);
+    grups.forEach((g, gi) => {
+      const rols = equipRols.filter(r => (r.grupo||'') === g);
+      const hiHaSeguent = gi < grups.length - 1;
+      if (g) dibuixaFilaGrup(g);
+      rols.forEach((r, ri) => {
+        const isLast = ri === rols.length - 1 && hiHaSeguent;
         dibuixaFilaRol(r, r.personas?.length ? r.personas : [{}], isLast);
       });
-    }
-    if (hiHaDF) {
-      dibuixaFilaGrup(esCA ? 'DIRECCIÓ FACULTATIVA' : 'DIRECCIÓN FACULTATIVA');
-      dfRols.forEach((r, ri) => {
-        const isLast = ri === dfRols.length - 1 && (hiHaDEO || hiHaEC);
-        dibuixaFilaRol(r, r.personas?.length ? r.personas : [{}], isLast);
-      });
-    }
-    if (hiHaDEO) {
-      dibuixaFilaGrup(esCA ? 'DIRECCIÓ D\'EXECUCIÓ' : 'DIRECCIÓN DE EJECUCIÓN');
-      deoRols.forEach((r, ri) => {
-        const isLast = ri === deoRols.length - 1 && hiHaEC;
-        dibuixaFilaRol(r, r.personas?.length ? r.personas : [{}], isLast);
-      });
-    }
-    altres.forEach(r => dibuixaFilaRol(r, r.personas?.length ? r.personas : [{}], false));
-    if (hiHaEC) {
-      dibuixaFilaGrup(esCA ? 'CONTRACTISTA' : 'CONTRATISTA');
-      ecRols.forEach((r, ri) => {
-        dibuixaFilaRol(r, r.personas?.length ? r.personas : [{}], false); // últim grup, no cal ometre
-      });
-    }
+    });
   } else {
     y += 8;
   }
