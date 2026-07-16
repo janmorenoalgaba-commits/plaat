@@ -8,6 +8,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } },
 })
 
+// Exposar URL base per a la reconstrucció d'URLs públiques a App.jsx
+window._supabaseUrl = SUPABASE_URL;
+
 // ── Storage legacy (migración) ───────────────────────────────────────────────
 window.storage = {
   async get(key) {
