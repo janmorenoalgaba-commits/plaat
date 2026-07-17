@@ -5254,11 +5254,10 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     const actius=(sec.temas||[]).filter(t=>!(t.resuelto&&t.resueltoEnActa&&t.resueltoEnActa<vo.num));
     if (!actius.length) return;
 
+    const secH = 5.5;
     // Salt de pàgina coherent: la secció necessita la capçalera + almenys un tema (mínim 30mm)
     // Si no cap tot, salta de pàgina
     checkPage(secH + 25);
-    // Capçalera secció — IGUAL format que Estat de l'obra (gris, sense bordes, font 8 bold)
-    const secH = 5.5;
     doc.setFillColor(...GRIS15);
     doc.rect(ML, y, CW, secH, 'F');
     // SENSE rect de contorn ni línies — igual que DF/Contratista/Estat obra
