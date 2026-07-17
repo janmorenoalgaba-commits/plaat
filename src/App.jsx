@@ -5286,7 +5286,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
     actius.forEach(t => {
       const fW3=(cDesc-5)/2;
-      const ed = (t.entradas||[]).map(en => {
+      const ed = (t.entradas||[]).map((en, pi) => {
         const esNova = en.actaNum === vo.num;
         const estat = esNova ? 'N' : (en.estado||'P');
         // Colors brandbook actualitzats: P=groc, R=verd, I=blau, N=sense fons, A=vermell
