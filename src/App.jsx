@@ -5024,9 +5024,11 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // Alçada 7mm + 2mm espai = 9mm total
   doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
   doc.text(T.equip, ML + 2, y + 4.5, { baseline:'middle' });
-  // "AS." a la dreta del títol, alineat amb la columna d'assistència
+  // "AS." centrada a la zona d'assistència (entre xTel+eTel i ML+CW)
+  const asZonaIniTit = xTel + eTel;
+  const asXTit = asZonaIniTit + (ML + CW - asZonaIniTit) / 2;
   doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
-  doc.text(esCA ? 'AS.' : 'AS.', ML + CW - 2, y + 4.5, { align:'right', baseline:'middle' });
+  doc.text('AS.', asXTit, y + 4.5, { align:'center', baseline:'middle' });
   y += 9; // 7mm alçada text + 2mm espai sota
 
   // Grups de rol: els detectem per nom
@@ -5106,18 +5108,22 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
       // Tic/guió d'assistència — centrat horitzontalment a la columna AS
       // jsPDF no suporta emoji → usar símbols ASCII compatibles
+      // Tic/guió centrat exactament a la zona AS (entre tel i marge dret)
       const asZonaIni = xTel + eTel;
-      const asX = asZonaIni + (ML + CW - asZonaIni) / 2; // centre exacte zona AS
+      const asX = asZonaIni + (ML + CW - asZonaIni) / 2;
       if (asistio) {
-        doc.setTextColor(44, 94, 16); // verd
-        doc.setFont('helvetica','bold'); doc.setFontSize(9);
-        doc.text('/', asX, midY, { align:'center', baseline:'middle' }); // marca sutil
+        // Dibuixar tic (V) amb dues línies — més fiable que text en jsPDF
+        doc.setLineWidth(0.7); doc.setDrawColor(44, 94, 16);
+        const tx = asX - 1.2, ty = midY;
+        doc.line(tx - 1.2, ty, tx, ty + 1.6);       // branca curta esquerra
+        doc.line(tx, ty + 1.6, tx + 2.4, ty - 1.8); // branca llarga dreta
+        doc.setLineWidth(LW); doc.setDrawColor(0,0,0);
       } else {
-        doc.setTextColor(190, 190, 190); // gris clar
-        doc.setFont('helvetica','normal'); doc.setFontSize(9);
-        doc.text('-', asX, midY, { align:'center', baseline:'middle' });
+        // Guió gris
+        doc.setLineWidth(0.4); doc.setDrawColor(190, 190, 190);
+        doc.line(asX - 1.5, midY, asX + 1.5, midY);
+        doc.setLineWidth(LW); doc.setDrawColor(0,0,0);
       }
-      doc.setTextColor(0,0,0); doc.setFont('helvetica','normal');
 
       // Línia INFERIOR — NO si és l'última persona del grup (evita solapament amb fila grisa)
       const omitirLinia = isLastOfGroup && isLastPer;
@@ -5245,9 +5251,19 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       const rh = Math.max(...dims.map(d => d.h));
       // Saltar pàgina NOMÉS si no hi cap de cap manera
       if (y + rh + 4 > PH - MB - 12) checkPage(rh + 4);
+      // Centrar les fotos: calcular offset per centrar cada foto dins del seu espai
+      const totalW = pair.length === 1 ? CW : CW;
       pair.forEach((f, pi) => {
         const src = f.url || f.data;
-        if (src) try { doc.addImage(src, 'JPEG', ML + pi * (fW2 + 6), y, dims[pi].w, dims[pi].h); } catch(e) {}
+        if (!src) return;
+        try {
+          const slotW = (CW - 4) / 2; // amplada de cada slot (2 fotos per fila)
+          const imgW = dims[pi].w;
+          const imgH = dims[pi].h;
+          // Centrar la imatge dins del seu slot
+          const xOffset = ML + pi * (slotW + 4) + (slotW - imgW) / 2;
+          doc.addImage(src, 'JPEG', xOffset, y, imgW, imgH);
+        } catch(e) {}
       });
       y += rh + 3;
     }
