@@ -5104,14 +5104,20 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       // Tic/Creu d'assistència — sutil, sense recuadre
       const asistio = p.asistio === true;
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+      // Tic/guió d'assistència — centrat horitzontalment a la columna AS
+      // jsPDF no suporta emoji → usar símbols ASCII compatibles
+      const asZonaIni = xTel + eTel;
+      const asX = asZonaIni + (ML + CW - asZonaIni) / 2; // centre exacte zona AS
       if (asistio) {
         doc.setTextColor(44, 94, 16); // verd
-        doc.text('✓', ML + CW - 2, midY, { align:'right', baseline:'middle' });
+        doc.setFont('helvetica','bold'); doc.setFontSize(9);
+        doc.text('/', asX, midY, { align:'center', baseline:'middle' }); // marca sutil
       } else {
-        doc.setTextColor(180, 180, 180); // gris clar
-        doc.text('–', ML + CW - 2, midY, { align:'right', baseline:'middle' });
+        doc.setTextColor(190, 190, 190); // gris clar
+        doc.setFont('helvetica','normal'); doc.setFontSize(9);
+        doc.text('-', asX, midY, { align:'center', baseline:'middle' });
       }
-      doc.setTextColor(0,0,0);
+      doc.setTextColor(0,0,0); doc.setFont('helvetica','normal');
 
       // Línia INFERIOR — NO si és l'última persona del grup (evita solapament amb fila grisa)
       const omitirLinia = isLastOfGroup && isLastPer;
@@ -5226,24 +5232,26 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     const fW2 = (CW - 6) / 2;
     for (let fi = 0; fi < fotos.length; fi += 2) {
       const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
+      // Reduir mida màxima per prioritzar que càpiguen a la pàg 1 (màx 52mm alçada)
+      const altMax = 52;
       const dims = pair.map(f => {
         try {
           const pr = doc.getImageProperties(f.url||f.data);
           const r = pr.height / pr.width;
-          const h = Math.min(fW2 * r, 75);
+          const h = Math.min(fW2 * r, altMax);
           return { w: h/r, h };
-        } catch(e) { return { w: fW2, h: 55 }; }
+        } catch(e) { return { w: fW2, h: 40 }; }
       });
       const rh = Math.max(...dims.map(d => d.h));
-      // Saltar pàgina si no hi cap el parell de fotos
-      checkPage(rh + 4);
+      // Saltar pàgina NOMÉS si no hi cap de cap manera
+      if (y + rh + 4 > PH - MB - 12) checkPage(rh + 4);
       pair.forEach((f, pi) => {
         const src = f.url || f.data;
         if (src) try { doc.addImage(src, 'JPEG', ML + pi * (fW2 + 6), y, dims[pi].w, dims[pi].h); } catch(e) {}
       });
       y += rh + 3;
     }
-    y += 3; // espai sota les fotos, sense línia de tancament
+    y += 3;
   }
 
   // Seccions de temes tractats
@@ -5286,7 +5294,9 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         doc.setFontSize(8.5);
         const lines = doc.splitTextToSize(en.texto||'', cDesc-3);
         const lh85 = 8.5*0.3528+0.6;
-        const textH = lines.length*lh85+5;
+        // Si és la primera entrada i hi ha títol, afegir l'alçada del títol
+        const titolOffset = (pi === 0 && t.titulo) ? lh85 + 2 : 0;
+        const textH = lines.length*lh85+5+titolOffset;
         const fotos=en.fotos||[]; const fotoRows=[]; let fotosH=0;
         for(let i=0;i<fotos.length;i+=2){
           const pair=[fotos[i],fotos[i+1]].filter(Boolean);
@@ -5329,20 +5339,27 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
       ey=y;
       ed.forEach(e=>{
-        // Text descripció — si hi ha títol, desplaçar per sota
+        // Text descripció — si hi ha títol a la primera entrada, desplaçar per sota
         doc.setFont('helvetica', e.esNova?'bold':'normal');
         doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-        const offsetTitol = (titolTema && ey === y) ? (8.5*0.3528+0.6) + 1 : 0;
-        let ty=ey+3+e.lh*0.8+offsetTitol;
-        e.lines.forEach(l=>{doc.text(l,ML+cNum+2,ty,{baseline:'middle'});ty+=e.lh;});
+        const titolH = (titolTema && ey === y) ? (8.5*0.3528+0.6) + 2 : 0;
+        let ty = ey + 3 + e.lh*0.8 + titolH;
+        // Assegurar que el text no sorti de la fila
+        e.lines.forEach(l => {
+          if (ty < ey + e.h - 1) { // no sortir per sota
+            doc.text(l, ML+cNum+2, ty, {baseline:'middle'});
+          }
+          ty += e.lh;
+        });
         // Fotos
         let fy=ey+e.textH;
         e.fotoRows.forEach(row=>{
           row.pair.forEach((f,pi)=>{const src=f.url||f.data;if(src)try{doc.addImage(src,'JPEG',ML+cNum+2+pi*(fW3+1),fy,row.dims[pi].w,row.dims[pi].h);}catch(er){}});
           fy+=row.rh+2;
         });
-        // Valors columnes (centrats)
-        const midY=ey+e.h/2;
+        // Valors columnes centrats en l'alçada de CADA entrada (no del tema sencer)
+        // titolOffset fa que la fila sigui més alta → el centre és correcte amb e.h/2
+        const midY = ey + e.h/2;
         // Estat amb color de lletra segons brandbook
         const colorEstat = e.estat==='R' ? [44,94,16] : e.estat==='I'||e.estat==='INF' ? [12,68,124] : e.estat==='N' ? [0,0,0] : [124,74,0];
         doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
