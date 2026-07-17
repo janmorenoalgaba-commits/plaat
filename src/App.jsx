@@ -5405,21 +5405,38 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
   doc.text(T.conforme,ML,y); y+=8;
 
-  // 4 caselles de firma (brandbook: línies horitzontals 0.5p, sense verticals)
-  const fw=CW/4;
-  const firmesLabels=[T.promotor, T.pm_f, T.do_f, T.deo_f];
-  firmesLabels.forEach((f,i)=>{
-    setLW(0.5); doc.rect(ML+i*fw,y,fw,28,'S');
-    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
-    const fl=doc.splitTextToSize(f,fw-4);
-    doc.text(fl,ML+i*fw+2,y+4);
+  // Taula de firmes — format de la captura:
+  // Fila 1: PROMOTOR | PROJECT MANAGER | DIRECCIÓN DE OBRA (3 columnes iguals)
+  // Fila 2: DIRECCIÓN EJECUCIÓN OBRA / COORD. SEGURIDAD | CONTRATISTA (2 columnes)
+  // Format: sense recuadres, sols línia inferior de cada cel·la + text bold petit a baix
+  checkPage(50);
+  const fH = 22; // alçada de cada fila de firma
+  const f3 = CW / 3; // amplada columna fila 1
+  const f2 = CW / 2; // amplada columna fila 2
+
+  // Fila 1: 3 firmes
+  const firma1 = [T.promotor, T.pm_f, T.do_f];
+  firma1.forEach((label, i) => {
+    // Línia inferior
+    setLW(0.4); doc.line(ML + i*f3, y + fH, ML + i*f3 + f3, y + fH);
+    // Text label en bold petit a la part inferior de la cel·la
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+    const ls = doc.splitTextToSize(label, f3 - 4);
+    let ty = y + fH - ls.length * (6.5*0.3528+0.4) - 1;
+    ls.forEach(l => { doc.text(l, ML + i*f3 + 2, ty); ty += 6.5*0.3528+0.4; });
   });
-  y+=28+4;
-  // 5a casella: Contractista (ample mig)
-  checkPage(30);
-  setLW(0.5); doc.rect(ML,y,fw,28,'S');
-  doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
-  doc.text(T.ec_f,ML+2,y+4);
+  y += fH + 8;
+
+  // Fila 2: 2 firmes
+  const firma2 = [T.deo_f, T.ec_f];
+  firma2.forEach((label, i) => {
+    setLW(0.4); doc.line(ML + i*f2, y + fH, ML + i*f2 + f2, y + fH);
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+    const ls = doc.splitTextToSize(label, f2 - 4);
+    let ty = y + fH - ls.length * (6.5*0.3528+0.4) - 1;
+    ls.forEach(l => { doc.text(l, ML + i*f2 + 2, ty); ty += 6.5*0.3528+0.4; });
+  });
+  y += fH + 6;
 
   // ── PEU FINAL TOTES LES PÀGINES ───────────────────────────────────────────
   const totalPags = doc.getNumberOfPages();
