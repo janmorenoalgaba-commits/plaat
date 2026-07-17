@@ -3867,8 +3867,12 @@ function migrateVO(raw) {
     }
     vo.secciones = secs;
   }
-  // ensure every entry has fin field
-  vo.secciones = vo.secciones.map(s => ({ ...s, temas: (s.temas||[]).map(t => ({ ...t, entradas: (t.entradas||[]).map(e => ({ fin: '', ...e })) })) }));
+  // ensure every entry has fin field + títol per defecte als temes antics
+  vo.secciones = vo.secciones.map(s => ({ ...s, temas: (s.temas||[]).map(t => ({
+    ...t,
+    titulo: t.titulo || (t.entradas?.[0]?.texto?.slice(0,60) || ''),
+    entradas: (t.entradas||[]).map(e => ({ fin: '', ...e })),
+  })) }));
   return vo;
 }
 
@@ -3987,9 +3991,10 @@ function ModuloActaVO({ obra, onSave }) {
     const n = (nums.length ? Math.max(...nums) : 0) + 1;
     return `${sec.codigo}.${String(n).padStart(2,'0')}`;
   }
-  function addTema(secId, texto) {
-    if (!texto.trim()) return;
-    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: [...(s.temas||[]), { id: uid(), num: nextNum(s), resuelto: false, resueltoEnActa: null, entradas: [{ id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '', actaNum: vo.num }] }] }) });
+  function addTema(secId, titulo, texto) {
+    if (!titulo.trim()) return;
+    const entrades = texto ? [{ id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '', actaNum: vo.num }] : [];
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: [...(s.temas||[]), { id: uid(), num: nextNum(s), titulo: titulo.trim(), resuelto: false, resueltoEnActa: null, entradas: entrades }] }) });
   }
   function addEntrada(secId, temaId, texto) {
     if (!texto.trim()) return;
@@ -4272,7 +4277,7 @@ function ModuloActaVO({ obra, onSave }) {
                   onDel={() => setBorrar({ tipo: 'tema', secId: sec.id, id: t.id, label: t.num })} />
               );
             })}
-            <NuevoTema onAdd={txt => addTema(sec.id, txt)} />
+            <NuevoTema onAdd={(titulo, txt) => addTema(sec.id, titulo, txt)} />
           </div>
         );
       })}
@@ -4316,19 +4321,26 @@ function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAd
   const [confirmFoto, setConfirmFoto] = useState(null);
   const ult = t.entradas[t.entradas.length - 1] || { texto: '', actaNum: null, estado: 'P' };
   const ultEsNueva = ult.actaNum === voNum;
+  const tituloDisplay = t.titulo || ult.texto || 'Sin título';
   return (
     <div style={{ border: `1px solid ${abierto ? '#C5C4BE' : '#E8E7E1'}`, borderRadius: 9, marginBottom: 6, overflow: 'hidden' }}>
       <div onClick={() => setAbierto(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', cursor: 'pointer', background: abierto ? '#FAFAF8' : '#fff' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: '#52524E', flexShrink: 0, minWidth: 34 }}>{t.num}</span>
-        <span style={{ flex: 1, fontSize: 13, color: '#18180F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ult.texto}</span>
+        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#18180F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tituloDisplay}</span>
         {ultEsNueva
           ? <Pill label="N — Nueva" bg="#F2F1ED" color="#52524E" />
           : <Pill label={est.label} bg={est.bg} color={est.color} />}
       </div>
       {abierto && (
         <div className="fade" style={{ padding: '4px 12px 12px', borderTop: '1px solid #F2F1ED' }}>
+          {/* Editar títol del tema */}
+          <div style={{ marginBottom: 8, paddingTop: 6 }}>
+            <label style={{ fontSize: 11, color: '#9B9B97', display: 'block', marginBottom: 3 }}>Título del tema:</label>
+            <input value={t.titulo||''} onChange={e => onUpdTema(t.id, 'titulo', e.target.value)}
+              placeholder="Título del tema..." style={{ fontWeight: 600, fontSize: 13 }} />
+          </div>
           {/* Editar número de tema */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, paddingTop: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: '#9B9B97' }}>Nº tema:</span>
             {editNum
               ? <input autoFocus value={t.num} onChange={e => onUpdTema(t.id, 'num', e.target.value)} onBlur={() => setEditNum(false)}
@@ -4411,14 +4423,16 @@ function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAd
 
 function NuevoTema({ onAdd }) {
   const [open, setOpen] = useState(false);
+  const [titulo, setTitulo] = useState('');
   const [txt, setTxt] = useState('');
   if (!open) return <button onClick={() => setOpen(true)} style={{ width: '100%', padding: '6px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97' }}>+ Nuevo tema</button>;
   return (
     <div className="fade" style={{ background: '#F9F8F5', borderRadius: 9, padding: 10, marginTop: 2 }}>
-      <textarea autoFocus value={txt} onChange={e => setTxt(e.target.value)} placeholder="Describe el tema tratado..." style={{ minHeight: 50, marginBottom: 8 }} />
+      <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título del tema (ej: Replanteo escaleras)..." style={{ marginBottom: 6, fontWeight: 600 }} />
+      <textarea value={txt} onChange={e => setTxt(e.target.value)} placeholder="Primer seguimiento (opcional)..." style={{ minHeight: 44, marginBottom: 8 }} />
       <div style={{ display: 'flex', gap: 8 }}>
-        <Btn primary full disabled={!txt.trim()} onClick={() => { onAdd(txt); setTxt(''); setOpen(false); }}>Añadir tema</Btn>
-        <Btn onClick={() => { setTxt(''); setOpen(false); }}>✕</Btn>
+        <Btn primary full disabled={!titulo.trim()} onClick={() => { onAdd(titulo.trim(), txt.trim()); setTitulo(''); setTxt(''); setOpen(false); }}>Añadir tema</Btn>
+        <Btn onClick={() => { setTitulo(''); setTxt(''); setOpen(false); }}>✕</Btn>
       </div>
     </div>
   );
@@ -4735,11 +4749,28 @@ async function generarActaVO(obra, vo, idioma = 'ca') {
 
   const total=doc.getNumberOfPages();
   for(let p=1;p<=total;p++){doc.setPage(p);pie();}
-  const lang=idioma==='ca'?'Cat':'Cast';
-  // iOS Safari no permite descargas programáticas — abrir en nueva pestaña
+
+  // Nom del fitxer: NomObra_ActaVO_XX_CA/ES.pdf
+  const nomObra = (obra.nombre||'Obra').replace(/[^a-zA-Z0-9À-ÿ\s\-_]/g,'').trim().replace(/\s+/g,'_');
+  const numStr = String(vo.num).padStart(2,'0');
+  const langStr = idioma === 'ca' ? 'CA' : 'ES';
+  const fileName = `${nomObra}_ActaVO_${numStr}_${langStr}.pdf`;
+
   const pdfBlob = doc.output('blob');
   const url = URL.createObjectURL(pdfBlob);
-  window.open(url, '_blank');
+
+  // Intentar descàrrega amb nom (funciona a Chrome/Firefox/Edge)
+  // iOS Safari no suporta a.download — obre en nova pestanya com a fallback
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  if (typeof a.download !== 'undefined') {
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } else {
+    window.open(url, '_blank');
+  }
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
@@ -4993,6 +5024,9 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // Alçada 7mm + 2mm espai = 9mm total
   doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
   doc.text(T.equip, ML + 2, y + 4.5, { baseline:'middle' });
+  // "AS." a la dreta del títol, alineat amb la columna d'assistència
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+  doc.text(esCA ? 'AS.' : 'AS.', ML + CW - 2, y + 4.5, { align:'right', baseline:'middle' });
   y += 9; // 7mm alçada text + 2mm espai sota
 
   // Grups de rol: els detectem per nom
@@ -5066,6 +5100,18 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       doc.setFontSize(7.5);
       const telStr = doc.splitTextToSize(p.tel||'', eTel-3)[0] || '';
       doc.text(telStr, xTel+2, midY, {baseline:'middle'});
+
+      // Tic/Creu d'assistència — sutil, sense recuadre
+      const asistio = p.asistio === true;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+      if (asistio) {
+        doc.setTextColor(44, 94, 16); // verd
+        doc.text('✓', ML + CW - 2, midY, { align:'right', baseline:'middle' });
+      } else {
+        doc.setTextColor(180, 180, 180); // gris clar
+        doc.text('–', ML + CW - 2, midY, { align:'right', baseline:'middle' });
+      }
+      doc.setTextColor(0,0,0);
 
       // Línia INFERIOR — NO si és l'última persona del grup (evita solapament amb fila grisa)
       const omitirLinia = isLastOfGroup && isLastPer;
@@ -5175,7 +5221,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       y += dh - 3; // reduir 5mm l'espai entre text i fotos
     }
 
-    // Fotos de 2 en 2 — SENSE salt de pàgina, han de quedar a la pàg 1
+    // Fotos de 2 en 2 — amb salts de pàgina coherents
     const fotos = eo.fotos || [];
     const fW2 = (CW - 6) / 2;
     for (let fi = 0; fi < fotos.length; fi += 2) {
@@ -5189,7 +5235,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         } catch(e) { return { w: fW2, h: 55 }; }
       });
       const rh = Math.max(...dims.map(d => d.h));
-      // NO checkPage — les fotos han de quedar sempre a la mateixa pàgina
+      // Saltar pàgina si no hi cap el parell de fotos
+      checkPage(rh + 4);
       pair.forEach((f, pi) => {
         const src = f.url || f.data;
         if (src) try { doc.addImage(src, 'JPEG', ML + pi * (fW2 + 6), y, dims[pi].w, dims[pi].h); } catch(e) {}
@@ -5207,7 +5254,9 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     const actius=(sec.temas||[]).filter(t=>!(t.resuelto&&t.resueltoEnActa&&t.resueltoEnActa<vo.num));
     if (!actius.length) return;
 
-    checkPage(20);
+    // Salt de pàgina coherent: la secció necessita la capçalera + almenys un tema (mínim 30mm)
+    // Si no cap tot, salta de pàgina
+    checkPage(secH + 25);
     // Capçalera secció — IGUAL format que Estat de l'obra (gris, sense bordes, font 8 bold)
     const secH = 5.5;
     doc.setFillColor(...GRIS15);
@@ -5255,28 +5304,37 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
       // Fons de color per estat (brandbook) — inclou la columna del número
       // El color del fons del número és el de la primera entrada (o el predominant)
-      // Color num: verd NOMÉS si TOTS els estats del tema estan resolts (R)
-      const totesResoltes = ed.every(e => e.estat === 'R');
-      const fillNum = totesResoltes ? C_R : (ed.find(e => e.estat !== 'R' && e.fill)?.fill || ed.find(e=>e.fill)?.fill || null);
+      // Color num: cada entrada té el seu color al costat del número
+      // La cel·la del número mostra el color de l'entrada en la seva mateixa alçada
+      // Fons de color per estat — cada entrada té el seu propi color
       let ey=y;
       ed.forEach(e=>{
-        // Fons columna número (mateix color que l'estat)
-        if(fillNum){doc.setFillColor(...fillNum);doc.rect(ML,ey,cNum,e.h,'F');}
+        // Fons columna número: IGUAL color que l'entrada
+        if(e.fill){doc.setFillColor(...e.fill);doc.rect(ML,ey,cNum,e.h,'F');}
         // Fons columna contingut
         if(e.fill){doc.setFillColor(...e.fill);doc.rect(ML+cNum,ey,CW-cNum,e.h,'F');}
         ey+=e.h;
       });
 
-      // Número del tema (centrat en el bloc)
+      // Número i títol del tema — alineats a dalt de la fila
+      const titolTema = t.titulo || '';
+      const tituloLH = 8.5*0.3528+0.6;
+      // Número alineat amb el títol (a dalt, no centrat)
       doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-      doc.text(t.num||'', ML+cNum/2, y+temaH/2, { align:'center', baseline:'middle' });
+      doc.text(t.num||'', ML+cNum/2, y + 3 + tituloLH*0.8, { align:'center', baseline:'middle' });
+      // Títol en bold a la part superior de la cel·la de descripció
+      if (titolTema) {
+        doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+        doc.text(titolTema, ML+cNum+2, y + 3 + tituloLH*0.8, { baseline:'middle' });
+      }
 
       ey=y;
       ed.forEach(e=>{
-        // Text descripció
+        // Text descripció — si hi ha títol, desplaçar per sota
         doc.setFont('helvetica', e.esNova?'bold':'normal');
         doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-        let ty=ey+3+e.lh*0.8;
+        const offsetTitol = (titolTema && ey === y) ? (8.5*0.3528+0.6) + 1 : 0;
+        let ty=ey+3+e.lh*0.8+offsetTitol;
         e.lines.forEach(l=>{doc.text(l,ML+cNum+2,ty,{baseline:'middle'});ty+=e.lh;});
         // Fotos
         let fy=ey+e.textH;
