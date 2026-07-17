@@ -5013,8 +5013,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // ── TAULA EQUIP TÈCNIC — format Word exacte ──────────────────────────────
   // Columnes ajustades per evitar solapaments:
   // ROL: 52mm | EMP: 14mm | NOM: 28mm | EMAIL: 58mm | TEL: resta (~28mm)
-  const eRol=50, eEmp=27, eNom=28, eEmail=47, eTel=CW-eRol-eEmp-eNom-eEmail; // eEmp+5mm, eTel=28mm
-  const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp, xEmail=ML+eRol+eEmp+eNom, xTel=ML+eRol+eEmp+eNom+eEmail;
+  const eRol=50, eEmp=27, eNom=28, eEmail=47, eAS=8, eTel=CW-eRol-eEmp-eNom-eEmail-eAS; // eTel=20mm, eAS=8mm
+  const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp, xEmail=ML+eRol+eEmp+eNom, xTel=ML+eRol+eEmp+eNom+eEmail, xAS=ML+eRol+eEmp+eNom+eEmail+eTel;
   const equipRols = vo.equipo || [];
   const RH = 6; // alçada fila persona
 
@@ -5024,9 +5024,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // Alçada 7mm + 2mm espai = 9mm total
   doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
   doc.text(T.equip, ML + 2, y + 4.5, { baseline:'middle' });
-  // "AS." centrada a la zona d'assistència (entre xTel+eTel i ML+CW)
-  const asZonaIniTit = xTel + eTel;
-  const asXTit = asZonaIniTit + (ML + CW - asZonaIniTit) / 2;
+  // "AS." centrada a la columna eAS
+  const asXTit = xAS + eAS / 2;
   doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
   doc.text('AS.', asXTit, y + 4.5, { align:'center', baseline:'middle' });
   y += 9; // 7mm alçada text + 2mm espai sota
@@ -5108,20 +5107,16 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
       // Tic/guió d'assistència — centrat horitzontalment a la columna AS
       // jsPDF no suporta emoji → usar símbols ASCII compatibles
-      // Tic/guió centrat exactament a la zona AS (entre tel i marge dret)
-      const asZonaIni = xTel + eTel;
-      const asX = asZonaIni + (ML + CW - asZonaIni) / 2;
+      // Tic/guió centrat a la columna AS (eAS=8mm reservada)
+      const asX = xAS + eAS / 2;
       if (asistio) {
-        // Dibuixar tic (V) amb dues línies — més fiable que text en jsPDF
-        doc.setLineWidth(0.7); doc.setDrawColor(44, 94, 16);
-        const tx = asX - 1.2, ty = midY;
-        doc.line(tx - 1.2, ty, tx, ty + 1.6);       // branca curta esquerra
-        doc.line(tx, ty + 1.6, tx + 2.4, ty - 1.8); // branca llarga dreta
+        doc.setLineWidth(0.5); doc.setDrawColor(44, 94, 16);
+        doc.line(asX - 0.8, midY + 0.2, asX - 0.1, midY + 1.0);
+        doc.line(asX - 0.1, midY + 1.0, asX + 1.2, midY - 0.8);
         doc.setLineWidth(LW); doc.setDrawColor(0,0,0);
       } else {
-        // Guió gris
-        doc.setLineWidth(0.4); doc.setDrawColor(190, 190, 190);
-        doc.line(asX - 1.5, midY, asX + 1.5, midY);
+        doc.setLineWidth(0.3); doc.setDrawColor(190, 190, 190);
+        doc.line(asX - 1.0, midY, asX + 1.0, midY);
         doc.setLineWidth(LW); doc.setDrawColor(0,0,0);
       }
 
