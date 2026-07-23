@@ -5303,67 +5303,74 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // Format Word: cabecera gris amb Nº | Títol, sense recuadres
   // Fotos: 2 per fila, amb descripció de text
   const eo = vo.estadoObra || {};
-  if (eo.descripcion || (eo.fotos||[]).length > 0) {
-    // Calcular alçada total del punt 0 per decidir si cal saltar de pàgina
-    const numFotoPairs = Math.ceil(((eo.fotos||[]).length) / 2);
-    const altTotal0 = 5.5 + (eo.descripcion ? 20 : 0) + numFotoPairs * 56;
-    // Si no cap tot, saltar de pàgina per mantenir el punt 0 compacte
-    if (y + altTotal0 > PH - MB - 12) checkPage(altTotal0);
-    else checkPage(20);
+  const ubicacionsEo = eo.ubicacions || (eo.fotos?.length ? [{ id:'leg', nom:'', fotos: eo.fotos }] : []);
+  const totalFotesEo = ubicacionsEo.reduce((a, u) => a + (u.fotos?.length || 0), 0);
+  const numFilesEo = Math.ceil(totalFotesEo / 3);
 
-    // Capçalera secció 0 — IGUAL format que DF/Contratista (gris, sense bordes, font 8 bold)
+  if (eo.descripcion || totalFotesEo > 0) {
+    // Calcular alçada TOTAL del punt 0 (capçalera + text + totes les fotos + títols ubicació)
+    const altCapEo = 5.5;
+    const altDescEo = eo.descripcion ? Math.max(10, eo.descripcion.split('\n').length * 4.2 + 5) : 0;
+    const altFotesEo = numFilesEo * (37.5 + 4); // fH0 + GAP0 per fila
+    const altTitolsEo = ubicacionsEo.filter(u => u.nom).length * 6;
+    const altTotal0 = altCapEo + altDescEo + altFotesEo + altTitolsEo + 4;
+
+    // Si no cap tot el punt 0, saltar de pàgina sencera ABANS de la capçalera
+    if (y + altTotal0 > PH - MB - 12) {
+      doc.addPage(); pagActual++;
+      dibuixarCapçalera(false); dibuixarPeu();
+    }
+
+    // Capçalera secció 0
     const eoH = 5.5;
     doc.setFillColor(...GRIS15);
     doc.rect(ML, y, CW, eoH, 'F');
-    // SENSE rect de contorn ni línies
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
     doc.text('0', ML + 2, y + eoH/2, { baseline:'middle' });
-    doc.text(T.estat0, ML + 2 + 3 + doc.getTextWidth('0'), y + eoH/2, { baseline:'middle' }); // 3mm separació
+    doc.text(T.estat0, ML + 2 + 3 + doc.getTextWidth('0'), y + eoH/2, { baseline:'middle' });
     y += eoH;
 
-    // Text de descripció (si n'hi ha)
+    // Text de descripció
     if (eo.descripcion) {
       doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
       const dl = doc.splitTextToSize(eo.descripcion, CW - 4);
       const dh = Math.max(10, dl.length * 4.2 + 5);
-      checkPage(dh);
-      // Sense recuadre — format Word
-      // Text dins dels marges (CW total) alineat amb l'inici del títol
       doc.text(dl, ML + 2, y + 4);
-      y += dh - 3; // reduir 5mm l'espai entre text i fotos
+      y += dh - 3;
     }
 
-    // Fotos de 2 en 2 — amb salts de pàgina coherents
-    const fotos = eo.fotos || [];
-    // Ubicacions amb fotos — 5cm × 3.75cm, 3 per fila, GAP 4mm
+    // Fotos — 5cm × 3.75cm, 3 per fila, centrades horitzontalment
     const GAP0 = 4;
-    const fW0 = 50;   // 5cm d'ample
-    const fH0 = 37.5; // 3.75cm d'alçada
-    const ubicacions = eo.ubicacions || (eo.fotos?.length ? [{ id:'leg', nom:'', fotos: eo.fotos }] : []);
+    const fW0 = 50;   // 5cm
+    const fH0 = 37.5; // 3.75cm
+    // Ample total d'una fila de 3: 3×50 + 2×4 = 158mm → centrar dins de CW=180mm
+    // Offset = (180 - 158) / 2 = 11mm
+    const xCenterOffset3 = (CW - (3 * fW0 + 2 * GAP0)) / 2; // offset per 3 fotos
+    const xCenterOffset2 = (CW - (2 * fW0 + 1 * GAP0)) / 2; // offset per 2 fotos
+    const xCenterOffset1 = (CW - fW0) / 2;                   // offset per 1 foto
 
     function dibuixaFilaFotos(filaPair) {
-      if (y + fH0 + GAP0 > PH - MB - 12) checkPage(fH0 + GAP0);
+      const n = filaPair.length;
+      const xOff = n === 3 ? xCenterOffset3 : n === 2 ? xCenterOffset2 : xCenterOffset1;
       filaPair.forEach((f, pi) => {
         const src = f.url || f.data;
         if (!src) return;
         try {
-          const x = ML + pi * (fW0 + GAP0);
+          const x = ML + xOff + pi * (fW0 + GAP0);
           doc.addImage(src, 'JPEG', x, y, fW0, fH0);
         } catch(e) {}
       });
       y += fH0 + GAP0;
     }
 
-    ubicacions.forEach(ub => {
+    ubicacionsEo.forEach(ub => {
       const fotsUb = ub.fotos || [];
       if (!fotsUb.length && !ub.nom) return;
       if (ub.nom) {
-        checkPage(8);
         doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
         doc.text(ub.nom.toUpperCase(), ML + 2, y + 3.5, { baseline:'middle' });
         y += 6;
       }
-      // Fotos de 3 en 3
       for (let fi = 0; fi < fotsUb.length; fi += 3) {
         const triple = [fotsUb[fi], fotsUb[fi+1], fotsUb[fi+2]].filter(Boolean);
         dibuixaFilaFotos(triple);
