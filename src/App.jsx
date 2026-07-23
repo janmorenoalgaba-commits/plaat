@@ -5152,20 +5152,23 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       const isFirst = pi === 0;
       const isLastPer = pi === persones.length - 1;
       const mateixaEmpresa = pi > 0 && (p.empresa||'') === (persones[pi-1]?.empresa||'');
-      // Calcular alçada real de la fila: wrap del rol fins a xEmpText (empresa)
-      // Ample disponible per al rol = xEmpText - xRol - 2mm de marge
+      // ROL — sempre a RH fix, si fa wrap s'escriu per sobre de la fila
       const rolLH7 = 7.5*0.3528+0.5;
-      const rolMaxW = xEmpText - xRol - 2; // no solapar amb l'empresa
-      const rolLines7 = isFirst ? doc.splitTextToSize(rol.nombre||'', rolMaxW) : [''];
-      const rowH = Math.max(RH, rolLines7.length * rolLH7 + 2);
+      const rolMaxW = xEmpText - xRol - 2;
+      const rolLines7 = isFirst ? doc.splitTextToSize(rol.nombre||'', rolMaxW) : [];
+      // La fila SEMPRE té alçada RH — el rol multilinea s'escriu centrat verticalment
+      // dins de la fila igual que la resta de columnes
+      const rowH = RH;
       checkPage(rowH);
       const midY = y + rowH/2;
 
-      // ROL — bold, solo primera persona, wrap si és massa llarg
-      if (isFirst) {
+      // ROL — bold, sols primera persona, centrat verticalment dins de RH
+      if (isFirst && rolLines7.length > 0) {
         doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        let ry = y + rowH/2 - (rolLines7.length*rolLH7)/2 + rolLH7*0.8;
-        rolLines7.forEach(l => { if(l) doc.text(l, xRol+2, ry, {baseline:'middle'}); ry+=rolLH7; });
+        // Centrar el bloc de text del rol dins de rowH
+        const totalRolH = rolLines7.length * rolLH7;
+        let ry = y + rowH/2 - totalRolH/2 + rolLH7*0.8;
+        rolLines7.forEach(l => { if(l) { doc.text(l, xRol+2, ry, {baseline:'middle'}); ry+=rolLH7; } });
       }
 
       // EMPRESA — primera persona o si és nova empresa
