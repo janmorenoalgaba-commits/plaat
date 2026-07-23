@@ -5110,12 +5110,14 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       // Tic/guió centrat a la columna AS (eAS=8mm reservada)
       const asX = xAS + eAS / 2;
       if (asistio) {
-        doc.setLineWidth(0.5); doc.setDrawColor(44, 94, 16);
+        // Tic en negre
+        doc.setLineWidth(0.5); doc.setDrawColor(0, 0, 0);
         doc.line(asX - 0.8, midY + 0.2, asX - 0.1, midY + 1.0);
         doc.line(asX - 0.1, midY + 1.0, asX + 1.2, midY - 0.8);
         doc.setLineWidth(LW); doc.setDrawColor(0,0,0);
       } else {
-        doc.setLineWidth(0.3); doc.setDrawColor(190, 190, 190);
+        // Guió en negre subtil
+        doc.setLineWidth(0.3); doc.setDrawColor(0, 0, 0);
         doc.line(asX - 1.0, midY, asX + 1.0, midY);
         doc.setLineWidth(LW); doc.setDrawColor(0,0,0);
       }
@@ -5204,7 +5206,12 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // Fotos: 2 per fila, amb descripció de text
   const eo = vo.estadoObra || {};
   if (eo.descripcion || (eo.fotos||[]).length > 0) {
-    checkPage(20);
+    // Calcular alçada total del punt 0 per decidir si cal saltar de pàgina
+    const numFotoPairs = Math.ceil(((eo.fotos||[]).length) / 2);
+    const altTotal0 = 5.5 + (eo.descripcion ? 20 : 0) + numFotoPairs * 56;
+    // Si no cap tot, saltar de pàgina per mantenir el punt 0 compacte
+    if (y + altTotal0 > PH - MB - 12) checkPage(altTotal0);
+    else checkPage(20);
 
     // Capçalera secció 0 — IGUAL format que DF/Contratista (gris, sense bordes, font 8 bold)
     const eoH = 5.5;
@@ -5290,7 +5297,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     ].forEach(([x,w,t]) => {
       doc.text(t, x+w/2, y + secH/2, { align:'center', baseline:'middle' });
     });
-    y += secH;
+    y += secH + 10; // 1cm espai entre capçalera grisa i primer tema (sense línia)
 
     // Textos de columnes ES/INICI/FI/RES dins de la fila grisa (sense fila blanca separada)
     // Ja s'han afegit a la fila grisa de secció anterior
@@ -5363,9 +5370,20 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
           ty += e.lh;
         });
         // Fotos
-        let fy=ey+e.textH;
+        let fy=ey+e.textH+titolH;
         e.fotoRows.forEach(row=>{
-          row.pair.forEach((f,pi)=>{const src=f.url||f.data;if(src)try{doc.addImage(src,'JPEG',ML+cNum+2+pi*(fW3+1),fy,row.dims[pi].w,row.dims[pi].h);}catch(er){}});
+          row.pair.forEach((f,pi)=>{
+            const src=f.url||f.data;
+            if(!src) return;
+            try {
+              // Centrar cada foto dins del seu slot (fW3)
+              const imgW = row.dims[pi].w;
+              const imgH = row.dims[pi].h;
+              const xSlot = ML+cNum+2 + pi*(fW3+2);
+              const xCentered = xSlot + (fW3-imgW)/2;
+              doc.addImage(src,'JPEG',xCentered,fy,imgW,imgH);
+            } catch(er) {}
+          });
           fy+=row.rh+2;
         });
         // Valors columnes centrats en l'alçada de CADA entrada (no del tema sencer)
@@ -5405,38 +5423,64 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
   doc.text(T.conforme,ML,y); y+=8;
 
-  // Taula de firmes — format de la captura:
-  // Fila 1: PROMOTOR | PROJECT MANAGER | DIRECCIÓN DE OBRA (3 columnes iguals)
-  // Fila 2: DIRECCIÓN EJECUCIÓN OBRA / COORD. SEGURIDAD | CONTRATISTA (2 columnes)
-  // Format: sense recuadres, sols línia inferior de cada cel·la + text bold petit a baix
-  checkPage(50);
-  const fH = 22; // alçada de cada fila de firma
-  const f3 = CW / 3; // amplada columna fila 1
-  const f2 = CW / 2; // amplada columna fila 2
+  // Taula de firmes — centrades, empresa sota el rol, màx 3 per fila
+  // Construir llista de firmants amb rol + empresa
+  checkPage(55);
+  const fH2 = 24; // alçada fila firma
+  const lh65 = 6.5*0.3528+0.4;
 
-  // Fila 1: 3 firmes
-  const firma1 = [T.promotor, T.pm_f, T.do_f];
-  firma1.forEach((label, i) => {
-    // Línia inferior
-    setLW(0.4); doc.line(ML + i*f3, y + fH, ML + i*f3 + f3, y + fH);
-    // Text label en bold petit a la part inferior de la cel·la
-    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
-    const ls = doc.splitTextToSize(label, f3 - 4);
-    let ty = y + fH - ls.length * (6.5*0.3528+0.4) - 1;
-    ls.forEach(l => { doc.text(l, ML + i*f3 + 2, ty); ty += 6.5*0.3528+0.4; });
-  });
-  y += fH + 8;
+  // Obtenir empresa de cada rol de l'equip VO
+  const getEmpresa = (rolNom) => {
+    const eq = vo.equipo || [];
+    for (const rol of eq) {
+      const n = rol.nombre?.toUpperCase() || '';
+      if (n.includes(rolNom.toUpperCase().slice(0,8))) {
+        const p = rol.personas?.find(p => p.empresa);
+        if (p) return p.empresa;
+      }
+    }
+    return '';
+  };
 
-  // Fila 2: 2 firmes
-  const firma2 = [T.deo_f, T.ec_f];
-  firma2.forEach((label, i) => {
-    setLW(0.4); doc.line(ML + i*f2, y + fH, ML + i*f2 + f2, y + fH);
+  // Firmants: [{rol, empresa}]
+  const firmants = [
+    { rol: T.promotor,   empresa: obra.propiedad || obra.cliente || '' },
+    { rol: T.pm_f,       empresa: getEmpresa('PROJECT') || '' },
+    { rol: T.do_f,       empresa: getEmpresa('OBRA (DO)') || getEmpresa('FACULTATIVA') || '' },
+    { rol: esCA ? "DIRECCIÓ D'EXECUCIÓ" : 'DIRECCIÓN EJECUCIÓN OBRA',
+      empresa: getEmpresa('EXECUCIÓ') || getEmpresa('EJECUCIÓN') || '' },
+    { rol: esCA ? 'COORDINADOR DE SEGURETAT' : 'COORDINADOR DE SEGURIDAD',
+      empresa: getEmpresa('SEGURE') || '' },
+    { rol: T.ec_f,       empresa: getEmpresa('CONTRAT') || '' },
+  ];
+
+  // Dibuixar firma individual centrada
+  function dibuixaFirma(fx, fy, fw, firmant) {
+    setLW(0.4); doc.line(fx, fy + fH2, fx + fw, fy + fH2);
+    const lines1 = doc.splitTextToSize(firmant.rol, fw - 4);
+    const lines2 = firmant.empresa ? doc.splitTextToSize(firmant.empresa, fw - 4) : [];
+    const totalLines = lines1.length + lines2.length;
+    let ty = fy + fH2 - totalLines * lh65 - 1;
     doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
-    const ls = doc.splitTextToSize(label, f2 - 4);
-    let ty = y + fH - ls.length * (6.5*0.3528+0.4) - 1;
-    ls.forEach(l => { doc.text(l, ML + i*f2 + 2, ty); ty += 6.5*0.3528+0.4; });
-  });
-  y += fH + 6;
+    lines1.forEach(l => { doc.text(l, fx + fw/2, ty, { align:'center' }); ty += lh65; });
+    if (lines2.length) {
+      doc.setFont('helvetica','normal');
+      lines2.forEach(l => { doc.text(l, fx + fw/2, ty, { align:'center' }); ty += lh65; });
+    }
+  }
+
+  // Fila 1: firmants 0,1,2 (màx 3)
+  const fila1 = firmants.slice(0,3);
+  const fw1 = CW / fila1.length;
+  fila1.forEach((f, i) => dibuixaFirma(ML + i*fw1, y, fw1, f));
+  y += fH2 + 8;
+
+  // Fila 2: firmants 3,4,5
+  checkPage(fH2 + 8);
+  const fila2 = firmants.slice(3);
+  const fw2 = CW / fila2.length;
+  fila2.forEach((f, i) => dibuixaFirma(ML + i*fw2, y, fw2, f));
+  y += fH2 + 6;
 
   // ── PEU FINAL TOTES LES PÀGINES ───────────────────────────────────────────
   const totalPags = doc.getNumberOfPages();
