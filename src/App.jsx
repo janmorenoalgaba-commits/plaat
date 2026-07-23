@@ -5237,23 +5237,21 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
     // Fotos de 2 en 2 — amb salts de pàgina coherents
     const fotos = eo.fotos || [];
-    // Fotos en files de 2 — proporcionals, sense retallar ni deformar
-    // Separació exacta 5mm entre fotos (H i V)
+    // Fotos en files de 2 — proporcionals, centrades dins del slot, 5mm entre slots
     const GAP0 = 5;
-    const maxW = (CW - GAP0) / 2; // ample màxim per foto
-    const maxH0 = 52; // alçada màxima per foto
+    const maxW = (CW - GAP0) / 2; // ample de cada slot
+    const maxH0 = 52;
     for (let fi = 0; fi < fotos.length; fi += 2) {
       const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
-      // Calcular dimensions proporcionals per a cada foto
       const dims = pair.map(f => {
         try {
           const pr = doc.getImageProperties(f.url||f.data||'');
           const ratio = pr.width / pr.height;
           let w = maxW, h = w / ratio;
           if (h > maxH0) { h = maxH0; w = h * ratio; }
-          if (w > maxW) { w = maxW; h = w / ratio; }
+          if (w > maxW)  { w = maxW;  h = w / ratio; }
           return { w, h };
-        } catch(e) { return { w: maxW * 0.8, h: maxH0 * 0.8 }; }
+        } catch(e) { return { w: maxW * 0.8, h: maxH0 * 0.7 }; }
       });
       const rh = Math.max(...dims.map(d => d.h));
       if (y + rh + GAP0 > PH - MB - 12) checkPage(rh + GAP0);
@@ -5261,13 +5259,15 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         const src = f.url || f.data;
         if (!src) return;
         try {
-          // Posició x: foto 0 a ML, foto 1 a ML + maxW + GAP0
-          // Cada foto s'alinea a l'esquerra del seu slot
-          const x = ML + pi * (maxW + GAP0);
-          doc.addImage(src, 'JPEG', x, y, dims[pi].w, dims[pi].h);
+          // Inici del slot: slot0=ML, slot1=ML+maxW+GAP0
+          const xSlot = ML + pi * (maxW + GAP0);
+          // Centrar la foto dins del slot
+          const xCenter = xSlot + (maxW - dims[pi].w) / 2;
+          const yCenter = y + (rh - dims[pi].h) / 2;
+          doc.addImage(src, 'JPEG', xCenter, yCenter, dims[pi].w, dims[pi].h);
         } catch(e) {}
       });
-      y += rh + GAP0; // separació vertical = GAP0
+      y += rh + GAP0;
     }
     y += 2;
   }
