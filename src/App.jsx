@@ -5335,52 +5335,38 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
     // Fotos de 2 en 2 — amb salts de pàgina coherents
     const fotos = eo.fotos || [];
-    // Ubicacions amb fotos
-    const GAP0 = 5;
-    const maxW = (CW - GAP0) / 2;
-    const maxH0 = 52;
+    // Ubicacions amb fotos — 5cm × 3.75cm, 3 per fila, GAP 4mm
+    const GAP0 = 4;
+    const fW0 = 50;   // 5cm d'ample
+    const fH0 = 37.5; // 3.75cm d'alçada
     const ubicacions = eo.ubicacions || (eo.fotos?.length ? [{ id:'leg', nom:'', fotos: eo.fotos }] : []);
 
-    function dibuixaParellFotos(fotoPair) {
-      const dims = fotoPair.map(f => {
-        try {
-          const pr = doc.getImageProperties(f.url||f.data||'');
-          const ratio = pr.width / pr.height;
-          let w = maxW, h = w / ratio;
-          if (h > maxH0) { h = maxH0; w = h * ratio; }
-          if (w > maxW)  { w = maxW;  h = w / ratio; }
-          return { w, h };
-        } catch(e) { return { w: maxW*0.8, h: maxH0*0.7 }; }
-      });
-      const rh = Math.max(...dims.map(d => d.h));
-      if (y + rh + GAP0 > PH - MB - 12) checkPage(rh + GAP0);
-      fotoPair.forEach((f, pi) => {
+    function dibuixaFilaFotos(filaPair) {
+      if (y + fH0 + GAP0 > PH - MB - 12) checkPage(fH0 + GAP0);
+      filaPair.forEach((f, pi) => {
         const src = f.url || f.data;
         if (!src) return;
         try {
-          const xSlot = ML + pi * (maxW + GAP0);
-          const xCenter = xSlot + (maxW - dims[pi].w) / 2;
-          const yCenter = y + (rh - dims[pi].h) / 2;
-          doc.addImage(src, 'JPEG', xCenter, yCenter, dims[pi].w, dims[pi].h);
+          const x = ML + pi * (fW0 + GAP0);
+          doc.addImage(src, 'JPEG', x, y, fW0, fH0);
         } catch(e) {}
       });
-      y += rh + GAP0;
+      y += fH0 + GAP0;
     }
 
     ubicacions.forEach(ub => {
       const fotsUb = ub.fotos || [];
       if (!fotsUb.length && !ub.nom) return;
-      // Títol de la ubicació (si en té)
       if (ub.nom) {
         checkPage(8);
         doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
         doc.text(ub.nom.toUpperCase(), ML + 2, y + 3.5, { baseline:'middle' });
         y += 6;
       }
-      // Fotos en parelles
-      for (let fi = 0; fi < fotsUb.length; fi += 2) {
-        const pair = [fotsUb[fi], fotsUb[fi+1]].filter(Boolean);
-        dibuixaParellFotos(pair);
+      // Fotos de 3 en 3
+      for (let fi = 0; fi < fotsUb.length; fi += 3) {
+        const triple = [fotsUb[fi], fotsUb[fi+1], fotsUb[fi+2]].filter(Boolean);
+        dibuixaFilaFotos(triple);
       }
     });
     y += 2;
