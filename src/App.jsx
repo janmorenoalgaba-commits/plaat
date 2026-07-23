@@ -1616,7 +1616,7 @@ const ESTADOS_VO = {
   R: { label: 'Resuelto',    bg: '#E8F5E0', color: '#2D5E10' },
   I: { label: 'Informativo', bg: '#EEEDE7', color: '#52524E' },
 };
-const RESP_VO = ['', 'EC', 'DO', 'DEO', 'PR', 'DOE', 'DOI', 'CSS'];
+const RESP_VO = ['EC', 'DO', 'DEO', 'PR', 'DOE', 'DOI', 'CSS', 'INT'];
 const DIAS_DEFAULT = [1, 3]; // Lunes y Miércoles
 
 function esHoyVisita(obra) {
@@ -3833,7 +3833,15 @@ function getDefaultSecciones() {
 function migrateVO(raw) {
   let vo = raw ? { ...raw } : {};
   if (!vo.num) vo.num = 1;
-  if (!vo.estadoObra) vo.estadoObra = { descripcion: '', fotos: [] };
+  if (!vo.estadoObra) vo.estadoObra = { descripcion: '', ubicacions: [] };
+  // Migrar fotos antigues (format pla) a estructura d'ubicacions
+  if (!vo.estadoObra.ubicacions) {
+    const fotesVelles = vo.estadoObra.fotos || [];
+    vo.estadoObra.ubicacions = fotesVelles.length > 0
+      ? [{ id: uid(), nom: '', fotos: fotesVelles }]
+      : [];
+    delete vo.estadoObra.fotos;
+  }
   if (!Array.isArray(vo.equipo)) {
     const eq = getDefaultEquipo();
     // try to recover old object-style equipo
@@ -3871,7 +3879,7 @@ function migrateVO(raw) {
   vo.secciones = vo.secciones.map(s => ({ ...s, temas: (s.temas||[]).map(t => ({
     ...t,
     titulo: t.titulo || (t.entradas?.[0]?.texto?.slice(0,60) || ''),
-    entradas: (t.entradas||[]).map(e => ({ fin: '', ...e })),
+    entradas: (t.entradas||[]).map(e => ({ fin: '', ...e, resp: Array.isArray(e.resp) ? e.resp : (e.resp ? [e.resp] : []) })),
   })) }));
   return vo;
 }
@@ -4067,10 +4075,27 @@ function ModuloActaVO({ obra, onSave }) {
 
   // Estado de obra
   function updEstado(campo, val) { guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), [campo]: val } }); }
-  function addFotoEstado() {
-    pickFiles('image/*', f => guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: [...((vo.estadoObra||{}).fotos||[]), f] } }), obra?.id);
+  function addUbicacio() {
+    const nouId = uid();
+    const ub = { id: nouId, nom: '', fotos: [] };
+    guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), ubicacions: [...((vo.estadoObra||{}).ubicacions||[]), ub] } });
   }
-  function delFotoEstado(id) { guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: (vo.estadoObra.fotos||[]).filter(f => f.id !== id) } }); }
+  function updUbicacio(ubId, camp, val) {
+    guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}),
+      ubicacions: (vo.estadoObra.ubicacions||[]).map(u => u.id===ubId ? {...u, [camp]: val} : u) } });
+  }
+  function delUbicacio(ubId) {
+    guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}),
+      ubicacions: (vo.estadoObra.ubicacions||[]).filter(u => u.id!==ubId) } });
+  }
+  function addFotoUbicacio(ubId) {
+    pickFiles('image/*', f => guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}),
+      ubicacions: (vo.estadoObra.ubicacions||[]).map(u => u.id===ubId ? {...u, fotos:[...(u.fotos||[]),f]} : u) } }), obra?.id);
+  }
+  function delFotoUbicacio(ubId, fotoId) {
+    guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}),
+      ubicacions: (vo.estadoObra.ubicacions||[]).map(u => u.id===ubId ? {...u, fotos:(u.fotos||[]).filter(f=>f.id!==fotoId)} : u) } });
+  }
 
   const [showIdioma, setShowIdioma] = useState(false);
 
@@ -4229,15 +4254,30 @@ function ModuloActaVO({ obra, onSave }) {
           <span style={{ color: '#52524E', marginRight: 10 }}>0</span>ESTADO DE LA OBRA
         </div>
         <textarea placeholder="Describe brevemente el estado general de la obra en esta visita..." value={vo.estadoObra?.descripcion||''} onChange={e => updEstado('descripcion', e.target.value)} style={{ minHeight: 64, marginBottom: 10 }} />
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-          {(vo.estadoObra?.fotos||[]).map(f => (
-            <div key={f.id} style={{ position: 'relative', width: isMobile ? 80 : 110, height: isMobile ? 60 : 80 }}>
-              <img src={fotoSrc(f)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }} />
-              <button onClick={() => setConfirmacion({ titulo: 'Eliminar foto', texto: 'Vas a eliminar esta foto del estado de obra.', onSi: () => { delFotoEstado(f.id); setConfirmacion(null); } })} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
+        {/* Ubicacions amb fotos */}
+        {(vo.estadoObra?.ubicacions||[]).map(ub => (
+          <div key={ub.id} style={{ marginBottom: 10, background: '#F9F8F5', borderRadius: 8, padding: '8px 10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <input
+                value={ub.nom||''}
+                onChange={e => updUbicacio(ub.id, 'nom', e.target.value)}
+                placeholder="Nom de la ubicació (p.ex. Façana Sud, Coberta, PB...)..."
+                style={{ flex: 1, fontSize: 12, fontWeight: 500 }}
+              />
+              <button onClick={() => setConfirmacion({ titulo: 'Eliminar ubicació', texto: `Vas a eliminar la ubicació "${ub.nom||'sense nom'}" i totes les seves fotos.`, onSi: () => { delUbicacio(ub.id); setConfirmacion(null); } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, lineHeight: 1 }}>×</button>
             </div>
-          ))}
-          <button onClick={addFotoEstado} style={{ width: isMobile ? 80 : 110, height: isMobile ? 60 : 80, borderRadius: 7, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 22, color: '#D0D0CB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
-        </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {(ub.fotos||[]).map(f => (
+                <div key={f.id} style={{ position: 'relative', width: isMobile ? 72 : 100, height: isMobile ? 54 : 72 }}>
+                  <img src={fotoSrc(f)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                  <button onClick={() => delFotoUbicacio(ub.id, f.id)} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 16, height: 16, cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                </div>
+              ))}
+              <button onClick={() => addFotoUbicacio(ub.id)} style={{ width: isMobile ? 72 : 100, height: isMobile ? 54 : 72, borderRadius: 6, border: '1.5px dashed #E0DFD9', background: '#fff', cursor: 'pointer', fontSize: 20, color: '#D0D0CB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+            </div>
+          </div>
+        ))}
+        <button onClick={addUbicacio} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#6B6B66', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 4 }}>+ Afegir ubicació</button>
       </div>
 
       {/* Secciones editables */}
@@ -4387,10 +4427,22 @@ function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAd
                         {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                       </select>
                       {en.estado === 'R' && <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)} style={{ width: 'auto', fontSize: 11 }} />}
-                      <select value={en.resp||''} onChange={ev => onUpdEntrada(t.id, en.id, 'resp', ev.target.value)}
-                        style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: '1px solid #E0DFD9' }}>
-                        {RESP_VO.map(r => <option key={r} value={r}>{r ? `${r}` : '— resp.'}</option>)}
-                      </select>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                        <span style={{ fontSize: 10, color: '#A5A5A0', marginRight: 2 }}>Resp:</span>
+                        {RESP_VO.map(r => {
+                          const resps = Array.isArray(en.resp) ? en.resp : (en.resp ? [en.resp] : []);
+                          const actiu = resps.includes(r);
+                          return (
+                            <button key={r} onClick={() => {
+                              const cur = Array.isArray(en.resp) ? en.resp : (en.resp ? [en.resp] : []);
+                              const nou = actiu ? cur.filter(x=>x!==r) : [...cur, r];
+                              onUpdEntrada(t.id, en.id, 'resp', nou);
+                            }} style={{ padding: '2px 7px', borderRadius: 4, fontSize: 10.5, fontWeight: actiu?600:400, border: `1px solid ${actiu?'#18180F':'#E0DFD9'}`, background: actiu?'#18180F':'transparent', color: actiu?'#fff':'#6B6B66', cursor:'pointer' }}>
+                              {r}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                     {esNueva && <div style={{ fontSize: 10.5, color: '#9B9B97', marginTop: 4 }}>En esta acta aparece como "N". En la siguiente mostrará el estado elegido.</div>}
                     {/* Fotos del comentario */}
@@ -5046,7 +5098,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // Columnes ajustades per evitar solapaments:
   // ROL: 52mm | EMP: 14mm | NOM: 28mm | EMAIL: 58mm | TEL: resta (~28mm)
   // Columnes desplaçades 5mm a l'esquerra, 3mm extra entre empresa i nom
-  const eRol=45, eEmp=20, eGapEN=3, eNom=27, eEmail=50, eAS=8, eTel=CW-eRol-eEmp-eGapEN-eNom-eEmail-eAS;
+  const eRol=35, eEmp=22, eGapEN=3, eNom=27, eEmail=52, eAS=8, eTel=CW-eRol-eEmp-eGapEN-eNom-eEmail-eAS; // xEmp 10mm menys
   const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp+eGapEN, xEmail=ML+eRol+eEmp+eGapEN+eNom, xTel=ML+eRol+eEmp+eGapEN+eNom+eEmail, xAS=ML+eRol+eEmp+eGapEN+eNom+eEmail+eTel;
   const equipRols = vo.equipo || [];
   const RH = 6; // alçada fila persona
@@ -5270,13 +5322,14 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
     // Fotos de 2 en 2 — amb salts de pàgina coherents
     const fotos = eo.fotos || [];
-    // Fotos en files de 2 — proporcionals, centrades dins del slot, 5mm entre slots
+    // Ubicacions amb fotos
     const GAP0 = 5;
-    const maxW = (CW - GAP0) / 2; // ample de cada slot
+    const maxW = (CW - GAP0) / 2;
     const maxH0 = 52;
-    for (let fi = 0; fi < fotos.length; fi += 2) {
-      const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
-      const dims = pair.map(f => {
+    const ubicacions = eo.ubicacions || (eo.fotos?.length ? [{ id:'leg', nom:'', fotos: eo.fotos }] : []);
+
+    function dibuixaParellFotos(fotoPair) {
+      const dims = fotoPair.map(f => {
         try {
           const pr = doc.getImageProperties(f.url||f.data||'');
           const ratio = pr.width / pr.height;
@@ -5284,17 +5337,15 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
           if (h > maxH0) { h = maxH0; w = h * ratio; }
           if (w > maxW)  { w = maxW;  h = w / ratio; }
           return { w, h };
-        } catch(e) { return { w: maxW * 0.8, h: maxH0 * 0.7 }; }
+        } catch(e) { return { w: maxW*0.8, h: maxH0*0.7 }; }
       });
       const rh = Math.max(...dims.map(d => d.h));
       if (y + rh + GAP0 > PH - MB - 12) checkPage(rh + GAP0);
-      pair.forEach((f, pi) => {
+      fotoPair.forEach((f, pi) => {
         const src = f.url || f.data;
         if (!src) return;
         try {
-          // Inici del slot: slot0=ML, slot1=ML+maxW+GAP0
           const xSlot = ML + pi * (maxW + GAP0);
-          // Centrar la foto dins del slot
           const xCenter = xSlot + (maxW - dims[pi].w) / 2;
           const yCenter = y + (rh - dims[pi].h) / 2;
           doc.addImage(src, 'JPEG', xCenter, yCenter, dims[pi].w, dims[pi].h);
@@ -5302,6 +5353,23 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       });
       y += rh + GAP0;
     }
+
+    ubicacions.forEach(ub => {
+      const fotsUb = ub.fotos || [];
+      if (!fotsUb.length && !ub.nom) return;
+      // Títol de la ubicació (si en té)
+      if (ub.nom) {
+        checkPage(8);
+        doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+        doc.text(ub.nom.toUpperCase(), ML + 2, y + 3.5, { baseline:'middle' });
+        y += 6;
+      }
+      // Fotos en parelles
+      for (let fi = 0; fi < fotsUb.length; fi += 2) {
+        const pair = [fotsUb[fi], fotsUb[fi+1]].filter(Boolean);
+        dibuixaParellFotos(pair);
+      }
+    });
     y += 2;
   }
 
@@ -5362,8 +5430,11 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         const lh85 = 8.5*0.3528+0.6;
         // Si és la primera entrada i hi ha títol, afegir l'alçada del títol
         const titolOffset = (pi === 0 && t.titulo) ? lh85 + 2 : 0;
-        const GAP = 2; // espai entre títol→text i text→fotos (igual)
-        const textH = lines.length*lh85 + 3 + titolOffset + GAP;
+        const GAP = 2;
+        // Responsables: calcular espai si n'hi ha més d'un
+        const respsNum = Array.isArray(en.resp) ? en.resp.length : (en.resp ? 1 : 0);
+        const respExtraH = respsNum > 1 ? (respsNum - 1) * (7.5*0.3528+0.4) : 0;
+        const textH = Math.max(lines.length*lh85 + 3 + titolOffset + GAP, respExtraH + 8);
         const fotos=en.fotos||[]; const fotoRows=[]; let fotosH=0;
         for(let i=0;i<fotos.length;i+=2){
           const pair=[fotos[i],fotos[i+1]].filter(Boolean);
@@ -5449,8 +5520,15 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         const isR=e.en.estado==='R'&&!e.esNova;
         doc.text(isR?'':fmtFechaCorta(e.en.fecha), ML+cNum+cDesc+cEs+cIni/2, colY, { align:'center', baseline:'middle' });
         doc.text(isR?fmtFechaCorta(e.en.fin||e.en.fecha):'', ML+cNum+cDesc+cEs+cIni+cFi/2, colY, { align:'center', baseline:'middle' });
-        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
-        doc.text(e.en.resp||'', ML+cNum+cDesc+cEs+cIni+cFi+cRes/2, colY, { align:'center', baseline:'middle' });
+        // Responsables: un per línia a la columna RES
+        const respsArr = Array.isArray(e.en.resp) ? e.en.resp : (e.en.resp ? [e.en.resp] : []);
+        doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+        const respLH = 7.5*0.3528+0.4;
+        let respY = colY;
+        respsArr.forEach((r, ri) => {
+          doc.text(r, ML+cNum+cDesc+cEs+cIni+cFi+cRes/2, respY, { align:'center', baseline:'middle' });
+          respY += respLH;
+        });
         ey+=e.h;
       });
 
