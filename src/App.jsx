@@ -4233,17 +4233,9 @@ function ModuloActaVO({ obra, onSave }) {
         <textarea placeholder="Describe brevemente el estado general de la obra en esta visita..." value={vo.estadoObra?.descripcion||''} onChange={e => updEstado('descripcion', e.target.value)} style={{ minHeight: 64, marginBottom: 10 }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
           {(vo.estadoObra?.fotos||[]).map(f => (
-            <div key={f.id} style={{ position: 'relative' }}>
-              <div style={{ position: 'relative', width: isMobile ? 80 : 110, height: isMobile ? 60 : 80 }}>
-                <img src={fotoSrc(f)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }} />
-                <button onClick={() => setConfirmacion({ titulo: 'Eliminar foto', texto: 'Vas a eliminar esta foto del estado de obra.', onSi: () => { delFotoEstado(f.id); setConfirmacion(null); } })} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
-              </div>
-              <input
-                value={f.caption||''}
-                onChange={e => guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: (vo.estadoObra.fotos||[]).map(x => x.id===f.id ? {...x, caption: e.target.value} : x) }})}
-                placeholder="Ubicació / títol..."
-                style={{ width: isMobile ? 80 : 110, fontSize: 10, padding: '2px 4px', marginTop: 3, borderRadius: 4 }}
-              />
+            <div key={f.id} style={{ position: 'relative', width: isMobile ? 80 : 110, height: isMobile ? 60 : 80 }}>
+              <img src={fotoSrc(f)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }} />
+              <button onClick={() => setConfirmacion({ titulo: 'Eliminar foto', texto: 'Vas a eliminar esta foto del estado de obra.', onSi: () => { delFotoEstado(f.id); setConfirmacion(null); } })} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
             </div>
           ))}
           <button onClick={addFotoEstado} style={{ width: isMobile ? 80 : 110, height: isMobile ? 60 : 80, borderRadius: 7, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 22, color: '#D0D0CB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
@@ -5245,43 +5237,34 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
     // Fotos de 2 en 2 — amb salts de pàgina coherents
     const fotos = eo.fotos || [];
-    const GAP0 = 4; // separació entre fotos, igual H i V
-    const fW2 = (CW - GAP0) / 2; // amplada slot foto
-    const altMax0 = 52; // alçada màxima per foto
+    // Separació H i V igual entre fotos
+    const GAP0 = 5; // mm entre fotos, igual en totes les direccions
+    const slotW0 = (CW - GAP0) / 2; // amplada de cada slot (2 columnes)
+    const altMax0 = 50; // alçada màxima per foto
     for (let fi = 0; fi < fotos.length; fi += 2) {
       const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
-      // Caption de la primera foto del parell (si en té)
-      const caption = pair[0]?.caption || '';
-      const captionH = caption ? 5 : 0;
       const dims = pair.map(f => {
         try {
           const pr = doc.getImageProperties(f.url||f.data||'');
           const r = pr.height / pr.width;
-          const h = Math.min(fW2 * r, altMax0);
+          const h = Math.min(slotW0 * r, altMax0);
           return { w: h/r, h };
-        } catch(e) { return { w: fW2, h: 40 }; }
+        } catch(e) { return { w: slotW0, h: 38 }; }
       });
       const rh = Math.max(...dims.map(d => d.h));
-      const rowH = captionH + rh + GAP0;
-      if (y + rowH > PH - MB - 12) checkPage(rowH);
-      // Dibuixar caption
-      if (caption) {
-        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
-        doc.text(caption, ML, y + 3.5, { baseline:'middle' });
-        y += captionH;
-      }
-      // Dibuixar fotos centrades
+      if (y + rh + GAP0 > PH - MB - 12) checkPage(rh + GAP0);
       pair.forEach((f, pi) => {
         const src = f.url || f.data;
         if (!src) return;
         try {
-          const imgW = dims[pi].w;
-          const imgH = dims[pi].h;
-          const xOffset = ML + pi * (fW2 + GAP0) + (fW2 - imgW) / 2;
-          doc.addImage(src, 'JPEG', xOffset, y, imgW, imgH);
+          // xInici de cada slot: slot 0 = ML, slot 1 = ML + slotW0 + GAP0
+          const xSlot = ML + pi * (slotW0 + GAP0);
+          // Centrar la imatge dins del slot
+          const xCentered = xSlot + (slotW0 - dims[pi].w) / 2;
+          doc.addImage(src, 'JPEG', xCentered, y, dims[pi].w, dims[pi].h);
         } catch(e) {}
       });
-      y += rh + GAP0;
+      y += rh + GAP0; // separació vertical = GAP0 (igual que horitzontal)
     }
     y += 2;
   }
