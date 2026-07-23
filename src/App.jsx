@@ -5098,7 +5098,9 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // Columnes ajustades per evitar solapaments:
   // ROL: 52mm | EMP: 14mm | NOM: 28mm | EMAIL: 58mm | TEL: resta (~28mm)
   // Columnes desplaçades 5mm a l'esquerra, 3mm extra entre empresa i nom
-  const eRol=35, eEmp=22, eGapEN=3, eNom=27, eEmail=52, eAS=8, eTel=CW-eRol-eEmp-eGapEN-eNom-eEmail-eAS; // xEmp 10mm menys
+  // Empresa torna a posició original (xEmp=ML+50)
+  // Nom/Email/Tel desplaçats 5mm a l'esquerra respecte l'original
+  const eRol=50, eEmp=17, eGapEN=3, eNom=27, eEmail=50, eAS=8, eTel=CW-eRol-eEmp-eGapEN-eNom-eEmail-eAS;
   const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp+eGapEN, xEmail=ML+eRol+eEmp+eGapEN+eNom, xTel=ML+eRol+eEmp+eGapEN+eNom+eEmail, xAS=ML+eRol+eEmp+eGapEN+eNom+eEmail+eTel;
   const equipRols = vo.equipo || [];
   const RH = 6; // alçada fila persona
@@ -5145,25 +5147,27 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // (per no solapar amb la fila grisa del grup següent)
   function dibuixaFilaRol(rol, persones, isLastOfGroup = false) {
     persones.forEach((p, pi) => {
-      checkPage(RH);
       const isFirst = pi === 0;
       const isLastPer = pi === persones.length - 1;
       const mateixaEmpresa = pi > 0 && (p.empresa||'') === (persones[pi-1]?.empresa||'');
-      const midY = y + RH/2;
+      // Calcular alçada real de la fila: pot ser més gran si el rol fa wrap
+      const rolLH7 = 7.5*0.3528+0.5;
+      const rolLines7 = isFirst ? doc.splitTextToSize(rol.nombre||'', eRol-3) : [''];
+      const rowH = Math.max(RH, rolLines7.length * rolLH7 + 2);
+      checkPage(rowH);
+      const midY = y + rowH/2;
 
       // ROL — bold, solo primera persona, wrap si és massa llarg
       if (isFirst) {
         doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        const rolLines = doc.splitTextToSize(rol.nombre||'', eRol-3);
-        const rolLH = 7.5*0.3528+0.5;
-        let ry = y + RH/2 - (rolLines.length*rolLH)/2 + rolLH*0.8;
-        rolLines.forEach(l => { doc.text(l, xRol+2, ry, {baseline:'middle'}); ry+=rolLH; });
+        let ry = y + rowH/2 - (rolLines7.length*rolLH7)/2 + rolLH7*0.8;
+        rolLines7.forEach(l => { if(l) doc.text(l, xRol+2, ry, {baseline:'middle'}); ry+=rolLH7; });
       }
 
       // EMPRESA — primera persona o si és nova empresa
       if (isFirst || !mateixaEmpresa) {
         doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        doc.text(p.empresa||'', xEmp+1, midY, {baseline:'middle'});
+        doc.text(p.empresa||'', xEmp+1, midY, {baseline:'middle'}); // empresa centrada verticalment
       }
 
       // NOM
@@ -5210,12 +5214,12 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       // Línia INFERIOR — NO si és l'última persona del grup (evita solapament amb fila grisa)
       const omitirLinia = isLastOfGroup && isLastPer;
       if (!omitirLinia) {
-        setLW(LW); // línies fines 0.25pt, igual que la taula de temes
+        setLW(LW);
         const xIniLinia = (!isFirst && mateixaEmpresa) ? xNom : xEmp;
-        doc.line(xIniLinia, y + RH, ML+CW, y + RH);
+        doc.line(xIniLinia, y + rowH, ML+CW, y + rowH);
       }
 
-      y += RH;
+      y += rowH; // alçada real de la fila (pot ser > RH si rol fa wrap)
     });
   }
 
