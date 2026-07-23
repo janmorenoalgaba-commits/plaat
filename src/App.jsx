@@ -5237,51 +5237,37 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
     // Fotos de 2 en 2 — amb salts de pàgina coherents
     const fotos = eo.fotos || [];
+    // Fotos en files de 2 — proporcionals, sense retallar ni deformar
     // Separació exacta 5mm entre fotos (H i V)
-    // Les fotos es retallen (clip) per omplir el slot sense deformar-les
     const GAP0 = 5;
-    const maxW = (CW - GAP0) / 2; // ample de cada slot
-    const rh0 = 45; // alçada fixa de cada slot
+    const maxW = (CW - GAP0) / 2; // ample màxim per foto
+    const maxH0 = 52; // alçada màxima per foto
     for (let fi = 0; fi < fotos.length; fi += 2) {
       const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
-      if (y + rh0 + GAP0 > PH - MB - 12) checkPage(rh0 + GAP0);
+      // Calcular dimensions proporcionals per a cada foto
+      const dims = pair.map(f => {
+        try {
+          const pr = doc.getImageProperties(f.url||f.data||'');
+          const ratio = pr.width / pr.height;
+          let w = maxW, h = w / ratio;
+          if (h > maxH0) { h = maxH0; w = h * ratio; }
+          if (w > maxW) { w = maxW; h = w / ratio; }
+          return { w, h };
+        } catch(e) { return { w: maxW * 0.8, h: maxH0 * 0.8 }; }
+      });
+      const rh = Math.max(...dims.map(d => d.h));
+      if (y + rh + GAP0 > PH - MB - 12) checkPage(rh + GAP0);
       pair.forEach((f, pi) => {
         const src = f.url || f.data;
         if (!src) return;
         try {
-          const pr = doc.getImageProperties(src);
-          const imgW = pr.width, imgH = pr.height;
-          const ratio = imgW / imgH;
-          // Calcular dimensions per omplir el slot (object-fit: cover)
-          let drawW, drawH;
-          if (ratio > maxW / rh0) {
-            // Imatge més ampla que el slot → ajustar per alçada
-            drawH = rh0;
-            drawW = rh0 * ratio;
-          } else {
-            // Imatge més alta que el slot → ajustar per ample
-            drawW = maxW;
-            drawH = maxW / ratio;
-          }
-          // Centrar i retallar dins del slot
+          // Posició x: foto 0 a ML, foto 1 a ML + maxW + GAP0
+          // Cada foto s'alinea a l'esquerra del seu slot
           const x = ML + pi * (maxW + GAP0);
-          const offsetX = (maxW - drawW) / 2;
-          const offsetY = (rh0 - drawH) / 2;
-          // Clip rect per no sortir del slot
-          doc.saveGraphicsState();
-          // Clip en coordenades jsPDF (punts)
-          const toPoints = mm => mm * 2.8346;
-          doc.internal.write(
-            `q ${toPoints(x)} ${toPoints(PH - y - rh0)} ${toPoints(maxW)} ${toPoints(rh0)} re W n`
-          );
-          doc.addImage(src, 'JPEG', x + offsetX, y + offsetY, drawW, drawH);
-          doc.restoreGraphicsState();
-        } catch(e) {
-          // Fallback: mostrar sense clip
-          try { doc.addImage(src, 'JPEG', ML + pi*(maxW+GAP0), y, maxW, rh0); } catch(e2) {}
-        }
+          doc.addImage(src, 'JPEG', x, y, dims[pi].w, dims[pi].h);
+        } catch(e) {}
       });
-      y += rh0 + GAP0;
+      y += rh + GAP0; // separació vertical = GAP0
     }
     y += 2;
   }
