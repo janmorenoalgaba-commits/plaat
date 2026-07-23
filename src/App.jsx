@@ -5152,9 +5152,11 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       const isFirst = pi === 0;
       const isLastPer = pi === persones.length - 1;
       const mateixaEmpresa = pi > 0 && (p.empresa||'') === (persones[pi-1]?.empresa||'');
-      // Calcular alçada real de la fila: pot ser més gran si el rol fa wrap
+      // Calcular alçada real de la fila: wrap del rol fins a xEmpText (empresa)
+      // Ample disponible per al rol = xEmpText - xRol - 2mm de marge
       const rolLH7 = 7.5*0.3528+0.5;
-      const rolLines7 = isFirst ? doc.splitTextToSize(rol.nombre||'', eRol-3) : [''];
+      const rolMaxW = xEmpText - xRol - 2; // no solapar amb l'empresa
+      const rolLines7 = isFirst ? doc.splitTextToSize(rol.nombre||'', rolMaxW) : [''];
       const rowH = Math.max(RH, rolLines7.length * rolLH7 + 2);
       checkPage(rowH);
       const midY = y + rowH/2;
