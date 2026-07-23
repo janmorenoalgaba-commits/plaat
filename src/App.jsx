@@ -5255,19 +5255,19 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       if (y + rh + 4 > PH - MB - 12) checkPage(rh + 4);
       // Centrar les fotos: calcular offset per centrar cada foto dins del seu espai
       const totalW = pair.length === 1 ? CW : CW;
+      const GAP0 = 4; // separació entre fotos (H i V igual)
       pair.forEach((f, pi) => {
         const src = f.url || f.data;
         if (!src) return;
         try {
-          const slotW = (CW - 4) / 2; // amplada de cada slot (2 fotos per fila)
+          const slotW = (CW - GAP0) / 2;
           const imgW = dims[pi].w;
           const imgH = dims[pi].h;
-          // Centrar la imatge dins del seu slot
-          const xOffset = ML + pi * (slotW + 4) + (slotW - imgW) / 2;
+          const xOffset = ML + pi * (slotW + GAP0) + (slotW - imgW) / 2;
           doc.addImage(src, 'JPEG', xOffset, y, imgW, imgH);
         } catch(e) {}
       });
-      y += rh + 3;
+      y += rh + GAP0; // mateixa separació vertical que horitzontal
     }
     y += 3;
   }
@@ -5297,12 +5297,12 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     ].forEach(([x,w,t]) => {
       doc.text(t, x+w/2, y + secH/2, { align:'center', baseline:'middle' });
     });
-    y += secH + 10; // 1cm espai entre capçalera grisa i primer tema (sense línia)
+    y += secH + 5; // 5mm espai entre capçalera grisa i primer tema (sense línia)
 
     // Textos de columnes ES/INICI/FI/RES dins de la fila grisa (sense fila blanca separada)
     // Ja s'han afegit a la fila grisa de secció anterior
 
-    actius.forEach(t => {
+    actius.forEach((t, tIdx) => {
       const fW3=(cDesc-5)/2;
       const ed = (t.entradas||[]).map((en, pi) => {
         const esNova = en.actaNum === vo.num;
@@ -5314,15 +5314,18 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         const lh85 = 8.5*0.3528+0.6;
         // Si és la primera entrada i hi ha títol, afegir l'alçada del títol
         const titolOffset = (pi === 0 && t.titulo) ? lh85 + 2 : 0;
-        const textH = lines.length*lh85+5+titolOffset;
+        const GAP = 2; // espai entre títol→text i text→fotos (igual)
+        const textH = lines.length*lh85 + 3 + titolOffset + GAP;
         const fotos=en.fotos||[]; const fotoRows=[]; let fotosH=0;
         for(let i=0;i<fotos.length;i+=2){
           const pair=[fotos[i],fotos[i+1]].filter(Boolean);
-          const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.url||f.data);const r=pr.height/pr.width;const h=Math.min(fW3*r,42);return{w:h/r,h};}catch(e){return{w:fW3,h:32};}});
+          // Mida màxima de foto: 38mm alçada per caber en columna cDesc
+          const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.url||f.data);const r=pr.height/pr.width;const h=Math.min(fW3*r,38);return{w:h/r,h};}catch(e){return{w:fW3,h:28};}});
           const rh=Math.max(...dims.map(d=>d.h));
-          fotoRows.push({pair,dims,rh}); fotosH+=rh+2;
+          fotoRows.push({pair,dims,rh}); fotosH+=rh+GAP;
         }
-        const h=Math.max(8,textH+fotosH);
+        // Alçada exacta del contingut (text + fotos) sense max mínim que talla fotos
+        const h = textH + fotosH + (fotos.length > 0 ? GAP : 0);
         return{en,esNova,estat,fill,lines,textH,fotoRows,h,lh:lh85};
       });
 
@@ -5370,7 +5373,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
           ty += e.lh;
         });
         // Fotos
-        let fy=ey+e.textH+titolH;
+        const GAP_FY = 2; // mateix espai que títol→text
+        let fy = ey + e.textH + GAP_FY;
         e.fotoRows.forEach(row=>{
           row.pair.forEach((f,pi)=>{
             const src=f.url||f.data;
@@ -5386,26 +5390,26 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
           });
           fy+=row.rh+2;
         });
-        // Valors columnes centrats en l'alçada de CADA entrada (no del tema sencer)
-        // titolOffset fa que la fila sigui més alta → el centre és correcte amb e.h/2
-        const midY = ey + e.h/2;
-        // Estat amb color de lletra segons brandbook
+        // Valors columnes alineats al PRINCIPI del text (top de l'entrada + offset titol)
+        const colY = ey + 3 + (titolH > 0 ? titolH : 0) + e.lh*0.8;
         const colorEstat = e.estat==='R' ? [44,94,16] : e.estat==='I'||e.estat==='INF' ? [12,68,124] : e.estat==='N' ? [0,0,0] : [124,74,0];
         doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
         doc.setTextColor(...colorEstat);
-        doc.text(e.estat, ML+cNum+cDesc+cEs/2, midY, { align:'center', baseline:'middle' });
+        doc.text(e.estat, ML+cNum+cDesc+cEs/2, colY, { align:'center', baseline:'middle' });
         doc.setTextColor(0,0,0);
         doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
         const isR=e.en.estado==='R'&&!e.esNova;
-        doc.text(isR?'':fmtFechaCorta(e.en.fecha), ML+cNum+cDesc+cEs+cIni/2, midY, { align:'center', baseline:'middle' });
-        doc.text(isR?fmtFechaCorta(e.en.fin||e.en.fecha):'', ML+cNum+cDesc+cEs+cIni+cFi/2, midY, { align:'center', baseline:'middle' });
+        doc.text(isR?'':fmtFechaCorta(e.en.fecha), ML+cNum+cDesc+cEs+cIni/2, colY, { align:'center', baseline:'middle' });
+        doc.text(isR?fmtFechaCorta(e.en.fin||e.en.fecha):'', ML+cNum+cDesc+cEs+cIni+cFi/2, colY, { align:'center', baseline:'middle' });
         doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
-        doc.text(e.en.resp||'', ML+cNum+cDesc+cEs+cIni+cFi+cRes/2, midY, { align:'center', baseline:'middle' });
+        doc.text(e.en.resp||'', ML+cNum+cDesc+cEs+cIni+cFi+cRes/2, colY, { align:'center', baseline:'middle' });
         ey+=e.h;
       });
 
       // SENSE línies verticals — sols línies horitzontals fines entre temes
-      setLW(LW_THIN); doc.line(ML, y, ML+CW, y); doc.line(ML, y+temaH, ML+CW, y+temaH);
+      // Eliminar línia superior del primer tema de cada secció
+      if (tIdx > 0) { setLW(LW_THIN); doc.line(ML, y, ML+CW, y); }
+      setLW(LW_THIN); doc.line(ML, y+temaH, ML+CW, y+temaH);
       y+=temaH;
     });
     y+=4;
