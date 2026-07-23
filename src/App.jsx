@@ -5238,10 +5238,10 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     // Fotos de 2 en 2 — amb salts de pàgina coherents
     const fotos = eo.fotos || [];
     // Separació exacta 5mm entre fotos (H i V)
-    // Cada foto omple exactament el seu slot (maxW x rh) sense deixar espai buit
+    // Les fotos es retallen (clip) per omplir el slot sense deformar-les
     const GAP0 = 5;
-    const maxW = (CW - GAP0) / 2; // ample exacte de cada foto
-    const rh0 = 45; // alçada fixa per a totes les fotos
+    const maxW = (CW - GAP0) / 2; // ample de cada slot
+    const rh0 = 45; // alçada fixa de cada slot
     for (let fi = 0; fi < fotos.length; fi += 2) {
       const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
       if (y + rh0 + GAP0 > PH - MB - 12) checkPage(rh0 + GAP0);
@@ -5249,14 +5249,39 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         const src = f.url || f.data;
         if (!src) return;
         try {
-          // Foto esquerra: x=ML, foto dreta: x=ML+maxW+GAP0
-          // Cada foto ocupa exactament maxW x rh0
-          // La separació horitzontal entre fotos = GAP0 exacte
+          const pr = doc.getImageProperties(src);
+          const imgW = pr.width, imgH = pr.height;
+          const ratio = imgW / imgH;
+          // Calcular dimensions per omplir el slot (object-fit: cover)
+          let drawW, drawH;
+          if (ratio > maxW / rh0) {
+            // Imatge més ampla que el slot → ajustar per alçada
+            drawH = rh0;
+            drawW = rh0 * ratio;
+          } else {
+            // Imatge més alta que el slot → ajustar per ample
+            drawW = maxW;
+            drawH = maxW / ratio;
+          }
+          // Centrar i retallar dins del slot
           const x = ML + pi * (maxW + GAP0);
-          doc.addImage(src, 'JPEG', x, y, maxW, rh0);
-        } catch(e) {}
+          const offsetX = (maxW - drawW) / 2;
+          const offsetY = (rh0 - drawH) / 2;
+          // Clip rect per no sortir del slot
+          doc.saveGraphicsState();
+          // Clip en coordenades jsPDF (punts)
+          const toPoints = mm => mm * 2.8346;
+          doc.internal.write(
+            `q ${toPoints(x)} ${toPoints(PH - y - rh0)} ${toPoints(maxW)} ${toPoints(rh0)} re W n`
+          );
+          doc.addImage(src, 'JPEG', x + offsetX, y + offsetY, drawW, drawH);
+          doc.restoreGraphicsState();
+        } catch(e) {
+          // Fallback: mostrar sense clip
+          try { doc.addImage(src, 'JPEG', ML + pi*(maxW+GAP0), y, maxW, rh0); } catch(e2) {}
+        }
       });
-      y += rh0 + GAP0; // separació vertical = GAP0 = separació horitzontal
+      y += rh0 + GAP0;
     }
     y += 2;
   }
