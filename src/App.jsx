@@ -5237,31 +5237,38 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
     // Fotos de 2 en 2 — amb salts de pàgina coherents
     const fotos = eo.fotos || [];
-    // Separació H i V igual entre fotos
-    const GAP0 = 5; // mm entre fotos, igual en totes les direccions
-    const slotW0 = (CW - GAP0) / 2; // amplada de cada slot (2 columnes)
-    const altMax0 = 50; // alçada màxima per foto
+    // Separació H i V igual entre fotos — GAP0 exacte
+    const GAP0 = 4; // mm — igual horitzontal i vertical
+    const slotW0 = (CW - GAP0) / 2; // ample exacte de cada slot
+    const altMax0 = 48; // alçada màxima foto
     for (let fi = 0; fi < fotos.length; fi += 2) {
       const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
+      // Calcular alçada normalitzada: totes les fotos d'una fila a la mateixa alçada
       const dims = pair.map(f => {
         try {
           const pr = doc.getImageProperties(f.url||f.data||'');
-          const r = pr.height / pr.width;
-          const h = Math.min(slotW0 * r, altMax0);
-          return { w: h/r, h };
+          const r = pr.height / pr.width; // ratio h/w
+          // Escalar per omplir el slot en ample, limitar a altMax0
+          const hFromW = slotW0 * r;
+          const h = Math.min(hFromW, altMax0);
+          const w = h / r; // ample proporcional
+          return { w, h };
         } catch(e) { return { w: slotW0, h: 38 }; }
       });
-      const rh = Math.max(...dims.map(d => d.h));
+      // Usar la mateixa alçada per a les dues fotos de la fila (la menor)
+      const rh = Math.min(...dims.map(d => d.h)); // mateixa alçada per a totes
       if (y + rh + GAP0 > PH - MB - 12) checkPage(rh + GAP0);
       pair.forEach((f, pi) => {
         const src = f.url || f.data;
         if (!src) return;
         try {
-          // xInici de cada slot: slot 0 = ML, slot 1 = ML + slotW0 + GAP0
+          // Cada foto ocupa exactament slotW0 d'ample i rh d'alçada
+          // Slot 0: x=ML, Slot 1: x=ML+slotW0+GAP0
+          // La separació entre les dues fotos = GAP0
           const xSlot = ML + pi * (slotW0 + GAP0);
-          // Centrar la imatge dins del slot
-          const xCentered = xSlot + (slotW0 - dims[pi].w) / 2;
-          doc.addImage(src, 'JPEG', xCentered, y, dims[pi].w, dims[pi].h);
+          const w = rh / (dims[pi].h / dims[pi].w); // ample proporcional a rh
+          const xCentered = xSlot + (slotW0 - w) / 2;
+          doc.addImage(src, 'JPEG', xCentered, y, w, rh);
         } catch(e) {}
       });
       y += rh + GAP0; // separació vertical = GAP0 (igual que horitzontal)
