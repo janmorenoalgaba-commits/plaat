@@ -4233,9 +4233,17 @@ function ModuloActaVO({ obra, onSave }) {
         <textarea placeholder="Describe brevemente el estado general de la obra en esta visita..." value={vo.estadoObra?.descripcion||''} onChange={e => updEstado('descripcion', e.target.value)} style={{ minHeight: 64, marginBottom: 10 }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
           {(vo.estadoObra?.fotos||[]).map(f => (
-            <div key={f.id} style={{ position: 'relative', width: isMobile ? 80 : 110, height: isMobile ? 60 : 80 }}>
-              <img src={fotoSrc(f)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }} />
-              <button onClick={() => setConfirmacion({ titulo: 'Eliminar foto', texto: 'Vas a eliminar esta foto del estado de obra.', onSi: () => { delFotoEstado(f.id); setConfirmacion(null); } })} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
+            <div key={f.id} style={{ position: 'relative' }}>
+              <div style={{ position: 'relative', width: isMobile ? 80 : 110, height: isMobile ? 60 : 80 }}>
+                <img src={fotoSrc(f)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 7, display: 'block' }} />
+                <button onClick={() => setConfirmacion({ titulo: 'Eliminar foto', texto: 'Vas a eliminar esta foto del estado de obra.', onSi: () => { delFotoEstado(f.id); setConfirmacion(null); } })} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
+              </div>
+              <input
+                value={f.caption||''}
+                onChange={e => guardarVO({ ...vo, estadoObra: { ...(vo.estadoObra||{}), fotos: (vo.estadoObra.fotos||[]).map(x => x.id===f.id ? {...x, caption: e.target.value} : x) }})}
+                placeholder="Ubicació / títol..."
+                style={{ width: isMobile ? 80 : 110, fontSize: 10, padding: '2px 4px', marginTop: 3, borderRadius: 4 }}
+              />
             </div>
           ))}
           <button onClick={addFotoEstado} style={{ width: isMobile ? 80 : 110, height: isMobile ? 60 : 80, borderRadius: 7, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 22, color: '#D0D0CB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
@@ -5237,39 +5245,45 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
     // Fotos de 2 en 2 — amb salts de pàgina coherents
     const fotos = eo.fotos || [];
-    const fW2 = (CW - 6) / 2;
+    const GAP0 = 4; // separació entre fotos, igual H i V
+    const fW2 = (CW - GAP0) / 2; // amplada slot foto
+    const altMax0 = 52; // alçada màxima per foto
     for (let fi = 0; fi < fotos.length; fi += 2) {
       const pair = [fotos[fi], fotos[fi+1]].filter(Boolean);
-      // Reduir mida màxima per prioritzar que càpiguen a la pàg 1 (màx 52mm alçada)
-      const altMax = 52;
+      // Caption de la primera foto del parell (si en té)
+      const caption = pair[0]?.caption || '';
+      const captionH = caption ? 5 : 0;
       const dims = pair.map(f => {
         try {
-          const pr = doc.getImageProperties(f.url||f.data);
+          const pr = doc.getImageProperties(f.url||f.data||'');
           const r = pr.height / pr.width;
-          const h = Math.min(fW2 * r, altMax);
+          const h = Math.min(fW2 * r, altMax0);
           return { w: h/r, h };
         } catch(e) { return { w: fW2, h: 40 }; }
       });
       const rh = Math.max(...dims.map(d => d.h));
-      // Saltar pàgina NOMÉS si no hi cap de cap manera
-      if (y + rh + 4 > PH - MB - 12) checkPage(rh + 4);
-      // Centrar les fotos: calcular offset per centrar cada foto dins del seu espai
-      const totalW = pair.length === 1 ? CW : CW;
-      const GAP0 = 4; // separació entre fotos (H i V igual)
+      const rowH = captionH + rh + GAP0;
+      if (y + rowH > PH - MB - 12) checkPage(rowH);
+      // Dibuixar caption
+      if (caption) {
+        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+        doc.text(caption, ML, y + 3.5, { baseline:'middle' });
+        y += captionH;
+      }
+      // Dibuixar fotos centrades
       pair.forEach((f, pi) => {
         const src = f.url || f.data;
         if (!src) return;
         try {
-          const slotW = (CW - GAP0) / 2;
           const imgW = dims[pi].w;
           const imgH = dims[pi].h;
-          const xOffset = ML + pi * (slotW + GAP0) + (slotW - imgW) / 2;
+          const xOffset = ML + pi * (fW2 + GAP0) + (fW2 - imgW) / 2;
           doc.addImage(src, 'JPEG', xOffset, y, imgW, imgH);
         } catch(e) {}
       });
-      y += rh + GAP0; // mateixa separació vertical que horitzontal
+      y += rh + GAP0;
     }
-    y += 3;
+    y += 2;
   }
 
   // Seccions de temes tractats
@@ -5281,9 +5295,24 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     if (!actius.length) return;
 
     const secH = 5.5;
-    // Salt de pàgina coherent: la secció necessita la capçalera + almenys un tema (mínim 30mm)
-    // Si no cap tot, salta de pàgina
-    checkPage(secH + 25);
+    // Salt de pàgina: calcular alçada real del primer tema per no quedar la secció sola
+    const primerTema = actius[0];
+    let altPrimerTema = 12; // mínim
+    if (primerTema) {
+      const lhCalc = 8.5*0.3528+0.6;
+      (primerTema.entradas||[]).forEach((en, pi2) => {
+        const ls = doc.splitTextToSize(en.texto||'', cDesc-3);
+        const tOff = (pi2===0 && primerTema.titulo) ? lhCalc+2 : 0;
+        const fots = (en.fotos||[]);
+        const fotRows = Math.ceil(fots.length/2);
+        altPrimerTema += ls.length*lhCalc + 5 + tOff + fotRows*42;
+      });
+    }
+    // Si la secció + primer tema no caben, saltar de pàgina sencera
+    if (y + secH + 5 + altPrimerTema > PH - MB - 12) {
+      doc.addPage(); pagActual++;
+      dibuixarCapçalera(false); dibuixarPeu();
+    }
     doc.setFillColor(...GRIS15);
     doc.rect(ML, y, CW, secH, 'F');
     // SENSE rect de contorn ni línies — igual que DF/Contratista/Estat obra
@@ -5415,20 +5444,23 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     y+=4;
   });
 
-  // ── NOTA + TAULA FIRMES ────────────────────────────────────────────────────
-  checkPage(45);
+  // ── NOTA + TAULA FIRMES — tot a la mateixa pàgina si és possible ────────────
+  const notaFirmes=doc.splitTextToSize(T.nota,CW);
+  const altNotaFirmes = 4 + 3 + notaFirmes.length*3.8 + 4 + 8 + 55; // nota+conforme+firmes
+  // Si no cap tot, saltar sencer a la pàgina nova
+  if (y + altNotaFirmes > PH - MB - 12) {
+    doc.addPage(); pagActual++;
+    dibuixarCapçalera(false); dibuixarPeu();
+  }
   y+=4;
-  // Línia 0.5pt just sobre la nota (més gruixuda que les de les taules)
   setLW(0.5); doc.line(ML, y, ML+CW, y); setLW(LW);
   y+=3;
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-  const notaFirmes=doc.splitTextToSize(T.nota,CW);
   doc.text(notaFirmes,ML,y); y+=notaFirmes.length*3.8+4;
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
   doc.text(T.conforme,ML,y); y+=8;
 
-  // Taula de firmes — centrades, empresa sota el rol, màx 3 per fila
-  // Construir llista de firmants amb rol + empresa
+  // Taula de firmes
   checkPage(55);
   const fH2 = 24; // alçada fila firma
   const lh65 = 6.5*0.3528+0.4;
