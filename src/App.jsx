@@ -5157,10 +5157,11 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       const rolMaxW = xEmpText - xRol - 2;
       const rolLines7 = isFirst ? doc.splitTextToSize(rol.nombre||'', rolMaxW) : [];
       // La fila SEMPRE té alçada RH — el rol multilinea s'escriu centrat verticalment
-      // dins de la fila igual que la resta de columnes
-      const rowH = RH;
+      // Si el rol fa wrap i és l'última persona del grup, afegim espai extra per no solapar la fila grisa
+      const extraH = (isLastPer && rolLines7.length > 1) ? (rolLines7.length - 1) * rolLH7 : 0;
+      const rowH = RH + extraH;
       checkPage(rowH);
-      const midY = y + rowH/2;
+      const midY = y + RH/2; // midY basat en RH fix, no en rowH
 
       // ROL — bold, sols primera persona, centrat verticalment dins de RH
       if (isFirst && rolLines7.length > 0) {
@@ -5223,10 +5224,11 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       if (!omitirLinia) {
         setLW(LW);
         const xIniLinia = (!isFirst && mateixaEmpresa) ? xNom : xEmpText;
-        doc.line(xIniLinia, y + rowH, ML+CW, y + rowH);
+        // La línia va sempre a y + RH (alçada visual de la fila), l'espai extra queda sota
+        doc.line(xIniLinia, y + RH, ML+CW, y + RH);
       }
 
-      y += rowH; // alçada real de la fila (pot ser > RH si rol fa wrap)
+      y += rowH; // rowH = RH + extraH si rol fa wrap i és última persona
     });
   }
 
