@@ -4206,10 +4206,8 @@ function ModuloActaVO({ obra, onSave }) {
                         />
                         <button
                           onClick={() => {
-                            const newGrupId = uid();
-                            const newGrup = 'NOU GRUP ' + newGrupId.slice(-3).toUpperCase();
-                            // Afegir un nou rol buit amb aquest grup
-                            guardarVO({ ...vo, equipo: [...vo.equipo, { id: uid(), nombre: 'NOU ROL', grupo: newGrup, personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] }] });
+                            // Afegir un nou rol buit al MATEIX grup
+                            guardarVO({ ...vo, equipo: [...vo.equipo, { id: uid(), nombre: 'NOU ROL', grupo: g, personas: [{ id: uid(), empresa: '', nombre: '', email: '', tel: '', asistio: false }] }] });
                           }}
                           title="Añadir rol a este grupo"
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A5A5A0', fontSize: 13, lineHeight: 1 }}>+</button>
@@ -4997,24 +4995,59 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.text(val, fx, filaY, { baseline:'middle' });
     fx += doc.getTextWidth(val) + 8;
   });
-  // FASE alineat a la dreta
-  const faseLabelW = doc.getStringUnitWidth(T.fase.toUpperCase()) * 7.5 / doc.internal.scaleFactor;
-  const faseValW   = doc.getStringUnitWidth((vo.fase || '').toUpperCase()) * 7.5 / doc.internal.scaleFactor;
-  let rfx = ML + CW - 3;
-  doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text((vo.fase || '').toUpperCase(), rfx, filaY, { baseline:'middle', align:'right' });
-  rfx -= faseValW + 2;
-  doc.setFont('helvetica','bold');
-  doc.text(T.fase.toUpperCase(), rfx, filaY, { baseline:'middle', align:'right' });
-
-  setLW(LW); doc.line(ML, y + filaH, ML+CW, y + filaH); // línia inferior fina 0.25pt
-  y += filaH + 5;
+  // FASE alineat a la dreta — si el text és massa llarg, va a sota de ACTA
+  doc.setFontSize(7.5);
+  const faseLabel = T.fase.toUpperCase();
+  const faseVal   = (vo.fase || '').toUpperCase();
+  const faseLabelW2 = doc.getTextWidth(faseLabel);
+  const faseValW2   = doc.getTextWidth(faseVal);
+  const faseFullW   = faseLabelW2 + 2 + faseValW2 + 3;
+  // Espai disponible a la dreta (des de fx fins al marge dret)
+  const espaiDreta = ML + CW - fx - 5;
+  const filaH2 = faseFullW > espaiDreta ? filaH * 2 : filaH; // si solapa, doblar alçada
+  // Redibuxar la fila amb l'alçada correcta (les línies ja s'han dibuixat, reescrivim)
+  if (filaH2 > filaH) {
+    // Cobrir text anterior amb blanc i redibuixar fila més alta
+    doc.setFillColor(255,255,255);
+    doc.rect(ML-1, y-1, CW+2, filaH+2, 'F');
+    // Redibuxar tres parelles a la primera línia
+    let fx2 = ML + 3;
+    tresParelles.forEach(([label, val]) => {
+      doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+      doc.text(label, fx2, y + filaH/2, { baseline:'middle' });
+      fx2 += doc.getTextWidth(label) + 2;
+      doc.setFont('helvetica','normal');
+      doc.text(val, fx2, y + filaH/2, { baseline:'middle' });
+      fx2 += doc.getTextWidth(val) + 8;
+    });
+    // FASE a la segona línia, alineat a l'esquerra sota ACTA
+    const acteValW = doc.getTextWidth(String(num));
+    const acteX = ML + 3 + doc.getTextWidth(T.acta.toUpperCase()) + 2;
+    doc.setFont('helvetica','bold');
+    doc.text(faseLabel, ML + 3, y + filaH + filaH/2, { baseline:'middle' });
+    doc.setFont('helvetica','normal');
+    doc.text(faseVal, ML + 3 + faseLabelW2 + 2, y + filaH + filaH/2, { baseline:'middle' });
+    setLW(LW); doc.line(ML, y, ML+CW, y);
+    setLW(LW); doc.line(ML, y + filaH2, ML+CW, y + filaH2);
+    y += filaH2 + 5;
+  } else {
+    // FASE normal a la dreta
+    let rfx = ML + CW - 3;
+    doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    doc.text(faseVal, rfx, filaY, { baseline:'middle', align:'right' });
+    rfx -= faseValW2 + 2;
+    doc.setFont('helvetica','bold');
+    doc.text(faseLabel, rfx, filaY, { baseline:'middle', align:'right' });
+    setLW(LW); doc.line(ML, y + filaH, ML+CW, y + filaH);
+    y += filaH + 5;
+  }
 
   // ── TAULA EQUIP TÈCNIC — format Word exacte ──────────────────────────────
   // Columnes ajustades per evitar solapaments:
   // ROL: 52mm | EMP: 14mm | NOM: 28mm | EMAIL: 58mm | TEL: resta (~28mm)
-  const eRol=50, eEmp=27, eNom=28, eEmail=47, eAS=8, eTel=CW-eRol-eEmp-eNom-eEmail-eAS; // eTel=20mm, eAS=8mm
-  const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp, xEmail=ML+eRol+eEmp+eNom, xTel=ML+eRol+eEmp+eNom+eEmail, xAS=ML+eRol+eEmp+eNom+eEmail+eTel;
+  // Columnes desplaçades 5mm a l'esquerra, 3mm extra entre empresa i nom
+  const eRol=45, eEmp=20, eGapEN=3, eNom=27, eEmail=50, eAS=8, eTel=CW-eRol-eEmp-eGapEN-eNom-eEmail-eAS;
+  const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp+eGapEN, xEmail=ML+eRol+eEmp+eGapEN+eNom, xTel=ML+eRol+eEmp+eGapEN+eNom+eEmail, xAS=ML+eRol+eEmp+eGapEN+eNom+eEmail+eTel;
   const equipRols = vo.equipo || [];
   const RH = 6; // alçada fila persona
 
@@ -5066,7 +5099,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       const mateixaEmpresa = pi > 0 && (p.empresa||'') === (persones[pi-1]?.empresa||'');
       const midY = y + RH/2;
 
-      // ROL — bold, solo primera persona
+      // ROL — bold, solo primera persona, wrap si és massa llarg
       if (isFirst) {
         doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
         const rolLines = doc.splitTextToSize(rol.nombre||'', eRol-3);
