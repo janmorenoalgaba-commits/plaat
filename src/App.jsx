@@ -5102,6 +5102,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   // Nom/Email/Tel desplaçats 5mm a l'esquerra respecte l'original
   const eRol=50, eEmp=17, eGapEN=3, eNom=27, eEmail=50, eAS=8, eTel=CW-eRol-eEmp-eGapEN-eNom-eEmail-eAS;
   const xRol=ML, xEmp=ML+eRol, xNom=ML+eRol+eEmp+eGapEN, xEmail=ML+eRol+eEmp+eGapEN+eNom, xTel=ML+eRol+eEmp+eGapEN+eNom+eEmail, xAS=ML+eRol+eEmp+eGapEN+eNom+eEmail+eTel;
+  // Empresa: text i línia 15mm més a l'esquerra (evita solapament amb el nom)
+  const xEmpText = xEmp - 15;
   const equipRols = vo.equipo || [];
   const RH = 6; // alçada fila persona
 
@@ -5167,7 +5169,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       // EMPRESA — primera persona o si és nova empresa
       if (isFirst || !mateixaEmpresa) {
         doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        doc.text(p.empresa||'', xEmp+1, midY, {baseline:'middle'}); // empresa centrada verticalment
+        doc.text(p.empresa||'', xEmpText+1, midY, {baseline:'middle'}); // empresa centrada verticalment
       }
 
       // NOM
@@ -5215,7 +5217,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       const omitirLinia = isLastOfGroup && isLastPer;
       if (!omitirLinia) {
         setLW(LW);
-        const xIniLinia = (!isFirst && mateixaEmpresa) ? xNom : xEmp;
+        const xIniLinia = (!isFirst && mateixaEmpresa) ? xNom : xEmpText;
         doc.line(xIniLinia, y + rowH, ML+CW, y + rowH);
       }
 
