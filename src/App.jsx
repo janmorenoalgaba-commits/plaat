@@ -5156,9 +5156,9 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       const rolLH7 = 7.5*0.3528+0.5;
       const rolMaxW = xEmpText - xRol - 2;
       const rolLines7 = isFirst ? doc.splitTextToSize(rol.nombre||'', rolMaxW) : [];
-      // La fila SEMPRE té alçada RH — el rol multilinea s'escriu centrat verticalment
-      // Si el rol fa wrap i és l'última persona del grup, afegim espai extra per no solapar la fila grisa
-      const extraH = (isLastPer && rolLines7.length > 1) ? (rolLines7.length - 1) * rolLH7 : 0;
+      // Si el rol fa wrap, afegir espai extra SEMPRE (no només a l'última persona)
+      // per evitar solapament entre el text del rol i la fila de sota
+      const extraH = (isFirst && rolLines7.length > 1) ? (rolLines7.length - 1) * rolLH7 : 0;
       const rowH = RH + extraH;
       checkPage(rowH);
       const midY = y + RH/2; // midY basat en RH fix, no en rowH
