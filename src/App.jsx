@@ -4352,166 +4352,228 @@ function ModuloActaVO({ obra, onSave }) {
 
 // Componente de un tema (para evitar closures stale en los selects)
 function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAddEntrada, onAddFoto, onDelFoto, onDelEntrada, onMover, onReordenar, onDel }) {
+  const isMobile = useIsMobile();
   const [abierto, setAbierto] = useState(false);
-  const [editNum, setEditNum] = useState(false);
-  const [editEnt, setEditEnt] = useState(null); // id entrada en edición
+  const [editEnt, setEditEnt] = useState(null);
   const [txtEdit, setTxtEdit] = useState('');
   const [confirmFoto, setConfirmFoto] = useState(null);
+  const [openResp, setOpenResp] = useState(null);   // id entrada amb el selector de resp obert
+  const [showAdmin, setShowAdmin] = useState(false); // controls poc freqüents
+
   const ult = t.entradas[t.entradas.length - 1] || { texto: '', actaNum: null, estado: 'P' };
   const ultEsNueva = ult.actaNum === voNum;
-  const tituloDisplay = t.titulo || ult.texto || 'Sin título';
+  const tituloDisplay = t.titulo || ult.texto || 'Sense títol';
+  const NUM = { fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em' };
+
   return (
-    <div style={{ border: `1px solid ${abierto ? '#C5C4BE' : '#E8E7E1'}`, borderRadius: 9, marginBottom: 6, overflow: 'hidden' }}>
-      <div onClick={() => setAbierto(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 12px', cursor: 'pointer', background: abierto ? '#FAFAF8' : '#fff' }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#52524E', flexShrink: 0, minWidth: 34 }}>{t.num}</span>
-        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#18180F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tituloDisplay}</span>
+    <div style={{ background: '#fff', border: `1px solid ${abierto ? '#D8D7D1' : '#EDECE7'}`, borderRadius: 10, marginBottom: 5, overflow: 'hidden', transition: 'border-color .15s' }}>
+
+      {/* ── Capçalera del tema ─────────────────────────────────────── */}
+      <div onClick={() => setAbierto(v => !v)}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '10px 12px' : '9px 13px', cursor: 'pointer' }}>
+        <span style={{ ...NUM, fontSize: 11.5, fontWeight: 700, color: '#8A8A85', flexShrink: 0, minWidth: 32 }}>{t.num}</span>
+        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: '#141412', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tituloDisplay}</span>
+        {/* Punts d'estat: un per seguiment */}
+        {!isMobile && t.entradas.length > 1 && (
+          <span style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+            {t.entradas.slice(-6).map(en => (
+              <span key={en.id} style={{ width: 5, height: 5, borderRadius: '50%', background: (ESTADOS_VO[en.estado]||est).color, opacity: .55 }} />
+            ))}
+          </span>
+        )}
         {ultEsNueva
-          ? <Pill label="N — Nueva" bg="#F2F1ED" color="#52524E" />
+          ? <Pill label="Nova" bg="#F2F1ED" color="#52524E" />
           : <Pill label={est.label} bg={est.bg} color={est.color} />}
+        <span style={{ fontSize: 9, color: '#C4C3BE', flexShrink: 0, transition: 'transform .2s', transform: abierto ? 'rotate(90deg)' : 'none' }}>▶</span>
       </div>
+
       {abierto && (
-        <div className="fade" style={{ padding: '4px 12px 12px', borderTop: '1px solid #F2F1ED' }}>
-          {/* Editar títol del tema */}
-          <div style={{ marginBottom: 8, paddingTop: 6 }}>
-            <label style={{ fontSize: 11, color: '#9B9B97', display: 'block', marginBottom: 3 }}>Título del tema:</label>
+        <div className="fade" style={{ borderTop: '1px solid #F2F1ED' }}>
+
+          {/* ── Títol del tema — el camp protagonista ──────────────── */}
+          <div style={{ padding: isMobile ? '10px 12px 6px' : '11px 13px 7px' }}>
             <input value={t.titulo||''} onChange={e => onUpdTema(t.id, 'titulo', e.target.value)}
-              placeholder="Título del tema..." style={{ fontWeight: 600, fontSize: 13 }} />
+              placeholder="Títol del tema"
+              style={{ fontWeight: 600, fontSize: 14, padding: '7px 10px', border: '1px solid #EDECE7', background: '#FAFAF8' }} />
           </div>
-          {/* Editar número de tema */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, color: '#9B9B97' }}>Nº tema:</span>
-            {editNum
-              ? <input autoFocus value={t.num} onChange={e => onUpdTema(t.id, 'num', e.target.value)} onBlur={() => setEditNum(false)}
-                  style={{ width: 70, fontSize: 12, padding: '3px 6px' }} />
-              : <><span style={{ fontSize: 12, fontWeight: 600, color: '#141412', padding: '2px 6px', borderRadius: 5, border: '1px solid #E0DFD9' }}>{t.num}</span><button onClick={() => setEditNum(true)} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:11, padding:'0 2px' }}>✏️</button></>}
 
-            {/* Reordenar dentro de la sección */}
-            <button onClick={() => onReordenar(-1)} title="Subir" style={{ background:'none', border:'1px solid #E0DFD9', borderRadius:6, cursor:'pointer', color:'#6B6B66', fontSize:12, padding:'2px 7px', marginLeft:8 }}>↑</button>
-            <button onClick={() => onReordenar(1)} title="Bajar" style={{ background:'none', border:'1px solid #E0DFD9', borderRadius:6, cursor:'pointer', color:'#6B6B66', fontSize:12, padding:'2px 7px' }}>↓</button>
+          {/* ── Seguiments ────────────────────────────────────────── */}
+          <div style={{ padding: isMobile ? '0 12px' : '0 13px' }}>
+            {t.entradas.map(en => {
+              const esNueva = en.actaNum === voNum;
+              const resps = Array.isArray(en.resp) ? en.resp : (en.resp ? [en.resp] : []);
+              const e = ESTADOS_VO[en.estado] || est;
+              const editant = editEnt === en.id;
 
-            {/* Mover a otra sección */}
-            {secciones && secciones.length > 1 && (
-              <>
-                <span style={{ fontSize: 11, color: '#9B9B97', marginLeft: 10 }}>Mover a:</span>
-                <select value={secId} onChange={e => onMover(e.target.value)} style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6 }}>
-                  {secciones.map(s => <option key={s.id} value={s.id}>{s.codigo} {s.titulo}</option>)}
-                </select>
-              </>
+              return (
+                <div key={en.id} style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                  {/* Rail d'estat — mateix color que el PDF */}
+                  <div style={{ width: 3, borderRadius: 2, background: esNueva ? '#D8D7D1' : e.color, opacity: esNueva ? 1 : .45, flexShrink: 0 }} />
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* Franja de metadades */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 5 }}>
+                      <span style={{ ...NUM, fontSize: 11, color: '#9B9B97', fontWeight: 500 }}>{fmtShort(en.fecha)}</span>
+                      {esNueva && <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 4, background: '#F2F1ED', color: '#6B6B66', fontWeight: 700, letterSpacing: '.04em' }}>NOVA</span>}
+                      <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
+                        style={{ width: 'auto', fontSize: 11, padding: '2px 5px', borderRadius: 5, border: `1px solid ${e.color}35`, background: e.bg, color: e.color, fontWeight: 600 }}>
+                        {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                      </select>
+                      {en.estado === 'R' && (
+                        <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)}
+                          style={{ width: 'auto', fontSize: 11, padding: '2px 5px', borderRadius: 5 }} />
+                      )}
+
+                      {/* Responsables: només els triats + botó per obrir */}
+                      {resps.map(r => (
+                        <span key={r} onClick={() => onUpdEntrada(t.id, en.id, 'resp', resps.filter(x => x !== r))}
+                          title="Treure responsable"
+                          style={{ ...NUM, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#1C1C1A', color: '#fff', cursor: 'pointer', letterSpacing: '.03em' }}>{r}</span>
+                      ))}
+                      <button onClick={() => setOpenResp(openResp === en.id ? null : en.id)}
+                        title="Assignar responsable"
+                        style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px dashed #DEDDD8', background: 'transparent', color: '#9B9B97', cursor: 'pointer' }}>
+                        {resps.length ? '+' : '+ resp'}
+                      </button>
+
+                      <span style={{ marginLeft: 'auto', display: 'flex', gap: 2, flexShrink: 0 }}>
+                        <button onClick={() => { setEditEnt(en.id); setTxtEdit(en.texto); }} title="Editar text"
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'2px 4px' }}>✏️</button>
+                        <button onClick={() => onDelEntrada(t.id, en.id)} title="Eliminar seguiment"
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#D4D3CE', fontSize:15, lineHeight:1, padding:'0 3px' }}>×</button>
+                      </span>
+                    </div>
+
+                    {/* Selector de responsables desplegat */}
+                    {openResp === en.id && (
+                      <div className="fade" style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '7px 8px', background: '#FAFAF8', borderRadius: 7, marginBottom: 6 }}>
+                        {RESP_VO.map(r => {
+                          const actiu = resps.includes(r);
+                          return (
+                            <button key={r} onClick={() => onUpdEntrada(t.id, en.id, 'resp', actiu ? resps.filter(x=>x!==r) : [...resps, r])}
+                              style={{ ...NUM, padding: '3px 9px', borderRadius: 5, fontSize: 11, fontWeight: actiu?700:500,
+                                border: `1px solid ${actiu?'#1C1C1A':'#E5E4DF'}`, background: actiu?'#1C1C1A':'#fff', color: actiu?'#fff':'#6B6B66', cursor:'pointer' }}>{r}</button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Text del seguiment — el contingut mana */}
+                    {editant ? (
+                      <div>
+                        <textarea autoFocus value={txtEdit} onChange={ev => setTxtEdit(ev.target.value)}
+                          style={{ minHeight: isMobile ? 120 : 96, fontSize: 13, lineHeight: 1.65, resize: 'vertical', marginBottom: 7 }} />
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <Btn sm primary onClick={() => { onUpdEntrada(t.id, en.id, 'texto', txtEdit.trim()); setEditEnt(null); }}>Desar</Btn>
+                          <Btn sm onClick={() => setEditEnt(null)}>Cancel·lar</Btn>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 13, color: '#18180F', lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                        {en.texto || <span style={{ color: '#C5C4BE', fontStyle: 'italic' }}>Sense text</span>}
+                      </div>
+                    )}
+
+                    {/* Fotos */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                      {(en.fotos||[]).map(ft => (
+                        <div key={ft.id} style={{ position: 'relative', width: 68, height: 51 }}>
+                          <img src={fotoSrc(ft)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 5, display: 'block' }} />
+                          <button onClick={() => setConfirmFoto({ eId: en.id, fId: ft.id })}
+                            style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 15, height: 15, cursor: 'pointer', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                        </div>
+                      ))}
+                      <button onClick={() => onAddFoto(t.id, en.id)}
+                        style={{ width: 68, height: 51, borderRadius: 5, border: '1.5px dashed #E5E4DF', background: '#FAFAF8', cursor: 'pointer', fontSize: 16, color: '#C5C4BE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            <NuevaEntrada onAdd={txt => onAddEntrada(t.id, txt)} />
+          </div>
+
+          {/* ── Peu administratiu — poc freqüent, discret ──────────── */}
+          <div style={{ borderTop: '1px solid #F2F1ED', marginTop: 10 }}>
+            <button onClick={() => setShowAdmin(v => !v)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '8px 13px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#A5A5A0' }}>
+              <span style={{ fontSize: 8, transition: 'transform .2s', transform: showAdmin ? 'rotate(90deg)' : 'none' }}>▶</span>
+              Numeració, ordre i secció
+            </button>
+            {showAdmin && (
+              <div className="fade" style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', padding: '0 13px 11px' }}>
+                <input value={t.num} onChange={e => onUpdTema(t.id, 'num', e.target.value)}
+                  style={{ ...NUM, width: 62, fontSize: 12, padding: '4px 7px', fontWeight: 600 }} />
+                <button onClick={() => onReordenar(-1)} title="Pujar"
+                  style={{ border:'1px solid #E5E4DF', borderRadius:6, background:'#fff', cursor:'pointer', color:'#6B6B66', fontSize:12, padding:'4px 9px' }}>↑</button>
+                <button onClick={() => onReordenar(1)} title="Baixar"
+                  style={{ border:'1px solid #E5E4DF', borderRadius:6, background:'#fff', cursor:'pointer', color:'#6B6B66', fontSize:12, padding:'4px 9px' }}>↓</button>
+                {secciones && secciones.length > 1 && (
+                  <select value={secId} onChange={e => onMover(e.target.value)}
+                    style={{ width: 'auto', maxWidth: isMobile ? 150 : 200, fontSize: 11, padding: '4px 7px', borderRadius: 6 }}>
+                    {secciones.map(s => <option key={s.id} value={s.id}>{s.codigo} {s.titulo}</option>)}
+                  </select>
+                )}
+                <span style={{ marginLeft: 'auto' }}><Btn sm danger onClick={onDel}>Eliminar tema</Btn></span>
+              </div>
             )}
           </div>
-
-          {t.entradas.map(en => {
-            const esNueva = en.actaNum === voNum;
-            const resps = Array.isArray(en.resp) ? en.resp : (en.resp ? [en.resp] : []);
-            return (
-              <div key={en.id} style={{ marginBottom: 10, background: '#FAFAF8', borderRadius: 10, border: '1px solid #F0EFEA', overflow: 'hidden' }}>
-                {/* Barra superior: data + estat + responsables */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', padding: '7px 10px', borderBottom: '1px solid #F0EFEA', background: esNueva ? '#F5F4F0' : '#fff' }}>
-                  <span style={{ fontSize: 11, color: '#9B9B97', whiteSpace: 'nowrap', fontWeight: 500 }}>{fmtShort(en.fecha)}</span>
-                  {esNueva && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, background: '#F2F1ED', color: '#52524E', fontWeight: 700, border: '1px solid #E0DFD9' }}>N</span>}
-                  <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
-                    style={{ fontSize: 11, padding: '2px 6px', borderRadius: 6, border: `1px solid ${ESTADOS_VO[en.estado].color}50`, background: ESTADOS_VO[en.estado].bg, color: ESTADOS_VO[en.estado].color, fontWeight: 600, width: 'auto' }}>
-                    {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
-                  {en.estado === 'R' && (
-                    <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)}
-                      style={{ fontSize: 11, padding: '2px 6px', borderRadius: 6, border: '1px solid #E0DFD9', width: 'auto' }} />
-                  )}
-                  {/* Responsables — botons compactes */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center', marginLeft: 'auto' }}>
-                    {RESP_VO.map(r => {
-                      const actiu = resps.includes(r);
-                      return (
-                        <button key={r} onClick={() => {
-                          const nou = actiu ? resps.filter(x=>x!==r) : [...resps, r];
-                          onUpdEntrada(t.id, en.id, 'resp', nou);
-                        }} style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: actiu?700:400, border: `1px solid ${actiu?'#18180F':'#E0DFD9'}`, background: actiu?'#18180F':'transparent', color: actiu?'#fff':'#9B9B97', cursor:'pointer', lineHeight: 1.4 }}>
-                          {r}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* Eliminar entrada */}
-                  <button onClick={() => onDelEntrada(t.id, en.id)} title="Eliminar" style={{ background:'none', border:'none', cursor:'pointer', color:'#D4D3CE', fontSize:16, lineHeight:1, padding:'0 2px', flexShrink:0 }}>×</button>
-                </div>
-
-                {/* Text editable — ample total, textarea auto-altura */}
-                <div style={{ padding: '8px 10px' }}>
-                  {editEnt === en.id
-                    ? <div>
-                        <textarea
-                          autoFocus
-                          value={txtEdit}
-                          onChange={e => setTxtEdit(e.target.value)}
-                          style={{ minHeight: 80, fontSize: 13, lineHeight: 1.6, resize: 'vertical', marginBottom: 6 }}
-                        />
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <Btn sm primary onClick={() => { onUpdEntrada(t.id, en.id, 'texto', txtEdit.trim()); setEditEnt(null); }}>Guardar</Btn>
-                          <Btn sm onClick={() => setEditEnt(null)}>✕</Btn>
-                        </div>
-                      </div>
-                    : <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                        <div
-                          style={{ flex: 1, fontSize: 13, color: '#18180F', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', cursor: 'text', minHeight: 24 }}
-                          onClick={() => { setEditEnt(en.id); setTxtEdit(en.texto); }}
-                          title="Clic per editar"
-                        >
-                          {en.texto || <span style={{ color: '#C5C4BE' }}>Escriu el text del seguiment...</span>}
-                        </div>
-                        <button onClick={() => { setEditEnt(en.id); setTxtEdit(en.texto); }} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'2px', flexShrink:0 }}>✏️</button>
-                      </div>
-                  }
-                  {esNueva && <div style={{ fontSize: 10.5, color: '#9B9B97', marginTop: 4, fontStyle: 'italic' }}>En aquesta acta apareix com a "N". A la següent mostrarà l'estat elegit.</div>}
-
-                  {/* Fotos del comentari */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
-                    {(en.fotos||[]).map(ft => (
-                      <div key={ft.id} style={{ position: 'relative', width: 72, height: 54 }}>
-                        <img src={fotoSrc(ft)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
-                        <button onClick={() => setConfirmFoto({ eId: en.id, fId: ft.id })} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 16, height: 16, cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-                      </div>
-                    ))}
-                    <button onClick={() => onAddFoto(t.id, en.id)} style={{ width: 72, height: 54, borderRadius: 6, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 11, color: '#9B9B97', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>+ foto</button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          <NuevaEntrada onAdd={txt => onAddEntrada(t.id, txt)} />
-          <div style={{ marginTop: 8, textAlign: 'right' }}><Btn sm danger onClick={onDel}>Eliminar tema</Btn></div>
         </div>
       )}
-      {confirmFoto && <ConfirmMini titulo="Eliminar foto" texto="Vas a eliminar esta foto del comentario." onSi={() => { onDelFoto(t.id, confirmFoto.eId, confirmFoto.fId); setConfirmFoto(null); }} onNo={() => setConfirmFoto(null)} />}
+      {confirmFoto && <ConfirmMini titulo="Eliminar foto" texto="Vas a eliminar aquesta foto del seguiment." onSi={() => { onDelFoto(t.id, confirmFoto.eId, confirmFoto.fId); setConfirmFoto(null); }} onNo={() => setConfirmFoto(null)} />}
     </div>
   );
 }
 
 function NuevoTema({ onAdd }) {
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [titulo, setTitulo] = useState('');
   const [txt, setTxt] = useState('');
-  if (!open) return <button onClick={() => setOpen(true)} style={{ width: '100%', padding: '6px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97' }}>+ Nuevo tema</button>;
+  if (!open) return (
+    <button onClick={() => setOpen(true)}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '9px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12.5, color: '#8A8A85', fontWeight: 500 }}>
+      <span style={{ fontSize: 14, lineHeight: 1, color: '#C5C4BE' }}>+</span> Nou tema
+    </button>
+  );
   return (
-    <div className="fade" style={{ background: '#F9F8F5', borderRadius: 9, padding: 10, marginTop: 2 }}>
-      <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título del tema (ej: Replanteo escaleras)..." style={{ marginBottom: 6, fontWeight: 600 }} />
-      <textarea value={txt} onChange={e => setTxt(e.target.value)} placeholder="Primer seguimiento (opcional)..." style={{ minHeight: 44, marginBottom: 8 }} />
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Btn primary full disabled={!titulo.trim()} onClick={() => { onAdd(titulo.trim(), txt.trim()); setTitulo(''); setTxt(''); setOpen(false); }}>Añadir tema</Btn>
-        <Btn onClick={() => { setTitulo(''); setTxt(''); setOpen(false); }}>✕</Btn>
+    <div className="fade" style={{ background: '#fff', border: '1px solid #D8D7D1', borderRadius: 10, padding: 12 }}>
+      <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)}
+        placeholder="Títol del tema (p. ex. Replanteig escales)"
+        style={{ marginBottom: 7, fontWeight: 600, fontSize: 14, padding: '8px 10px' }} />
+      <textarea value={txt} onChange={e => setTxt(e.target.value)}
+        placeholder="Primer seguiment (opcional)"
+        style={{ minHeight: isMobile ? 100 : 80, fontSize: 13, lineHeight: 1.65, resize: 'vertical', marginBottom: 9 }} />
+      <div style={{ display: 'flex', gap: 7 }}>
+        <Btn primary full disabled={!titulo.trim()} onClick={() => { onAdd(titulo.trim(), txt.trim()); setTitulo(''); setTxt(''); setOpen(false); }}>Afegir tema</Btn>
+        <Btn onClick={() => { setTitulo(''); setTxt(''); setOpen(false); }}>Cancel·lar</Btn>
       </div>
     </div>
   );
 }
 function NuevaEntrada({ onAdd }) {
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [txt, setTxt] = useState('');
-  if (!open) return <button onClick={() => setOpen(true)} style={{ marginTop: 8, fontSize: 12, color: '#6B6B66', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Añadir seguimiento de esta visita</button>;
+  if (!open) return (
+    <button onClick={() => setOpen(true)}
+      style={{ display: 'flex', alignItems: 'center', gap: 7, width: '100%', marginBottom: 12, padding: '9px 11px', fontSize: 12.5, color: '#6B6B66', background: '#FAFAF8', border: '1.5px dashed #E5E4DF', borderRadius: 8, cursor: 'pointer' }}>
+      <span style={{ fontSize: 14, color: '#C5C4BE', lineHeight: 1 }}>+</span>
+      Afegir seguiment d'aquesta visita
+    </button>
+  );
   return (
-    <div className="fade" style={{ marginTop: 8 }}>
-      <textarea autoFocus value={txt} onChange={e => setTxt(e.target.value)} placeholder="Novedad de esta visita..." style={{ minHeight: 50, marginBottom: 6 }} />
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Btn sm primary disabled={!txt.trim()} onClick={() => { onAdd(txt); setTxt(''); setOpen(false); }}>Añadir</Btn>
-        <Btn sm onClick={() => { setTxt(''); setOpen(false); }}>✕</Btn>
+    <div className="fade" style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+      <div style={{ width: 3, borderRadius: 2, background: '#D8D7D1', flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <textarea autoFocus value={txt} onChange={e => setTxt(e.target.value)}
+          placeholder="Què s'ha tractat en aquesta visita…"
+          style={{ minHeight: isMobile ? 120 : 96, fontSize: 13, lineHeight: 1.65, resize: 'vertical', marginBottom: 7 }} />
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Btn sm primary disabled={!txt.trim()} onClick={() => { onAdd(txt); setTxt(''); setOpen(false); }}>Afegir seguiment</Btn>
+          <Btn sm onClick={() => { setTxt(''); setOpen(false); }}>Cancel·lar</Btn>
+        </div>
       </div>
     </div>
   );
