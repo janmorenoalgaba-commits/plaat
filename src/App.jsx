@@ -4402,62 +4402,77 @@ function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAd
 
           {t.entradas.map(en => {
             const esNueva = en.actaNum === voNum;
+            const resps = Array.isArray(en.resp) ? en.resp : (en.resp ? [en.resp] : []);
             return (
-              <div key={en.id} style={{ padding: '8px 0', borderBottom: '1px solid #F5F4F0' }}>
-                <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: 11, color: '#A5A5A0', whiteSpace: 'nowrap', paddingTop: 2, minWidth: 36 }}>{fmtShort(en.fecha)}</span>
-                  <div style={{ flex: 1 }}>
-                    {/* Texto editable */}
-                    {editEnt === en.id
-                      ? <div style={{ marginBottom: 6 }}>
-                          <textarea autoFocus value={txtEdit} onChange={e => setTxtEdit(e.target.value)} style={{ minHeight: 54, marginBottom: 6 }} />
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <Btn sm primary onClick={() => { onUpdEntrada(t.id, en.id, 'texto', txtEdit.trim()); setEditEnt(null); }}>Guardar</Btn>
-                            <Btn sm onClick={() => setEditEnt(null)}>✕</Btn>
-                          </div>
-                        </div>
-                      : <div style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginBottom: 5 }}>
-                          <div style={{ flex: 1, fontSize: 13, color: '#18180F', lineHeight: 1.5 }}>{en.texto}</div>
-                          <button onClick={() => { setEditEnt(en.id); setTxtEdit(en.texto); }} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'0 2px', flexShrink:0, marginTop:1 }}>✏️</button>
-                        </div>}
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                      {esNueva && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, background: '#F2F1ED', color: '#52524E', fontWeight: 700, border: '1px solid #E0DFD9' }}>N</span>}
-                      <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
-                        style={{ width: 'auto', fontSize: 11, padding: '3px 7px', borderRadius: 6, border: `1px solid ${ESTADOS_VO[en.estado].color}40`, background: ESTADOS_VO[en.estado].bg, color: ESTADOS_VO[en.estado].color, fontWeight: 500 }}>
-                        {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                      </select>
-                      {en.estado === 'R' && <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)} style={{ width: 'auto', fontSize: 11 }} />}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                        <span style={{ fontSize: 10, color: '#A5A5A0', marginRight: 2 }}>Resp:</span>
-                        {RESP_VO.map(r => {
-                          const resps = Array.isArray(en.resp) ? en.resp : (en.resp ? [en.resp] : []);
-                          const actiu = resps.includes(r);
-                          return (
-                            <button key={r} onClick={() => {
-                              const cur = Array.isArray(en.resp) ? en.resp : (en.resp ? [en.resp] : []);
-                              const nou = actiu ? cur.filter(x=>x!==r) : [...cur, r];
-                              onUpdEntrada(t.id, en.id, 'resp', nou);
-                            }} style={{ padding: '2px 7px', borderRadius: 4, fontSize: 10.5, fontWeight: actiu?600:400, border: `1px solid ${actiu?'#18180F':'#E0DFD9'}`, background: actiu?'#18180F':'transparent', color: actiu?'#fff':'#6B6B66', cursor:'pointer' }}>
-                              {r}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    {esNueva && <div style={{ fontSize: 10.5, color: '#9B9B97', marginTop: 4 }}>En esta acta aparece como "N". En la siguiente mostrará el estado elegido.</div>}
-                    {/* Fotos del comentario */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                      {(en.fotos||[]).map(ft => (
-                        <div key={ft.id} style={{ position: 'relative', width: 64, height: 48 }}>
-                          <img src={fotoSrc(ft)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
-                          <button onClick={() => setConfirmFoto({ eId: en.id, fId: ft.id })} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 16, height: 16, cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
-                        </div>
-                      ))}
-                      <button onClick={() => onAddFoto(t.id, en.id)} style={{ width: 64, height: 48, borderRadius: 6, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 11, color: '#9B9B97', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>+ foto</button>
-                    </div>
+              <div key={en.id} style={{ marginBottom: 10, background: '#FAFAF8', borderRadius: 10, border: '1px solid #F0EFEA', overflow: 'hidden' }}>
+                {/* Barra superior: data + estat + responsables */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', padding: '7px 10px', borderBottom: '1px solid #F0EFEA', background: esNueva ? '#F5F4F0' : '#fff' }}>
+                  <span style={{ fontSize: 11, color: '#9B9B97', whiteSpace: 'nowrap', fontWeight: 500 }}>{fmtShort(en.fecha)}</span>
+                  {esNueva && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, background: '#F2F1ED', color: '#52524E', fontWeight: 700, border: '1px solid #E0DFD9' }}>N</span>}
+                  <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
+                    style={{ fontSize: 11, padding: '2px 6px', borderRadius: 6, border: `1px solid ${ESTADOS_VO[en.estado].color}50`, background: ESTADOS_VO[en.estado].bg, color: ESTADOS_VO[en.estado].color, fontWeight: 600, width: 'auto' }}>
+                    {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  </select>
+                  {en.estado === 'R' && (
+                    <input type="date" value={en.fin||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fin', ev.target.value)}
+                      style={{ fontSize: 11, padding: '2px 6px', borderRadius: 6, border: '1px solid #E0DFD9', width: 'auto' }} />
+                  )}
+                  {/* Responsables — botons compactes */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center', marginLeft: 'auto' }}>
+                    {RESP_VO.map(r => {
+                      const actiu = resps.includes(r);
+                      return (
+                        <button key={r} onClick={() => {
+                          const nou = actiu ? resps.filter(x=>x!==r) : [...resps, r];
+                          onUpdEntrada(t.id, en.id, 'resp', nou);
+                        }} style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: actiu?700:400, border: `1px solid ${actiu?'#18180F':'#E0DFD9'}`, background: actiu?'#18180F':'transparent', color: actiu?'#fff':'#9B9B97', cursor:'pointer', lineHeight: 1.4 }}>
+                          {r}
+                        </button>
+                      );
+                    })}
                   </div>
-                  {/* Botón eliminar entrada */}
-                  <button onClick={() => onDelEntrada(t.id, en.id)} title="Eliminar comentario" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:16, lineHeight:1, padding:'2px 3px', flexShrink:0, marginTop:1 }}>×</button>
+                  {/* Eliminar entrada */}
+                  <button onClick={() => onDelEntrada(t.id, en.id)} title="Eliminar" style={{ background:'none', border:'none', cursor:'pointer', color:'#D4D3CE', fontSize:16, lineHeight:1, padding:'0 2px', flexShrink:0 }}>×</button>
+                </div>
+
+                {/* Text editable — ample total, textarea auto-altura */}
+                <div style={{ padding: '8px 10px' }}>
+                  {editEnt === en.id
+                    ? <div>
+                        <textarea
+                          autoFocus
+                          value={txtEdit}
+                          onChange={e => setTxtEdit(e.target.value)}
+                          style={{ minHeight: 80, fontSize: 13, lineHeight: 1.6, resize: 'vertical', marginBottom: 6 }}
+                        />
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <Btn sm primary onClick={() => { onUpdEntrada(t.id, en.id, 'texto', txtEdit.trim()); setEditEnt(null); }}>Guardar</Btn>
+                          <Btn sm onClick={() => setEditEnt(null)}>✕</Btn>
+                        </div>
+                      </div>
+                    : <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <div
+                          style={{ flex: 1, fontSize: 13, color: '#18180F', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', cursor: 'text', minHeight: 24 }}
+                          onClick={() => { setEditEnt(en.id); setTxtEdit(en.texto); }}
+                          title="Clic per editar"
+                        >
+                          {en.texto || <span style={{ color: '#C5C4BE' }}>Escriu el text del seguiment...</span>}
+                        </div>
+                        <button onClick={() => { setEditEnt(en.id); setTxtEdit(en.texto); }} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'2px', flexShrink:0 }}>✏️</button>
+                      </div>
+                  }
+                  {esNueva && <div style={{ fontSize: 10.5, color: '#9B9B97', marginTop: 4, fontStyle: 'italic' }}>En aquesta acta apareix com a "N". A la següent mostrarà l'estat elegit.</div>}
+
+                  {/* Fotos del comentari */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                    {(en.fotos||[]).map(ft => (
+                      <div key={ft.id} style={{ position: 'relative', width: 72, height: 54 }}>
+                        <img src={fotoSrc(ft)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                        <button onClick={() => setConfirmFoto({ eId: en.id, fId: ft.id })} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 16, height: 16, cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                      </div>
+                    ))}
+                    <button onClick={() => onAddFoto(t.id, en.id)} style={{ width: 72, height: 54, borderRadius: 6, border: '1.5px dashed #E0DFD9', background: '#FAFAF8', cursor: 'pointer', fontSize: 11, color: '#9B9B97', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>+ foto</button>
+                  </div>
                 </div>
               </div>
             );
