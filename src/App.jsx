@@ -3305,6 +3305,8 @@ function getDefaultSeguimientoCQ() {
 }
 
 function SeguimientoCQ({ obra, onSave }) {
+  const isMobile = useIsMobile();
+  const NUM = { fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em' };
   const capitulos = (obra.seguimientoCQ && obra.seguimientoCQ.length) ? obra.seguimientoCQ : null;
   const [abierto, setAbierto] = useState({});
   const [confirmacion, setConfirmacion] = useState(null);
@@ -3405,39 +3407,96 @@ function SeguimientoCQ({ obra, onSave }) {
           const open = abierto[c.id];
           const doneItems = c.items.filter(i => i.estado === 'completo').length;
           return (
-            <div key={c.id} style={{ background: '#fff', border: '1px solid #E8E7E1', borderRadius: 10, overflow: 'hidden' }}>
-              {/* Cabecera capítulo */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px' }}>
-                <span onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))} style={{ width: 9, height: 9, borderRadius: '50%', background: est.dot, flexShrink: 0, cursor: 'pointer' }} />
-                {c.codigo && <span style={{ fontSize: 11, fontWeight: 700, color: '#A5A5A0', flexShrink: 0 }}>{c.codigo}</span>}
-                {editCap === c.id
-                  ? <input autoFocus value={c.titulo} onChange={e => setTitulo(c.id, e.target.value)} onBlur={() => setEditCap(null)}
-                      style={{ flex: 1, fontSize: 13, fontWeight: 600, padding: '3px 7px' }} />
-                  : <span onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))} style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#141412', cursor: 'pointer' }}>{c.titulo}</span>}
-                <span style={{ fontSize: 11, color: '#A5A5A0' }}>{doneItems}/{c.items.length}</span>
-                <button onClick={e => { e.stopPropagation(); setEditCap(c.id); }} title="Editar nombre" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C5C4BE', fontSize: 12, lineHeight: 1, padding: '0 2px' }}>✎</button>
-                <button onClick={e => { e.stopPropagation(); setConfirmacion({ titulo: 'Eliminar capítulo', texto: `Vas a eliminar "${c.titulo}" y todos sus elementos.`, onSi: () => delCap(c.id) }); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, lineHeight: 1, padding: '0 2px' }}>×</button>
-                <span onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))} style={{ fontSize: 11, color: '#C5C4BE', cursor: 'pointer' }}>{open ? '▲' : '▼'}</span>
+            <div key={c.id} style={{ background: '#fff', border: `1px solid ${open ? '#D8D7D1' : '#EDECE7'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color .15s' }}>
+              {/* ── Capçalera capítol ─────────────────────────────── */}
+              <div style={{ padding: isMobile ? '10px 12px' : '10px 14px' }}>
+
+                {/* Línia 1 — codi, títol, activitat, estat */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  {c.codigo && <span onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))}
+                    style={{ ...NUM, fontSize: 11.5, fontWeight: 700, color: '#8A8A85', flexShrink: 0, minWidth: 22, cursor: 'pointer' }}>{c.codigo}</span>}
+
+                  {editCap === c.id
+                    ? <input autoFocus value={c.titulo} onChange={e => setTitulo(c.id, e.target.value)} onBlur={() => setEditCap(null)}
+                        style={{ flex: 1, fontSize: 13, fontWeight: 600, padding: '4px 8px' }} />
+                    : <span onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))}
+                        style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: '#141412', cursor: 'pointer', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.titulo}</span>}
+
+                  {/* Activitat — recompte discret + punts d'estat sòlids */}
+                  {c.items.length > 0 && (
+                    <span onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, cursor: 'pointer' }}>
+                      <span style={{ ...NUM, fontSize: 10, fontWeight: 600, color: '#BFBEB9' }}>{doneItems}/{c.items.length}</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 2.5 }}>
+                        {c.items.slice(0, isMobile ? 4 : 7).map(i => (
+                          <span key={i.id} style={{ width: 5.5, height: 5.5, borderRadius: '50%', background: ESTADOS_CQ[i.estado].dot, flexShrink: 0 }} />
+                        ))}
+                        {c.items.length > (isMobile ? 4 : 7) &&
+                          <span style={{ ...NUM, fontSize: 9, color: '#C5C4BE', marginLeft: 1 }}>+{c.items.length - (isMobile ? 4 : 7)}</span>}
+                      </span>
+                    </span>
+                  )}
+
+                  <Pill label={est.label} bg={est.bg} color={est.color} />
+
+                  <button onClick={e => { e.stopPropagation(); setEditCap(c.id); }} title="Editar nom"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C5C4BE', fontSize: 12, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>✎</button>
+                  <button onClick={e => { e.stopPropagation(); setConfirmacion({ titulo: 'Eliminar capítol', texto: `Vas a eliminar "${c.titulo}" i tots els seus elements.`, onSi: () => delCap(c.id) }); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 16, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>×</button>
+                  <span onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))}
+                    style={{ fontSize: 9, color: '#C4C3BE', cursor: 'pointer', flexShrink: 0, transition: 'transform .2s', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>
+                </div>
+
+                {/* Línia 2 — què queda pendent */}
+                {!open && (() => {
+                  const pend = c.items.filter(i => i.estado !== 'completo');
+                  if (!pend.length) return null;
+                  return (
+                    <div onClick={() => setAbierto(a => ({ ...a, [c.id]: !a[c.id] }))}
+                      style={{ paddingLeft: c.codigo ? 31 : 0, marginTop: 3, fontSize: 12, color: '#9B9B97', lineHeight: 1.4, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      Falta: {pend.map(i => i.nombre).join(' · ')}
+                    </div>
+                  );
+                })()}
               </div>
 
+              {/* ── Elements del capítol ──────────────────────────── */}
               {open && (
-                <div className="fade" style={{ padding: '0 14px 12px', borderTop: '1px solid #F2F1ED' }}>
-                  {c.items.map(i => (
-                    <div key={i.id} style={{ padding: '10px 0', borderBottom: '1px solid #F5F4F0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-                        {i.codigo && <span style={{ fontSize: 11, fontWeight: 600, color: '#A5A5A0', flexShrink: 0 }}>{i.codigo}</span>}
-                        {editItem === i.id
-                          ? <input autoFocus value={i.nombre} onChange={e => setNombre(c.id, i.id, e.target.value)} onBlur={() => setEditItem(null)} style={{ flex: 1, fontSize: 13, padding: '3px 7px' }} />
-                          : <><span style={{ flex: 1, fontSize: 13, color: '#18180F' }}>{i.nombre}</span><button onClick={() => setEditItem(i.id)} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'0 2px', flexShrink:0 }}>✏️</button></>}
-                        <button onClick={() => setConfirmacion({ titulo: 'Eliminar elemento', texto: `Vas a eliminar "${i.nombre}".`, onSi: () => delItem(c.id, i.id) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, flexShrink: 0 }}>×</button>
+                <div className="fade" style={{ padding: isMobile ? '2px 12px 12px' : '2px 14px 12px', borderTop: '1px solid #F2F1ED' }}>
+                  {c.items.map(i => {
+                    const ei = ESTADOS_CQ[i.estado];
+                    return (
+                      <div key={i.id} style={{ display: 'flex', gap: 10, paddingTop: 11, marginBottom: 3 }}>
+                        {/* Rail d'estat */}
+                        <div style={{ width: 3, borderRadius: 2, background: ei.dot, flexShrink: 0 }} />
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+                            {i.codigo && <span style={{ ...NUM, fontSize: 10.5, fontWeight: 700, color: '#BFBEB9', flexShrink: 0 }}>{i.codigo}</span>}
+                            {editItem === i.id
+                              ? <input autoFocus value={i.nombre} onChange={e => setNombre(c.id, i.id, e.target.value)} onBlur={() => setEditItem(null)}
+                                  style={{ flex: 1, fontSize: 13, padding: '4px 8px' }} />
+                              : <span style={{ flex: 1, fontSize: 13, color: '#18180F', lineHeight: 1.4 }}>{i.nombre}</span>}
+                            <span style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                              <button onClick={() => setEditItem(i.id)} title="Editar nom"
+                                style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'2px 4px' }}>✏️</button>
+                              <button onClick={() => setConfirmacion({ titulo: 'Eliminar element', texto: `Vas a eliminar "${i.nombre}".`, onSi: () => delItem(c.id, i.id) })}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1, padding: '0 3px' }}>×</button>
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <Seg estado={i.estado} onChange={e => setEstado(c.id, i.id, e)} />
+                            <input placeholder="Nota — què falta, referència…" value={i.nota || ''} onChange={e => setNota(c.id, i.id, e.target.value)}
+                              style={{ flex: 1, minWidth: isMobile ? '100%' : 160, fontSize: 12 }} />
+                          </div>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <Seg estado={i.estado} onChange={e => setEstado(c.id, i.id, e)} />
-                        <input placeholder="Nota (qué falta, referencia...)" value={i.nota || ''} onChange={e => setNota(c.id, i.id, e.target.value)} style={{ flex: 1, minWidth: 140, fontSize: 12 }} />
-                      </div>
-                    </div>
-                  ))}
-                  <button onClick={() => addItem(c.id)} style={{ width: '100%', padding: '6px', marginTop: 8, borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97' }}>+ Añadir elemento</button>
+                    );
+                  })}
+                  <button onClick={() => addItem(c.id)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '8px', marginTop: 11, borderRadius: 8, border: '1.5px dashed #E5E4DF', background: '#FAFAF8', cursor: 'pointer', fontSize: 12.5, color: '#8A8A85' }}>
+                    <span style={{ fontSize: 14, lineHeight: 1, color: '#C5C4BE' }}>+</span> Afegir element
+                  </button>
                 </div>
               )}
             </div>
@@ -3445,8 +3504,11 @@ function SeguimientoCQ({ obra, onSave }) {
         })}
       </div>
 
-      {/* Añadir capítulo */}
-      <button onClick={addCap} style={{ width: '100%', padding: '9px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginTop: 8 }}>+ Añadir capítulo</button>
+      {/* Afegir capítol */}
+      <button onClick={addCap}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '10px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12.5, color: '#8A8A85', fontWeight: 500, marginTop: 8 }}>
+        <span style={{ fontSize: 14, lineHeight: 1, color: '#C5C4BE' }}>+</span> Afegir capítol
+      </button>
 
       {confirmacion && <ConfirmMini titulo={confirmacion.titulo} texto={confirmacion.texto} onSi={confirmacion.onSi} onNo={() => setConfirmacion(null)} />}
     </div>
@@ -4370,21 +4432,43 @@ function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAd
 
       {/* ── Capçalera del tema ─────────────────────────────────────── */}
       <div onClick={() => setAbierto(v => !v)}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '10px 12px' : '9px 13px', cursor: 'pointer' }}>
-        <span style={{ ...NUM, fontSize: 11.5, fontWeight: 700, color: '#8A8A85', flexShrink: 0, minWidth: 32 }}>{t.num}</span>
-        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: '#141412', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tituloDisplay}</span>
-        {/* Punts d'estat: un per seguiment */}
-        {!isMobile && t.entradas.length > 1 && (
-          <span style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-            {t.entradas.slice(-6).map(en => (
-              <span key={en.id} style={{ width: 5, height: 5, borderRadius: '50%', background: (ESTADOS_VO[en.estado]||est).color, opacity: .55 }} />
-            ))}
-          </span>
+        style={{ padding: isMobile ? '9px 12px' : '9px 13px', cursor: 'pointer' }}>
+
+        {/* Línia 1 — identificador, títol i estat */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ ...NUM, fontSize: 11.5, fontWeight: 700, color: '#8A8A85', flexShrink: 0, minWidth: 32 }}>{t.num}</span>
+          <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: '#141412', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tituloDisplay}</span>
+
+          {/* Activitat — recompte discret + punts d'estat sòlids */}
+          {t.entradas.length > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+              <span style={{ ...NUM, fontSize: 10, fontWeight: 600, color: '#BFBEB9' }}>{t.entradas.length}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 2.5 }}>
+                {t.entradas.slice(isMobile ? -3 : -5).map((en, i, arr) => {
+                  const c = (ESTADOS_VO[en.estado] || est).color;
+                  const ultim = i === arr.length - 1;
+                  return <span key={en.id} style={{
+                    width: ultim ? 7 : 5.5, height: ultim ? 7 : 5.5, borderRadius: '50%',
+                    background: c, flexShrink: 0,
+                    boxShadow: ultim ? `0 0 0 2.5px ${c}1F` : 'none',
+                  }} />;
+                })}
+              </span>
+            </span>
+          )}
+
+          {ultEsNueva
+            ? <Pill label="Nova" bg="#F2F1ED" color="#52524E" />
+            : <Pill label={est.label} bg={est.bg} color={est.color} />}
+          <span style={{ fontSize: 9, color: '#C4C3BE', flexShrink: 0, transition: 'transform .2s', transform: abierto ? 'rotate(90deg)' : 'none' }}>▶</span>
+        </div>
+
+        {/* Línia 2 — què es va dir l'últim cop */}
+        {!abierto && ult.texto && ult.texto !== tituloDisplay && (
+          <div style={{ paddingLeft: 41, marginTop: 3, fontSize: 12, color: '#9B9B97', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {ult.texto}
+          </div>
         )}
-        {ultEsNueva
-          ? <Pill label="Nova" bg="#F2F1ED" color="#52524E" />
-          : <Pill label={est.label} bg={est.bg} color={est.color} />}
-        <span style={{ fontSize: 9, color: '#C4C3BE', flexShrink: 0, transition: 'transform .2s', transform: abierto ? 'rotate(90deg)' : 'none' }}>▶</span>
       </div>
 
       {abierto && (
