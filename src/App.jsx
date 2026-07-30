@@ -60,6 +60,7 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
 @keyframes sheet { from { transform: translateY(100%);          } to { transform: none; } }
 @keyframes overlay { from { opacity: 0; } to { opacity: 1; } }
 @keyframes spin  { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
 
 .fade { animation: fi .22s ease both; }
 
@@ -6471,6 +6472,31 @@ export default function App() {
   const [nav,        setNav]        = useState('alertas');
   const [obraActiva, setObraActiva] = useState(null);
   const [newVersion, setNewVersion] = useState(false);
+  const [xarxa, setXarxa] = useState({ online: true, pendents: 0, sincronitzant: false });
+  const desatTimers  = useRef({});
+  const desatPendent = useRef({});
+
+  // No perdre res en tancar la pestanya
+  useEffect(() => {
+    const abans = () => {
+      Object.keys(desatPendent.current).forEach(id => {
+        clearTimeout(desatTimers.current[id]);
+        const p = desatPendent.current[id];
+        if (p) saveUnaObra(p.updated, p.lista, p.anterior).catch(() => {});
+      });
+      desatPendent.current = {};
+    };
+    window.addEventListener('beforeunload', abans);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) abans(); });
+    return () => window.removeEventListener('beforeunload', abans);
+  }, [obras]);
+
+  // Estat de connexió i cua de sincronització
+  useEffect(() => {
+    if (!window.db?.onCanviXarxa) return;
+    setXarxa(window.db.estatXarxa());
+    return window.db.onCanviXarxa(setXarxa);
+  }, []);
 
   // Detectar nou deployment de la PWA
   useEffect(() => {
@@ -6725,17 +6751,26 @@ export default function App() {
       setObras(obrasParciales);
       setLoading(false);
 
-      // FASE 2: enriquecer cada obra con sus módulos en paralelo (segundo plano)
-      const obrasCompletas = await Promise.all(rows.map(async row => {
-        const [incs, vos, insps, notas, cal, rol] = await Promise.all([
-          window.db.getModulo('incidencias', row.id),
-          window.db.getModulo('actas_vo', row.id),
-          window.db.getModulo('actas_insp', row.id),
-          window.db.getModulo('notas', row.id),
-          window.db.getModulo('calidad', row.id),
-          window.db.getRolUsuario(row.id, userId),
-        ]);
-        return { ...rowToObra(row, { incidencias: incs, actas_vo: vos, actas_insp: insps, notas, calidad: cal }), _rol: rol };
+      // FASE 2: TODOS los módulos de TODAS las obras en 6 consultas totales
+      // (antes: 6 consultas POR obra → con 10 obras eran 60 idas y vueltas)
+      const ids = rows.map(r => r.id);
+      const [incsAll, vosAll, inspsAll, notasAll, calAll, roles] = await Promise.all([
+        window.db.getModulosBatch('incidencias', ids),
+        window.db.getModulosBatch('actas_vo',    ids),
+        window.db.getModulosBatch('actas_insp',  ids),
+        window.db.getModulosBatch('notas',       ids),
+        window.db.getModulosBatch('calidad',     ids),
+        window.db.getRolesUsuario(userId),
+      ]);
+      const obrasCompletas = rows.map(row => ({
+        ...rowToObra(row, {
+          incidencias: incsAll[row.id]  || [],
+          actas_vo:    vosAll[row.id]   || [],
+          actas_insp:  inspsAll[row.id] || [],
+          notas:       notasAll[row.id] || [],
+          calidad:     calAll[row.id]   || [],
+        }),
+        _rol: roles[row.id] || 'deo',
       }));
       setObras(obrasCompletas);
       setTimeout(() => migrarFotosAntiguas(obrasCompletas), 2000);
@@ -6951,12 +6986,36 @@ export default function App() {
     setObraActiva(obra);
   }
 
-  async function actualizarObra(updated) {
-    const anterior = obras.find(o => o.id === updated.id);
+  // La UI s'actualitza a l'instant; el desat s'agrupa a 700ms.
+  // Escriure un paràgraf deixa de ser 200 escriptures a la BD i passa a ser una.
+  function actualizarObra(updated) {
     const lista = obras.map(o => o.id === updated.id ? updated : o);
     setObras(lista);
     setObraActiva(updated);
-    await saveUnaObra(updated, lista, anterior);
+
+    if (!desatPendent.current[updated.id]) {
+      desatPendent.current[updated.id] = { anterior: obras.find(o => o.id === updated.id) };
+    }
+    desatPendent.current[updated.id].updated = updated;
+    desatPendent.current[updated.id].lista   = lista;
+
+    clearTimeout(desatTimers.current[updated.id]);
+    desatTimers.current[updated.id] = setTimeout(() => {
+      const p = desatPendent.current[updated.id];
+      if (!p) return;
+      delete desatPendent.current[updated.id];
+      saveUnaObra(p.updated, p.lista, p.anterior).catch(e => console.error('Error desant:', e));
+    }, 700);
+  }
+
+  // Desa immediatament tot el que quedi pendent (en sortir d'una obra o tancar)
+  function desarPendentsAra() {
+    Object.keys(desatPendent.current).forEach(id => {
+      clearTimeout(desatTimers.current[id]);
+      const p = desatPendent.current[id];
+      delete desatPendent.current[id];
+      if (p) saveUnaObra(p.updated, p.lista, p.anterior).catch(() => {});
+    });
   }
 
   async function guardarEdicion(datos) {
@@ -7055,6 +7114,42 @@ export default function App() {
     </div>
   ) : null;
 
+  // Indicador de connexió — només apareix quan cal dir alguna cosa
+  const XarxaBanner = () => {
+    const { online, pendents, sincronitzant } = xarxa;
+    if (online && !pendents && !sincronitzant) return null;
+    const offline = !online;
+    return (
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9998,
+        background: offline ? '#1C1C1A' : '#FFF6D7',
+        color: offline ? '#F2F1ED' : '#7C4A00',
+        borderTop: offline ? 'none' : '1px solid #EBD9A0',
+        padding: '9px 16px', display: 'flex', alignItems: 'center', gap: 10,
+        fontSize: 12.5, lineHeight: 1.4,
+      }}>
+        <span style={{
+          width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+          background: offline ? '#E24B4A' : '#D48A0C',
+          animation: sincronitzant ? 'pulse 1.2s ease-in-out infinite' : 'none',
+        }} />
+        <span style={{ flex: 1 }}>
+          {offline
+            ? <>Sense connexió — pots seguir treballant. {pendents > 0 && <strong>{pendents} canvi{pendents > 1 ? 's' : ''} en cua.</strong>}</>
+            : sincronitzant
+              ? <>Sincronitzant {pendents} canvi{pendents > 1 ? 's' : ''}…</>
+              : <><strong>{pendents} canvi{pendents > 1 ? 's' : ''}</strong> pendent{pendents > 1 ? 's' : ''} de pujar.</>}
+        </span>
+        {online && !sincronitzant && pendents > 0 && (
+          <button onClick={() => window.db?.sincronitzarAra?.()}
+            style={{ background: '#7C4A00', color: '#FFF6D7', border: 'none', borderRadius: 7, padding: '4px 12px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+            Sincronitzar
+          </button>
+        )}
+      </div>
+    );
+  };
+
   if (obraActiva) {
     const fresh = obras.find(o => o.id === obraActiva.id) || obraActiva;
     // Si l'obra encara s'està carregant (Fase 1), mostrem un spinner lleuger
@@ -7065,8 +7160,8 @@ export default function App() {
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', overflow: 'hidden' }}>
           {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} onBackup={() => { setShowBackup(true); setBackupMsg(""); }} />}
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <UpdateBanner />
-      <DetalleObra obra={fresh} onBack={() => setObraActiva(null)} onSave={actualizarObra} isMobile={isMobile} user={user} />
+            <UpdateBanner /><XarxaBanner />
+      <DetalleObra obra={fresh} onBack={() => { desarPendentsAra(); setObraActiva(null); }} onSave={actualizarObra} isMobile={isMobile} user={user} />
           </div>
         </div>
       </>
@@ -7080,7 +7175,7 @@ export default function App() {
         {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} onBackup={() => { setShowBackup(true); setBackupMsg(""); }} />}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
-          <UpdateBanner />
+          <UpdateBanner /><XarxaBanner />
       {nav === 'alertas'      && <VistaAlertas obras={obras} onIrObra={o => setObraActiva(o)} isMobile={isMobile} />}
           {nav === 'seguimiento'  && <VistaSeguimiento obras={obras} isMobile={isMobile} />}
           {nav === 'tablero'   && (
