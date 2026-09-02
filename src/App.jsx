@@ -4157,9 +4157,11 @@ function ModuloActaVO({ obra, onSave }) {
     const n = (nums.length ? Math.max(...nums) : 0) + 1;
     return `${sec.codigo}.${String(n).padStart(2,'0')}`;
   }
-  function addTema(secId, titulo, texto) {
+  function addTema(secId, titulo, texto, extra = {}) {
     if (!titulo.trim()) return;
-    const entrades = texto ? [{ id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '', actaNum: vo.num }] : [];
+    const entrades = (texto || extra.fotos?.length)
+      ? [{ id: uid(), texto: (texto||'').trim(), estado: extra.estado || 'P', fecha: today(), fin: '', resp: extra.resp || [], fotos: extra.fotos || [], actaNum: vo.num }]
+      : [];
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: [...(s.temas||[]), { id: uid(), num: nextNum(s), titulo: titulo.trim(), resuelto: false, resueltoEnActa: null, entradas: entrades }] }) });
   }
   function addEntrada(secId, temaId, texto) {
@@ -4369,9 +4371,6 @@ function ModuloActaVO({ obra, onSave }) {
 
   const [showIdioma, setShowIdioma] = useState(false);
   const [vistaVO, setVistaVO] = useState('temes');
-  const [cercaTema, setCercaTema] = useState('');
-  const [filtreEstat, setFiltreEstat] = useState('pendents');
-  const [seccColapsades, setSeccColapsades] = useState({});
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   async function exportar(idioma) {
@@ -4770,151 +4769,53 @@ function ModuloActaVO({ obra, onSave }) {
 
       {vistaVO === 'temes' && (
       <>
-      {/* Cerca + filtres d'estat — la manera principal de trobar un tema quan n'hi ha molts */}
-      <div style={{ marginBottom: 12 }}>
-        <input
-          value={cercaTema}
-          onChange={e => setCercaTema(e.target.value)}
-          placeholder="🔍 Cerca un tema pel títol o pel text..."
-          style={{ marginBottom: 8, fontSize: 13 }}
-        />
-        <div style={{ display: 'flex', gap: 5, overflowX: 'auto' }} className="no-scrollbar">
-          {[
-            { id: 'pendents', label: 'Pendents' },
-            { id: 'informatius', label: 'Informatius' },
-            { id: 'resolts', label: 'Resolts' },
-            { id: 'tots', label: 'Tots' },
-          ].map(f => (
-            <button key={f.id} onClick={() => setFiltreEstat(f.id)}
-              style={{
-                flexShrink: 0, padding: '5px 12px', borderRadius: 20, cursor: 'pointer',
-                fontSize: 12, fontWeight: filtreEstat === f.id ? 600 : 500,
-                border: `1px solid ${filtreEstat === f.id ? '#18180F' : '#E5E4DF'}`,
-                background: filtreEstat === f.id ? '#18180F' : '#fff',
-                color: filtreEstat === f.id ? '#fff' : '#8A8A85',
-              }}>
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {(() => {
-        const filtreActiu = cercaTema.trim() !== '' || filtreEstat !== 'tots';
-        const cercaLower = cercaTema.trim().toLowerCase();
-        const passaFiltre = t => {
-          if (filtreEstat === 'pendents'    && estatAgregatTema(t) !== 'P') return false;
-          if (filtreEstat === 'resolts'     && estatAgregatTema(t) !== 'R') return false;
-          if (filtreEstat === 'informatius' && estatAgregatTema(t) !== 'I') return false;
-          if (cercaLower) {
-            const ult = t.entradas?.[t.entradas.length-1]?.texto || '';
-            const dinsText = (t.titulo||'').toLowerCase().includes(cercaLower) || ult.toLowerCase().includes(cercaLower);
-            if (!dinsText) return false;
-          }
-          return true;
-        };
-
-        // ── Vista amb filtre/cerca actiu: llista plana entre seccions, ordenada per rellevància ─────
-        if (filtreActiu) {
-          const resultats = [];
-          (vo.secciones||[]).forEach(sec => {
-            activosPorSec(sec.id).filter(passaFiltre).forEach(t => resultats.push({ t, sec }));
-          });
-          if (!resultats.length) {
-            return (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#BFBEB9', fontSize: 13 }}>
-                Cap tema coincideix amb la cerca.
-              </div>
-            );
-          }
-          return (
-            <div style={{ marginBottom: 16 }}>
-              {resultats.map(({ t, sec }) => (
-                <div key={t.id}>
-                  <div style={{ fontSize: 10.5, color: '#BFBEB9', fontWeight: 600, marginBottom: 2, marginLeft: 2 }}>
-                    {sec.codigo} · {sec.titulo}
-                  </div>
-                  <TemaVO t={t} est={ESTADOS_VO[estatAgregatTema(t)]} secId={sec.id} voNum={vo.num}
-                    secciones={vo.secciones}
-                    onUpdEntrada={(tId,eId,campo,val) => updEntrada(sec.id, tId, eId, campo, val)}
-                    onUpdTema={(tId,campo,val) => updTema(sec.id, tId, campo, val)}
-                    onAddEntrada={(tId,txt) => addEntrada(sec.id, tId, txt)}
-                    onAddFoto={(tId,eId) => addFotoEntrada(sec.id, tId, eId)}
-                    onDelFoto={(tId,eId,fId) => delFotoEntrada(sec.id, tId, eId, fId)}
-                    onDelEntrada={(tId,eId) => delEntrada(sec.id, tId, eId)}
-                    onMover={(secDestId) => moverTema(sec.id, t.id, secDestId)}
-                    onReordenar={(dir) => reordenarTema(sec.id, t.id, dir)}
-                    onDel={() => setBorrar({ tipo: 'tema', secId: sec.id, id: t.id, label: t.num })} />
-                </div>
-              ))}
-            </div>
-          );
-        }
-
-        // ── Vista per defecte: agrupada per secció, cada secció plegable ────────────────────────
+      {/* Secciones editables */}
+      {(vo.secciones||[]).map(sec => {
+        const activos = activosPorSec(sec.id);
         return (
-          <>
-            {(vo.secciones||[]).map(sec => {
-              const activos = activosPorSec(sec.id);
-              const pendents = activos.filter(t => estatAgregatTema(t) === 'P').length;
-              const colapsada = !!seccColapsades[sec.id];
-              return (
-                <div key={sec.id} style={{ marginBottom: 16 }}>
-                  {/* Cabecera sección — clicable per plegar/desplegar */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-                    <span onClick={() => setSeccColapsades(s => ({ ...s, [sec.id]: !s[sec.id] }))}
-                      style={{ fontSize: 9, color: '#C4C3BE', cursor: 'pointer', flexShrink: 0, transition: 'transform .2s', transform: colapsada ? 'none' : 'rotate(90deg)' }}>▶</span>
-                    <span onClick={() => setSeccColapsades(s => ({ ...s, [sec.id]: !s[sec.id] }))}
-                      style={{ fontSize: 11, fontWeight: 700, color: '#52524E', flexShrink: 0, cursor: 'pointer' }}>{sec.codigo}</span>
-                    {editandoSec === sec.id
-                      ? <input autoFocus value={sec.titulo} onChange={e => updSeccion(sec.id, 'titulo', e.target.value)} onBlur={() => setEditandoSec(null)} style={{ flex: 1, fontSize: 12, fontWeight: 600 }} />
-                      : <span onClick={() => setSeccColapsades(s => ({ ...s, [sec.id]: !s[sec.id] }))} style={{ fontSize: 12, fontWeight: 600, color: '#141412', flex: 1, cursor: 'pointer' }}>{sec.titulo}</span>}
-                    {!editandoSec && <button onClick={() => setEditandoSec(sec.id)} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'0 2px', flexShrink:0 }}>✏️</button>}
-                    {pendents > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#7C4A00', background: '#FEF3DB', borderRadius: 10, padding: '1px 7px' }}>{pendents}</span>}
-                    <span style={{ fontSize: 11, color: '#A5A5A0' }}>{activos.length}</span>
-                    <button onClick={() => setBorrar({ tipo: 'seccion', id: sec.id, label: sec.titulo })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
-                  </div>
-                  {/* Temas activos */}
-                  {!colapsada && (
-                    <>
-                      {activos.map(t => (
-                        <TemaVO key={t.id} t={t} est={ESTADOS_VO[estatAgregatTema(t)]} secId={sec.id} voNum={vo.num}
-                          secciones={vo.secciones}
-                          onUpdEntrada={(tId,eId,campo,val) => updEntrada(sec.id, tId, eId, campo, val)}
-                          onUpdTema={(tId,campo,val) => updTema(sec.id, tId, campo, val)}
-                          onAddEntrada={(tId,txt) => addEntrada(sec.id, tId, txt)}
-                          onAddFoto={(tId,eId) => addFotoEntrada(sec.id, tId, eId)}
-                          onDelFoto={(tId,eId,fId) => delFotoEntrada(sec.id, tId, eId, fId)}
-                          onDelEntrada={(tId,eId) => delEntrada(sec.id, tId, eId)}
-                          onMover={(secDestId) => moverTema(sec.id, t.id, secDestId)}
-                          onReordenar={(dir) => reordenarTema(sec.id, t.id, dir)}
-                          onDel={() => setBorrar({ tipo: 'tema', secId: sec.id, id: t.id, label: t.num })} />
-                      ))}
-                      <NuevoTema onAdd={(titulo, txt) => addTema(sec.id, titulo, txt)} />
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </>
+          <div key={sec.id} style={{ marginBottom: 16 }}>
+            {/* Cabecera sección con editar nombre */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#52524E', flexShrink: 0 }}>{sec.codigo}</span>
+              {editandoSec === sec.id
+                ? <input autoFocus value={sec.titulo} onChange={e => updSeccion(sec.id, 'titulo', e.target.value)} onBlur={() => setEditandoSec(null)} style={{ flex: 1, fontSize: 12, fontWeight: 600 }} />
+                : <><span style={{ fontSize: 12, fontWeight: 600, color: '#141412', flex: 1 }}>{sec.titulo}</span><button onClick={() => setEditandoSec(sec.id)} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'0 2px', flexShrink:0 }}>✏️</button></>}
+              <span style={{ fontSize: 11, color: '#A5A5A0' }}>{activos.length}</span>
+              <button onClick={() => setBorrar({ tipo: 'seccion', id: sec.id, label: sec.titulo })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
+            </div>
+            {/* Temas activos */}
+            {activos.map(t => (
+              <TemaVO key={t.id} t={t} est={ESTADOS_VO[estatAgregatTema(t)]} secId={sec.id} voNum={vo.num}
+                secciones={vo.secciones}
+                onUpdEntrada={(tId,eId,campo,val) => updEntrada(sec.id, tId, eId, campo, val)}
+                onUpdTema={(tId,campo,val) => updTema(sec.id, tId, campo, val)}
+                onAddEntrada={(tId,txt) => addEntrada(sec.id, tId, txt)}
+                onAddFoto={(tId,eId) => addFotoEntrada(sec.id, tId, eId)}
+                onDelFoto={(tId,eId,fId) => delFotoEntrada(sec.id, tId, eId, fId)}
+                onDelEntrada={(tId,eId) => delEntrada(sec.id, tId, eId)}
+                onMover={(secDestId) => moverTema(sec.id, t.id, secDestId)}
+                onReordenar={(dir) => reordenarTema(sec.id, t.id, dir)}
+                onDel={() => setBorrar({ tipo: 'tema', secId: sec.id, id: t.id, label: t.num })} />
+            ))}
+            <NuevoTema onAdd={(titulo, txt) => addTema(sec.id, titulo, txt)} />
+          </div>
         );
-      })()}
+      })}
       <button onClick={addSeccion} style={{ width: '100%', padding: '8px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginBottom: 14 }}>+ Añadir sección</button>
 
-      {/* Captura ràpida — sempre a l'abast, sense haver de buscar la secció correcta */}
-      <div style={{ position: 'fixed', right: isMobile ? 16 : 28, bottom: isMobile ? 74 : 24, zIndex: 30 }}>
-        {showQuickAdd ? (
-          <div className="fade" style={{ background: '#fff', borderRadius: 14, padding: 12, width: 260, boxShadow: '0 12px 32px rgba(0,0,0,.18)', border: '1px solid #E5E4DF' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#141412', marginBottom: 8 }}>Nou tema ràpid</div>
-            <QuickAddTema secciones={vo.secciones||[]} onAdd={(secId, titulo) => { addTema(secId, titulo, ''); setShowQuickAdd(false); }} onCancel={() => setShowQuickAdd(false)} />
-          </div>
-        ) : (
-          <button onClick={() => setShowQuickAdd(true)} title="Nou tema ràpid"
-            style={{ width: 52, height: 52, borderRadius: '50%', background: '#18180F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 26, lineHeight: 1, boxShadow: '0 6px 20px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            +
-          </button>
-        )}
-      </div>
+      {/* Captura ràpida — botó flotant sempre a l'abast, obre un formulari complet */}
+      <button onClick={() => setShowQuickAdd(true)} title="Nou tema ràpid"
+        style={{ position: 'fixed', right: isMobile ? 16 : 28, bottom: isMobile ? 74 : 24, zIndex: 30, width: 52, height: 52, borderRadius: '50%', background: '#18180F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 26, lineHeight: 1, boxShadow: '0 6px 20px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        +
+      </button>
+      {showQuickAdd && (
+        <QuickAddTema
+          secciones={vo.secciones||[]}
+          obraId={obra?.id}
+          onAdd={(secId, dades) => { addTema(secId, dades.titulo, dades.texto, dades); setShowQuickAdd(false); }}
+          onCancel={() => setShowQuickAdd(false)}
+        />
+      )}
       </>
       )}
 
@@ -5146,22 +5047,93 @@ function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAd
 }
 
 // Captura ràpida: tria secció + títol, sense haver de navegar-hi
-function QuickAddTema({ secciones, onAdd, onCancel }) {
+// Formulari complet per crear un tema nou — secció, títol, text, estat, responsable i fotos
+function QuickAddTema({ secciones, obraId, onAdd, onCancel }) {
+  const isMobile = useIsMobile();
   const [secId, setSecId] = useState(secciones[0]?.id || '');
   const [titulo, setTitulo] = useState('');
+  const [texto, setTexto] = useState('');
+  const [estado, setEstado] = useState('P');
+  const [resp, setResp] = useState([]);
+  const [fotos, setFotos] = useState([]);
+  const [pujantFoto, setPujantFoto] = useState(false);
+
+  function afegirFotos() {
+    setPujantFoto(true);
+    pickFiles('image/*', f => { setFotos(prev => [...prev, f]); setPujantFoto(false); }, obraId);
+  }
+  function treureFoto(id) { setFotos(prev => prev.filter(f => f.id !== id)); }
+
   return (
-    <div>
-      <select value={secId} onChange={e => setSecId(e.target.value)} style={{ fontSize: 12, marginBottom: 7 }}>
-        {secciones.map(s => <option key={s.id} value={s.id}>{s.codigo} · {s.titulo}</option>)}
-      </select>
-      <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && titulo.trim()) onAdd(secId, titulo.trim()); }}
-        placeholder="Títol del tema..." style={{ fontSize: 13, marginBottom: 9 }} />
-      <div style={{ display: 'flex', gap: 6 }}>
-        <Btn sm primary full disabled={!titulo.trim()} onClick={() => onAdd(secId, titulo.trim())}>Afegir</Btn>
-        <Btn sm full onClick={onCancel}>Cancel·lar</Btn>
+    <Modal title="Nou tema" onClose={onCancel} footer={
+      <>
+        <Btn onClick={onCancel}>Cancel·lar</Btn>
+        <Btn primary disabled={!titulo.trim()} onClick={() => onAdd(secId, { titulo: titulo.trim(), texto: texto.trim(), estado, resp, fotos })}>Afegir tema</Btn>
+      </>
+    }>
+      <Field label="Secció">
+        <select value={secId} onChange={e => setSecId(e.target.value)}>
+          {secciones.map(s => <option key={s.id} value={s.id}>{s.codigo} · {s.titulo}</option>)}
+        </select>
+      </Field>
+
+      <Field label="Títol del tema">
+        <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)}
+          placeholder="P. ex. Replanteig escales" style={{ fontWeight: 600, fontSize: 14 }} />
+      </Field>
+
+      <Field label="Descripció / primer seguiment">
+        <textarea value={texto} onChange={e => setTexto(e.target.value)}
+          placeholder="Què s'ha observat..." style={{ minHeight: isMobile ? 100 : 80, fontSize: 13, lineHeight: 1.6, resize: 'vertical' }} />
+      </Field>
+
+      <div style={{ display: 'flex', gap: 10, marginBottom: 13, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#52524E', marginBottom: 5 }}>Estat</label>
+          <div style={{ display: 'flex', gap: 5 }}>
+            {Object.entries(ESTADOS_VO).map(([k, v]) => (
+              <button key={k} onClick={() => setEstado(k)}
+                style={{ flex: 1, padding: '6px 4px', borderRadius: 7, fontSize: 11.5, fontWeight: estado===k?700:500, cursor: 'pointer',
+                  border: `1px solid ${estado===k ? v.color : '#E5E4DF'}`, background: estado===k ? v.bg : '#fff', color: estado===k ? v.color : '#8A8A85' }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#52524E', marginBottom: 5 }}>Responsable</label>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {RESP_VO.map(r => {
+              const actiu = resp.includes(r);
+              return (
+                <button key={r} onClick={() => setResp(actiu ? resp.filter(x=>x!==r) : [...resp, r])}
+                  style={{ padding: '4px 9px', borderRadius: 6, fontSize: 11, fontWeight: actiu?700:500, cursor: 'pointer',
+                    border: `1px solid ${actiu?'#18180F':'#E5E4DF'}`, background: actiu?'#18180F':'#fff', color: actiu?'#fff':'#8A8A85' }}>
+                  {r}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
-    </div>
+
+      <div>
+        <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#52524E', marginBottom: 5 }}>Fotos</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {fotos.map(f => (
+            <div key={f.id} style={{ position: 'relative', width: 68, height: 51 }}>
+              <img src={fotoSrc(f)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+              <button onClick={() => treureFoto(f.id)}
+                style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,.55)', color: '#fff', border: 'none', borderRadius: '50%', width: 16, height: 16, cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+            </div>
+          ))}
+          <button onClick={afegirFotos} disabled={pujantFoto}
+            style={{ width: 68, height: 51, borderRadius: 6, border: '1.5px dashed #E5E4DF', background: '#FAFAF8', cursor: 'pointer', fontSize: 11, color: '#9B9B97', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {pujantFoto ? '…' : '+ foto'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 function NuevoTema({ onAdd }) {
