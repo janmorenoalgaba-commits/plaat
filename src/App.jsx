@@ -4336,16 +4336,22 @@ function ModuloActaVO({ obra, onSave }) {
       const inici = new Date(climaSetmana + 'T00:00:00');
       const fi = new Date(inici); fi.setDate(fi.getDate() + 6);
       const fmt = d => d.toISOString().slice(0,10);
-      const esPassat = fi < new Date(new Date().toDateString());
+      const avui = new Date(new Date().toDateString());
+      const diesDesDeInici = Math.floor((avui - inici) / 86400000);
 
-      // Triar API: archive (passat) o forecast (present/futur)
-      const base = esPassat
+      // L'API d'arxiu (archive) fa servir reanàlisi ERA5, que triga ~5 dies a consolidar-se
+      // i per tant és MENYS precisa per a dates recents. Per a qualsevol data dels últims
+      // 92 dies (o futures) usem l'API de pronòstic, que dona la dada final/observada real
+      // per als dies recents i la predicció per als futurs. Només anem a l'arxiu per a
+      // dates més antigues que això.
+      const usarArxiu = diesDesDeInici > 92;
+      const base = usarArxiu
         ? 'https://archive-api.open-meteo.com/v1/archive'
         : 'https://api.open-meteo.com/v1/forecast';
-      const url = `${base}?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,precipitation_sum,weathercode&timezone=auto&start_date=${fmt(inici)}&end_date=${fmt(fi)}`;
+      const url = `${base}?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,precipitation_sum,weathercode&timezone=auto&models=best_match&start_date=${fmt(inici)}&end_date=${fmt(fi)}`;
       const wRes = await fetch(url);
       const wData = await wRes.json();
-      if (!wData.daily) throw new Error('El servei meteorològic no ha retornat dades per aquest període.');
+      if (!wData.daily || !wData.daily.time?.length) throw new Error('El servei meteorològic no ha retornat dades per aquest període.');
 
       const nousD = wData.daily.time.map((fecha, i) => ({
         id: uid(),
