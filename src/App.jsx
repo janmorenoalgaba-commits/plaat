@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, memo } from "react";
+import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -4372,6 +4373,7 @@ function ModuloActaVO({ obra, onSave }) {
   const [showIdioma, setShowIdioma] = useState(false);
   const [vistaVO, setVistaVO] = useState('temes');
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [seccColapsades, setSeccColapsades] = useState({});
 
   async function exportar(idioma) {
     setShowIdioma(false);
@@ -4769,22 +4771,32 @@ function ModuloActaVO({ obra, onSave }) {
 
       {vistaVO === 'temes' && (
       <>
-      {/* Secciones editables */}
+      {/* Secciones editables — cada una plegable; temes ordenats perquè el pendent es llegeixi primer */}
       {(vo.secciones||[]).map(sec => {
         const activos = activosPorSec(sec.id);
+        // Ordre de lectura directa: Pendent → Informatiu → Resolt (sense cap filtre, només ordenació)
+        const ORDRE_LECTURA = { P: 0, I: 1, R: 2 };
+        const activosOrdenats = [...activos].sort((a, b) => ORDRE_LECTURA[estatAgregatTema(a)] - ORDRE_LECTURA[estatAgregatTema(b)]);
+        const pendents = activos.filter(t => estatAgregatTema(t) === 'P').length;
+        const colapsada = !!seccColapsades[sec.id];
         return (
           <div key={sec.id} style={{ marginBottom: 16 }}>
-            {/* Cabecera sección con editar nombre */}
+            {/* Cabecera sección — clicable per plegar/desplegar tota la secció */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#52524E', flexShrink: 0 }}>{sec.codigo}</span>
+              <span onClick={() => setSeccColapsades(s => ({ ...s, [sec.id]: !s[sec.id] }))}
+                style={{ fontSize: 9, color: '#C4C3BE', cursor: 'pointer', flexShrink: 0, transition: 'transform .2s', transform: colapsada ? 'none' : 'rotate(90deg)' }}>▶</span>
+              <span onClick={() => setSeccColapsades(s => ({ ...s, [sec.id]: !s[sec.id] }))}
+                style={{ fontSize: 11, fontWeight: 700, color: '#52524E', flexShrink: 0, cursor: 'pointer' }}>{sec.codigo}</span>
               {editandoSec === sec.id
                 ? <input autoFocus value={sec.titulo} onChange={e => updSeccion(sec.id, 'titulo', e.target.value)} onBlur={() => setEditandoSec(null)} style={{ flex: 1, fontSize: 12, fontWeight: 600 }} />
-                : <><span style={{ fontSize: 12, fontWeight: 600, color: '#141412', flex: 1 }}>{sec.titulo}</span><button onClick={() => setEditandoSec(sec.id)} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'0 2px', flexShrink:0 }}>✏️</button></>}
+                : <span onClick={() => setSeccColapsades(s => ({ ...s, [sec.id]: !s[sec.id] }))} style={{ fontSize: 12, fontWeight: 600, color: '#141412', flex: 1, cursor: 'pointer' }}>{sec.titulo}</span>}
+              {!editandoSec && <button onClick={() => setEditandoSec(sec.id)} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', color:'#C4C3BE', fontSize:12, padding:'0 2px', flexShrink:0 }}>✏️</button>}
+              {pendents > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#7C4A00', background: '#FEF3DB', borderRadius: 10, padding: '1px 7px' }}>{pendents}</span>}
               <span style={{ fontSize: 11, color: '#A5A5A0' }}>{activos.length}</span>
               <button onClick={() => setBorrar({ tipo: 'seccion', id: sec.id, label: sec.titulo })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
             </div>
-            {/* Temas activos */}
-            {activos.map(t => (
+            {/* Temas activos — ordenats, sense botó d'afegir (la captura ràpida flotant ho substitueix) */}
+            {!colapsada && activosOrdenats.map(t => (
               <TemaVO key={t.id} t={t} est={ESTADOS_VO[estatAgregatTema(t)]} secId={sec.id} voNum={vo.num}
                 secciones={vo.secciones}
                 onUpdEntrada={(tId,eId,campo,val) => updEntrada(sec.id, tId, eId, campo, val)}
@@ -4797,17 +4809,21 @@ function ModuloActaVO({ obra, onSave }) {
                 onReordenar={(dir) => reordenarTema(sec.id, t.id, dir)}
                 onDel={() => setBorrar({ tipo: 'tema', secId: sec.id, id: t.id, label: t.num })} />
             ))}
-            <NuevoTema onAdd={(titulo, txt) => addTema(sec.id, titulo, txt)} />
           </div>
         );
       })}
       <button onClick={addSeccion} style={{ width: '100%', padding: '8px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginBottom: 14 }}>+ Añadir sección</button>
 
-      {/* Captura ràpida — botó flotant sempre a l'abast, obre un formulari complet */}
-      <button onClick={() => setShowQuickAdd(true)} title="Nou tema ràpid"
-        style={{ position: 'fixed', right: isMobile ? 16 : 28, bottom: isMobile ? 74 : 24, zIndex: 30, width: 52, height: 52, borderRadius: '50%', background: '#18180F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 26, lineHeight: 1, boxShadow: '0 6px 20px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        +
-      </button>
+      {/* Captura ràpida — única manera de crear temes nous, sempre a l'abast.
+          Renderitzat via portal a document.body: així el "fixed" és relatiu al viewport
+          real i no es queda enrere en fer scroll dins del contenidor de la pestanya. */}
+      {createPortal(
+        <button onClick={() => setShowQuickAdd(true)} title="Nou tema"
+          style={{ position: 'fixed', right: isMobile ? 16 : 28, bottom: isMobile ? 74 : 24, zIndex: 9990, width: 52, height: 52, borderRadius: '50%', background: '#18180F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 26, lineHeight: 1, boxShadow: '0 6px 20px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          +
+        </button>,
+        document.body
+      )}
       {showQuickAdd && (
         <QuickAddTema
           secciones={vo.secciones||[]}
@@ -5134,32 +5150,6 @@ function QuickAddTema({ secciones, obraId, onAdd, onCancel }) {
         </div>
       </div>
     </Modal>
-  );
-}
-function NuevoTema({ onAdd }) {
-  const isMobile = useIsMobile();
-  const [open, setOpen] = useState(false);
-  const [titulo, setTitulo] = useState('');
-  const [txt, setTxt] = useState('');
-  if (!open) return (
-    <button onClick={() => setOpen(true)}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '9px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12.5, color: '#8A8A85', fontWeight: 500 }}>
-      <span style={{ fontSize: 14, lineHeight: 1, color: '#C5C4BE' }}>+</span> Nou tema
-    </button>
-  );
-  return (
-    <div className="fade" style={{ background: '#fff', border: '1px solid #D8D7D1', borderRadius: 10, padding: 12 }}>
-      <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)}
-        placeholder="Títol del tema (p. ex. Replanteig escales)"
-        style={{ marginBottom: 7, fontWeight: 600, fontSize: 14, padding: '8px 10px' }} />
-      <textarea value={txt} onChange={e => setTxt(e.target.value)}
-        placeholder="Primer seguiment (opcional)"
-        style={{ minHeight: isMobile ? 100 : 80, fontSize: 13, lineHeight: 1.65, resize: 'vertical', marginBottom: 9 }} />
-      <div style={{ display: 'flex', gap: 7 }}>
-        <Btn primary full disabled={!titulo.trim()} onClick={() => { onAdd(titulo.trim(), txt.trim()); setTitulo(''); setTxt(''); setOpen(false); }}>Afegir tema</Btn>
-        <Btn onClick={() => { setTitulo(''); setTxt(''); setOpen(false); }}>Cancel·lar</Btn>
-      </div>
-    </div>
   );
 }
 function NuevaEntrada({ onAdd }) {
