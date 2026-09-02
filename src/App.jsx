@@ -4289,16 +4289,23 @@ function ModuloActaVO({ obra, onSave }) {
     guardarVO({ ...vo, contrataciones: (vo.contrataciones||[]).filter(c => c.id!==id) });
   }
 
-  // 8 — Clima
-  function addDiaClima() {
-    if ((vo.clima||[]).length >= 7) return;
-    guardarVO({ ...vo, clima: [...(vo.clima||[]), { id: uid(), fecha: today(), condicion: 'soleado', temp: '', precip: '' }] });
+  // 8 — Clima: es generen sempre 7 dies consecutius a partir d'una única data d'inici
+  function generarDiesClima(dataIniciStr) {
+    if (!dataIniciStr) return;
+    const inici = new Date(dataIniciStr + 'T00:00:00');
+    const existents = vo.clima || [];
+    const nous = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(inici); d.setDate(d.getDate() + i);
+      const fecha = d.toISOString().slice(0,10);
+      // Si aquell dia ja tenia dades introduïdes (manual o d'una càrrega prèvia), les conservem
+      const existent = existents.find(x => x.fecha === fecha);
+      nous.push(existent || { id: uid(), fecha, condicion: 'soleado', temp: '', precip: '' });
+    }
+    guardarVO({ ...vo, clima: nous });
   }
   function updDiaClima(id, campo, val) {
     guardarVO({ ...vo, clima: (vo.clima||[]).map(d => d.id===id ? {...d, [campo]: val} : d) });
-  }
-  function delDiaClima(id) {
-    guardarVO({ ...vo, clima: (vo.clima||[]).filter(d => d.id!==id) });
   }
 
   // Codi WMO (Open-Meteo) → condició del nostre model
@@ -4638,7 +4645,7 @@ function ModuloActaVO({ obra, onSave }) {
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', background: '#FAFAF8', borderRadius: 9, padding: 8 }}>
           <span style={{ fontSize: 11.5, color: '#6B6B66', flexShrink: 0 }}>Setmana des de</span>
-          <input type="date" value={climaSetmana} onChange={e => setClimaSetmana(e.target.value)}
+          <input type="date" value={climaSetmana} onChange={e => { setClimaSetmana(e.target.value); generarDiesClima(e.target.value); }}
             style={{ width: 140, fontSize: 11.5, flexShrink: 0 }} />
           <Btn sm primary onClick={carregarSetmanaClima} disabled={climaCarregant}>
             {climaCarregant ? 'Carregant…' : 'Carregar automàticament'}
@@ -4655,35 +4662,36 @@ function ModuloActaVO({ obra, onSave }) {
           />
         )}
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {(vo.clima||[]).map(d => (
-            <div key={d.id} style={{ background: '#FAFAF8', borderRadius: 9, padding: 8, width: isMobile ? '100%' : 150 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
-                <input type="date" value={d.fecha||''} onChange={e => updDiaClima(d.id, 'fecha', e.target.value)}
-                  style={{ flex: 1, fontSize: 11 }} />
-                <button onClick={() => delDiaClima(d.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#D4D3CE', fontSize:14, lineHeight:1, flexShrink:0 }}>×</button>
-              </div>
-              <select value={d.condicion||'soleado'} onChange={e => updDiaClima(d.id, 'condicion', e.target.value)}
-                style={{ fontSize: 11.5, marginBottom: 5 }}>
-                <option value="soleado">☀ Assolellat</option>
-                <option value="nublado">☁ Ennuvolat</option>
-                <option value="lluvia">🌧 Pluja</option>
-              </select>
-              <div style={{ display: 'flex', gap: 5 }}>
-                <input value={d.temp??''} onChange={e => updDiaClima(d.id, 'temp', e.target.value.replace(/[^0-9-]/g,''))}
-                  placeholder="°C" style={{ width: '50%', fontSize: 11.5, textAlign: 'center' }} />
-                <input value={d.precip??''} onChange={e => updDiaClima(d.id, 'precip', e.target.value.replace(/[^0-9.]/g,''))}
-                  placeholder="mm" style={{ width: '50%', fontSize: 11.5, textAlign: 'center' }} />
-              </div>
-            </div>
-          ))}
-          {(vo.clima||[]).length < 7 && (
-            <button onClick={addDiaClima}
-              style={{ width: isMobile ? '100%' : 150, borderRadius: 9, border: '1.5px dashed #E5E4DF', background: 'transparent', cursor: 'pointer', fontSize: 11.5, color: '#9B9B97', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: 60 }}>
-              <span style={{ fontSize: 15, lineHeight: 1, color: '#C5C4BE' }}>+</span> Afegir dia
-            </button>
-          )}
-        </div>
+        {(vo.clima||[]).length === 0 ? (
+          <div style={{ fontSize: 12, color: '#9B9B97', padding: '10px 0' }}>Tria una data d'inici per generar els 7 dies.</div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {(vo.clima||[]).map(d => {
+              const DIA_CURT = ['Dg','Dl','Dt','Dc','Dj','Dv','Ds'];
+              const diaLabel = d.fecha ? DIA_CURT[new Date(d.fecha + 'T12:00:00').getDay()] : '';
+              const dataLabel = d.fecha ? fmtShort(d.fecha) : '';
+              return (
+                <div key={d.id} style={{ background: '#FAFAF8', borderRadius: 9, padding: 8, width: isMobile ? '100%' : 150 }}>
+                  <div style={{ ...NUM, fontSize: 11.5, fontWeight: 600, color: '#52524E', marginBottom: 6, textAlign: 'center' }}>
+                    {diaLabel} {dataLabel}
+                  </div>
+                  <select value={d.condicion||'soleado'} onChange={e => updDiaClima(d.id, 'condicion', e.target.value)}
+                    style={{ fontSize: 11.5, marginBottom: 5 }}>
+                    <option value="soleado">☀ Assolellat</option>
+                    <option value="nublado">☁ Ennuvolat</option>
+                    <option value="lluvia">🌧 Pluja</option>
+                  </select>
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    <input value={d.temp??''} onChange={e => updDiaClima(d.id, 'temp', e.target.value.replace(/[^0-9-]/g,''))}
+                      placeholder="°C" style={{ width: '50%', fontSize: 11.5, textAlign: 'center' }} />
+                    <input value={d.precip??''} onChange={e => updDiaClima(d.id, 'precip', e.target.value.replace(/[^0-9.]/g,''))}
+                      placeholder="mm" style={{ width: '50%', fontSize: 11.5, textAlign: 'center' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Secciones editables */}
