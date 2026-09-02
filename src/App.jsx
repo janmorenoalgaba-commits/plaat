@@ -3957,6 +3957,9 @@ function ModuloActaVO({ obra, onSave }) {
   const isMobile = useIsMobile();
   const [voLocal, setVoLocal] = useState(null);
   const [cargandoVO, setCargandoVO] = useState(false);
+  const [climaSetmana, setClimaSetmana] = useState(today());
+  const [climaCarregant, setClimaCarregant] = useState(false);
+  const [climaError, setClimaError] = useState('');
   const NUM = { fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em' };
 
   // Si obra.actaVO és null (Fase 1 o mòdul no carregat), el carrega directament de Supabase
@@ -4204,6 +4207,56 @@ function ModuloActaVO({ obra, onSave }) {
   }
   function delDiaClima(id) {
     guardarVO({ ...vo, clima: (vo.clima||[]).filter(d => d.id!==id) });
+  }
+
+  // Codi WMO (Open-Meteo) → condició del nostre model
+  function wmoACondicio(codi) {
+    if (codi === 0 || codi === 1) return 'soleado';
+    if (codi === 2 || codi === 3 || (codi >= 45 && codi <= 48)) return 'nublado';
+    return 'lluvia'; // pluja, ruixats, tempesta, neu...
+  }
+
+  // Carrega automàtica de 7 dies de clima real (geocodifica l'obra + Open-Meteo)
+  async function carregarSetmanaClima() {
+    setClimaError('');
+    const adreca = obra.emplazamiento || obra.direccion || obra.nombre;
+    if (!adreca) { setClimaError('Aquesta obra no té emplaçament definit.'); return; }
+    if (!climaSetmana) { setClimaError('Tria una data d\'inici de setmana.'); return; }
+    setClimaCarregant(true);
+    try {
+      // 1. Geocodificar l'adreça de l'obra (Nominatim / OpenStreetMap)
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(adreca)}`);
+      const geoData = await geoRes.json();
+      if (!geoData || !geoData.length) throw new Error('No s\'ha pogut localitzar l\'adreça de l\'obra.');
+      const lat = geoData[0].lat, lon = geoData[0].lon;
+
+      // 2. Calcular rang de 7 dies des de la data triada
+      const inici = new Date(climaSetmana + 'T00:00:00');
+      const fi = new Date(inici); fi.setDate(fi.getDate() + 6);
+      const fmt = d => d.toISOString().slice(0,10);
+      const esPassat = fi < new Date(new Date().toDateString());
+
+      // 3. Triar API: archive (passat) o forecast (present/futur)
+      const base = esPassat
+        ? 'https://archive-api.open-meteo.com/v1/archive'
+        : 'https://api.open-meteo.com/v1/forecast';
+      const url = `${base}?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,precipitation_sum,weathercode&timezone=auto&start_date=${fmt(inici)}&end_date=${fmt(fi)}`;
+      const wRes = await fetch(url);
+      const wData = await wRes.json();
+      if (!wData.daily) throw new Error('El servei meteorològic no ha retornat dades per aquest període.');
+
+      const nousD = wData.daily.time.map((fecha, i) => ({
+        id: uid(),
+        fecha,
+        condicion: wmoACondicio(wData.daily.weathercode[i]),
+        temp: Math.round(wData.daily.temperature_2m_max[i]),
+        precip: Math.round((wData.daily.precipitation_sum[i] || 0) * 10) / 10,
+      }));
+      guardarVO({ ...vo, clima: nousD });
+    } catch (e) {
+      setClimaError(e.message || 'Error carregant el clima.');
+    }
+    setClimaCarregant(false);
   }
 
   const [showIdioma, setShowIdioma] = useState(false);
@@ -4475,6 +4528,18 @@ function ModuloActaVO({ obra, onSave }) {
           <span style={{ fontSize: 13, fontWeight: 600, color: '#141412' }}>Clima</span>
           <span style={{ ...NUM, fontSize: 10, color: '#BFBEB9', marginLeft: 'auto' }}>{(vo.clima||[]).length}/7</span>
         </div>
+
+        {/* Càrrega automàtica: geocodifica l'obra + servei meteorològic real */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', background: '#FAFAF8', borderRadius: 9, padding: 8 }}>
+          <span style={{ fontSize: 11.5, color: '#6B6B66', flexShrink: 0 }}>Setmana des de</span>
+          <input type="date" value={climaSetmana} onChange={e => setClimaSetmana(e.target.value)}
+            style={{ width: 140, fontSize: 11.5, flexShrink: 0 }} />
+          <Btn sm primary onClick={carregarSetmanaClima} disabled={climaCarregant}>
+            {climaCarregant ? 'Carregant…' : 'Carregar automàticament'}
+          </Btn>
+        </div>
+        {climaError && <div style={{ fontSize: 11.5, color: '#8A1F1F', marginBottom: 8 }}>{climaError}</div>}
+
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {(vo.clima||[]).map(d => (
             <div key={d.id} style={{ background: '#FAFAF8', borderRadius: 9, padding: 8, width: isMobile ? '100%' : 150 }}>
@@ -4490,10 +4555,10 @@ function ModuloActaVO({ obra, onSave }) {
                 <option value="lluvia">🌧 Pluja</option>
               </select>
               <div style={{ display: 'flex', gap: 5 }}>
-                <input value={d.temp||''} onChange={e => updDiaClima(d.id, 'temp', e.target.value.replace(/[^0-9-]/g,''))}
+                <input value={d.temp??''} onChange={e => updDiaClima(d.id, 'temp', e.target.value.replace(/[^0-9-]/g,''))}
                   placeholder="°C" style={{ width: '50%', fontSize: 11.5, textAlign: 'center' }} />
-                <input value={d.precip||''} onChange={e => updDiaClima(d.id, 'precip', e.target.value)}
-                  placeholder="Precip." style={{ width: '50%', fontSize: 11.5 }} />
+                <input value={d.precip??''} onChange={e => updDiaClima(d.id, 'precip', e.target.value.replace(/[^0-9.]/g,''))}
+                  placeholder="mm" style={{ width: '50%', fontSize: 11.5, textAlign: 'center' }} />
               </div>
             </div>
           ))}
@@ -5676,12 +5741,18 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.text(T.estat0, ML + 2 + 3 + doc.getTextWidth('A'), y + eoH/2, { baseline:'middle' });
     y += eoH;
 
-    // Text de descripció
+    // Text de descripció — amb prefix "A.1" al davant, igual que al Word
     if (eo.descripcion) {
       doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-      const dl = doc.splitTextToSize(eo.descripcion, CW - 4);
+      const prefixA1 = 'A.1';
+      const prefixW = doc.getTextWidth(prefixA1) + 2;
+      const dl = doc.splitTextToSize(eo.descripcion, CW - 4 - prefixW);
       const dh = Math.max(10, dl.length * 4.2 + 5);
-      doc.text(dl, ML + 2, y + 4);
+      // Prefix "A.1" a l'esquerra
+      doc.setFont('helvetica','bold');
+      doc.text(prefixA1, ML + 2, y + 4, { baseline:'alphabetic' });
+      doc.setFont('helvetica','normal');
+      doc.text(dl, ML + 2 + prefixW, y + 4);
       y += dh - 3;
     }
 
@@ -5739,6 +5810,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.text(T.trabajosCurso, ML + 2 + 3 + doc.getTextWidth('B'), y + bH/2, { baseline:'middle' });
     doc.text(T.pctEjecutado, ML + CW - 2, y + bH/2, { align:'right', baseline:'middle' });
     y += bH + 2;
+    setLW(LW); doc.line(ML, y, ML + CW, y); // línia superior de la primera fila
 
     trabajos.forEach((tr, i) => {
       const rh = 5.5;
@@ -5880,21 +5952,21 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         ey+=e.h;
       });
 
-      // Columnes ES / INICI / FI / RES — UN sol valor per a tot el tema, centrat verticalment
-      const midTema = y + temaH/2;
+      // Columnes ES / INICI / FI / RES — alineades al títol del tema (no centrades al bloc)
+      const topTema = y + 3 + tituloLH*0.8;
       const colorEstat = estatMostrat==='R' ? [44,94,16] : estatMostrat==='I'||estatMostrat==='INF' ? [12,68,124] : estatMostrat==='N' ? [0,0,0] : [124,74,0];
       doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(...colorEstat);
-      doc.text(estatMostrat, ML+cNum+cDesc+cEs/2, midTema, { align:'center', baseline:'middle' });
+      doc.text(estatMostrat, ML+cNum+cDesc+cEs/2, topTema, { align:'center', baseline:'middle' });
       doc.setTextColor(0,0,0);
       doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
       const fechaInicio = entradesOrdenades[0]?.fecha;
       const fechaFin     = ultima.fecha;
-      doc.text(fechaInicio ? fmtFechaCorta(fechaInicio) : '', ML+cNum+cDesc+cEs+cIni/2, midTema, { align:'center', baseline:'middle' });
-      doc.text((fechaFin && entradesOrdenades.length>1) ? fmtFechaCorta(fechaFin) : '', ML+cNum+cDesc+cEs+cIni+cFi/2, midTema, { align:'center', baseline:'middle' });
+      doc.text(fechaInicio ? fmtFechaCorta(fechaInicio) : '', ML+cNum+cDesc+cEs+cIni/2, topTema, { align:'center', baseline:'middle' });
+      doc.text((fechaFin && entradesOrdenades.length>1) ? fmtFechaCorta(fechaFin) : '', ML+cNum+cDesc+cEs+cIni+cFi/2, topTema, { align:'center', baseline:'middle' });
       const respsArr = Array.isArray(ultima.resp) ? ultima.resp : (ultima.resp ? [ultima.resp] : []);
       doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
       const respLH = 7.5*0.3528+0.4;
-      let respY = midTema - (respsArr.length-1)*respLH/2;
+      let respY = topTema;
       respsArr.forEach(r => { doc.text(r, ML+cNum+cDesc+cEs+cIni+cFi+cRes/2, respY, { align:'center', baseline:'middle' }); respY += respLH; });
 
       // SENSE línies verticals — sols línies horitzontals fines entre temes
@@ -5910,38 +5982,35 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   if ((hitos.esenciales||[]).length > 0 || (hitos.intermedios||[]).length > 0) {
     const c6H = 5.5;
     const c6Cod=14, c6Desc=64, cFP=32, cFR=32, cRD=CW-c6Cod-c6Desc-cFP-cFR;
-    const alt6 = c6H + 6 + 10 + ((hitos.esenciales||[]).length + (hitos.intermedios||[]).length) * 5.5 + 6;
+    const totalItems = (hitos.esenciales||[]).length + (hitos.intermedios||[]).length;
+    const alt6 = c6H + 10 + totalItems * 5.5 + 6;
     if (y + alt6 > PH - MB - 12) { doc.addPage(); pagActual++; dibuixarCapçalera(false); dibuixarPeu(); }
 
-    // Fila 1: títol de secció (fons gris, sola)
+    // Fila títol — igual patró que la taula de temes: codi+títol a l'esquerra, capçaleres a la dreta, MATEIXA fila
     doc.setFillColor(...GRIS15);
     doc.rect(ML, y, CW, c6H, 'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
     doc.text('6', ML + 2, y + c6H/2, { baseline:'middle' });
     doc.text(T.hitosContractuales, ML + 2 + 3 + doc.getTextWidth('6'), y + c6H/2, { baseline:'middle' });
-    y += c6H;
+    doc.setFontSize(6.5);
+    [[ML+c6Cod+c6Desc, cFP, T.fechaPrevista],[ML+c6Cod+c6Desc+cFP, cFR, T.fechaReal],
+     [ML+c6Cod+c6Desc+cFP+cFR, cRD, T.retrasoDias]]
+      .forEach(([x,w,t]) => doc.text(t, x+w/2, y + c6H/2, { align:'center', baseline:'middle' }));
+    y += c6H + 5;
 
-    // Fila 2: etiquetes de columna (línia fina superior i inferior)
-    doc.setFontSize(6.5); doc.setFont('helvetica','bold');
-    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
-    [[ML+c6Cod, c6Desc, T.planning],[ML+c6Cod+c6Desc, cFP, T.fechaPrevista],
-     [ML+c6Cod+c6Desc+cFP, cFR, T.fechaReal],[ML+c6Cod+c6Desc+cFP+cFR, cRD, T.retrasoDias]]
-      .forEach(([x,w,t]) => doc.text(t, x+w/2, y+3, { align:'center', baseline:'middle' }));
-    y += 5.5;
-    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
-    y += 3;
-
+    let contadorHito = 1;
     function dibuixaGrupHitos(nomGrup, items) {
       if (!items.length) return;
       doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
       doc.text(nomGrup, ML + 2, y + 3.5, { baseline:'middle' });
       setLW(LW_THIN); doc.line(ML, y+5.5, ML+CW, y+5.5);
       y += 5.5;
-      items.forEach((it, i) => {
+      items.forEach((it) => {
         const rh = 5.5;
         checkPage(rh);
         doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        doc.text(`${(nomGrup===T.plazosEsenciales?'6.E':'6.I')}${i+1}`, ML+2, y+rh/2, { baseline:'middle' });
+        doc.text(`6.${String(contadorHito).padStart(2,'0')}`, ML+2, y+rh/2, { baseline:'middle' });
+        contadorHito++;
         doc.setFont('helvetica','normal');
         doc.text(doc.splitTextToSize(it.descripcion||'', c6Desc-3)[0]||'', ML+c6Cod+2, y+rh/2, { baseline:'middle' });
         doc.text(it.fechaPrevista ? fmtFechaCorta(it.fechaPrevista) : '', ML+c6Cod+c6Desc+cFP/2, y+rh/2, { align:'center', baseline:'middle' });
@@ -6018,32 +6087,62 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.text(T.clima, ML + 2 + 3 + doc.getTextWidth('8'), y + c8H/2, { baseline:'middle' });
     y += c8H + 3;
 
-    // Fila dia + data
+    // Dia de la setmana abreujat (calculat automàticament de la data)
+    const DIA_ABREV = esCA
+      ? ['DG.','DL.','DT.','DC.','DJ.','DV.','DS.']
+      : ['DOM.','LUN.','MAR.','MIÉ.','JUE.','VIE.','SÁB.'];
+    function diaAbrev(fechaIso) {
+      if (!fechaIso) return '';
+      const d = new Date(fechaIso + 'T12:00:00');
+      return DIA_ABREV[d.getDay()];
+    }
+
+    // Nivell de pluja segons mm (llindars meteorològics estàndard)
+    function nivellPluja(mm) {
+      const v = parseFloat(mm) || 0;
+      if (v <= 0)   return esCA ? 'sense pluja'    : 'sin lluvia';
+      if (v <= 2)   return esCA ? 'pluja feble'    : 'lluvia leve';
+      if (v <= 10)  return esCA ? 'pluja moderada' : 'lluvia moderada';
+      return esCA ? 'pluja forta' : 'lluvia fuerte';
+    }
+
+    // Fila DIA + data
     doc.setFont('helvetica','bold'); doc.setFontSize(7);
     dies.forEach((d, i) => {
       const x = ML + i*cDia + cDia/2;
-      const diaTxt = d.fecha ? fmtFechaCorta(d.fecha) : '';
+      const diaTxt = d.fecha ? `${diaAbrev(d.fecha)} ${fmtFechaCorta(d.fecha)}` : '';
       doc.text(diaTxt, x, y+3.5, { align:'center', baseline:'middle' });
     });
     y += 7;
 
-    // Icona simple (dibuixada, no requereix imatges)
+    // Icones vectorials — sol / núvol (forma real) / pluja
     function dibuixaIconaClima(cx, cy, tipus) {
-      const R = 3.2;
+      const R = 3;
       if (tipus === 'lluvia') {
-        doc.setFillColor(180,190,200); doc.circle(cx, cy-1, R, 'F');
-        setLW(0.35); doc.setDrawColor(70,120,200);
-        for (let k=-1;k<=1;k++) doc.line(cx+k*2.2, cy+2, cx+k*2.2-0.8, cy+5);
+        // Núvol (3 cercles superposats) + gotes
+        doc.setFillColor(175,185,196);
+        doc.circle(cx-2.2, cy-0.3, R*0.75, 'F');
+        doc.circle(cx+2.2, cy-0.3, R*0.75, 'F');
+        doc.circle(cx, cy-1.4, R*0.95, 'F');
+        doc.rect(cx-3.3, cy-0.6, 6.6, 2.2, 'F');
+        setLW(0.4); doc.setDrawColor(70,120,200);
+        for (let k=-1;k<=1;k++) doc.line(cx+k*2.3, cy+2.2, cx+k*2.3-0.7, cy+4.8);
         doc.setDrawColor(0,0,0);
       } else if (tipus === 'nublado') {
-        doc.setFillColor(200,200,200); doc.circle(cx, cy, R, 'F');
-      } else { // soleado / parcial
-        doc.setFillColor(255,210,80); doc.circle(cx, cy, R*0.75, 'F');
-        setLW(0.4); doc.setDrawColor(255,180,50);
+        // Núvol (3 cercles superposats), sense pluja
+        doc.setFillColor(195,200,206);
+        doc.circle(cx-2.2, cy+0.3, R*0.75, 'F');
+        doc.circle(cx+2.2, cy+0.3, R*0.75, 'F');
+        doc.circle(cx, cy-0.8, R*0.95, 'F');
+        doc.rect(cx-3.3, cy-0.1, 6.6, 2.2, 'F');
+      } else {
+        // Sol — cercle groc + 8 raigs
+        doc.setFillColor(255,205,70); doc.circle(cx, cy, R*0.72, 'F');
+        setLW(0.45); doc.setDrawColor(255,175,45);
         for (let a=0; a<8; a++) {
           const ang = a * Math.PI/4;
-          const x1=cx+Math.cos(ang)*(R*0.9), y1=cy+Math.sin(ang)*(R*0.9);
-          const x2=cx+Math.cos(ang)*(R*1.5), y2=cy+Math.sin(ang)*(R*1.5);
+          const x1=cx+Math.cos(ang)*(R*0.95), y1=cy+Math.sin(ang)*(R*0.95);
+          const x2=cx+Math.cos(ang)*(R*1.6), y2=cy+Math.sin(ang)*(R*1.6);
           doc.line(x1,y1,x2,y2);
         }
         doc.setDrawColor(0,0,0);
@@ -6062,17 +6161,19 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.setFont('helvetica','normal');
     dies.forEach((d, i) => {
       const x = ML + i*cDia + cDia/2;
-      doc.text(d.temp ? `${d.temp} °C` : '', x, y+3.75, { align:'center', baseline:'middle' });
+      doc.text(d.temp !== undefined && d.temp !== '' ? `${d.temp} °C` : '', x, y+3.75, { align:'center', baseline:'middle' });
     });
     y += 5.5;
     setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
 
-    // Fila PREC
+    // Fila PREC — "X mm (nivell)"
     doc.setFont('helvetica','bold'); doc.text(T.prec, ML+2, y+3.75, { baseline:'middle' });
-    doc.setFont('helvetica','normal');
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
     dies.forEach((d, i) => {
       const x = ML + i*cDia + cDia/2;
-      doc.text(d.precip || '', x, y+3.75, { align:'center', baseline:'middle' });
+      const mm = d.precip !== undefined && d.precip !== '' ? d.precip : null;
+      const txt = mm !== null ? `${mm} mm (${nivellPluja(mm)})` : '';
+      doc.text(txt, x, y+3.75, { align:'center', baseline:'middle' });
     });
     y += 5.5;
     setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
