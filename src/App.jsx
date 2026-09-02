@@ -320,6 +320,87 @@ function ConfirmMini({ titulo, texto, onSi, onNo }) {
   );
 }
 
+// ── Selector d'ubicació al mapa (Leaflet, carregat dinàmicament) ─────────────
+function MapaClimaModal({ latInicial, lonInicial, onConfirmar, onCancelar }) {
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const markerRef = useRef(null);
+  const [carregant, setCarregant] = useState(true);
+  const [seleccio, setSeleccio] = useState(
+    latInicial !== undefined && lonInicial !== undefined
+      ? { lat: latInicial, lon: lonInicial }
+      : { lat: 41.3874, lon: 2.1686 } // Barcelona per defecte
+  );
+
+  useEffect(() => {
+    let cancelat = false;
+    async function carregarLeaflet() {
+      if (!window.L) {
+        await new Promise((res, rej) => {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+          document.head.appendChild(link);
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+          s.onload = res; s.onerror = () => rej(new Error('No es pot carregar el mapa'));
+          document.head.appendChild(s);
+        });
+      }
+      if (cancelat || !mapRef.current) return;
+      const L = window.L;
+      const map = L.map(mapRef.current).setView([seleccio.lat, seleccio.lon], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap',
+        maxZoom: 19,
+      }).addTo(map);
+      const marker = L.marker([seleccio.lat, seleccio.lon], { draggable: true }).addTo(map);
+      marker.on('dragend', () => {
+        const p = marker.getLatLng();
+        setSeleccio({ lat: p.lat, lon: p.lng });
+      });
+      map.on('click', (e) => {
+        marker.setLatLng(e.latlng);
+        setSeleccio({ lat: e.latlng.lat, lon: e.latlng.lng });
+      });
+      mapInstance.current = map;
+      markerRef.current = marker;
+      setCarregant(false);
+      setTimeout(() => map.invalidateSize(), 100);
+    }
+    carregarLeaflet();
+    return () => {
+      cancelat = true;
+      if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; }
+    };
+    // eslint-disable-next-line
+  }, []);
+
+  return (
+    <Modal title="Marca la ubicació de l'obra" onClose={onCancelar} footer={
+      <>
+        <Btn onClick={onCancelar}>Cancel·lar</Btn>
+        <Btn primary onClick={() => onConfirmar(seleccio.lat, seleccio.lon)}>Confirmar ubicació</Btn>
+      </>
+    }>
+      <p style={{ fontSize: 12.5, color: '#6B6B66', marginBottom: 10 }}>
+        Fes clic al mapa o arrossega el marcador fins a la posició exacta de l'obra. Aquesta ubicació s'usarà per obtenir el clima real.
+      </p>
+      <div style={{ position: 'relative', width: '100%', height: 340, borderRadius: 10, overflow: 'hidden', background: '#F0EFEA' }}>
+        {carregant && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, color: '#9B9B97' }}>
+            Carregant mapa…
+          </div>
+        )}
+        <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+      </div>
+      <div style={{ ...{ fontVariantNumeric: 'tabular-nums' }, fontSize: 11.5, color: '#9B9B97', marginTop: 8, textAlign: 'center' }}>
+        {seleccio.lat.toFixed(5)}, {seleccio.lon.toFixed(5)}
+      </div>
+    </Modal>
+  );
+}
+
 function Field({ label, children, hint }) {
   return (
     <div style={{ marginBottom: 13 }}>
@@ -3960,6 +4041,7 @@ function ModuloActaVO({ obra, onSave }) {
   const [climaSetmana, setClimaSetmana] = useState(today());
   const [climaCarregant, setClimaCarregant] = useState(false);
   const [climaError, setClimaError] = useState('');
+  const [showMapaClima, setShowMapaClima] = useState(false);
   const NUM = { fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em' };
 
   // Si obra.actaVO és null (Fase 1 o mòdul no carregat), el carrega directament de Supabase
@@ -4216,27 +4298,30 @@ function ModuloActaVO({ obra, onSave }) {
     return 'lluvia'; // pluja, ruixats, tempesta, neu...
   }
 
-  // Carrega automàtica de 7 dies de clima real (geocodifica l'obra + Open-Meteo)
+  // Desa la ubicació triada al mapa — a nivell d'obra (es reutilitza en totes les actes)
+  function guardarUbicacioClima(lat, lon) {
+    onSave({ ...obra, climaLat: lat, climaLon: lon });
+  }
+
+  // Carrega automàtica de 7 dies de clima real — a partir de la ubicació marcada al mapa
   async function carregarSetmanaClima() {
     setClimaError('');
-    const adreca = obra.emplazamiento || obra.direccion || obra.nombre;
-    if (!adreca) { setClimaError('Aquesta obra no té emplaçament definit.'); return; }
+    if (obra.climaLat === undefined || obra.climaLon === undefined) {
+      setClimaError('Primer marca la ubicació de l\'obra al mapa.');
+      return;
+    }
     if (!climaSetmana) { setClimaError('Tria una data d\'inici de setmana.'); return; }
     setClimaCarregant(true);
     try {
-      // 1. Geocodificar l'adreça de l'obra (Nominatim / OpenStreetMap)
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(adreca)}`);
-      const geoData = await geoRes.json();
-      if (!geoData || !geoData.length) throw new Error('No s\'ha pogut localitzar l\'adreça de l\'obra.');
-      const lat = geoData[0].lat, lon = geoData[0].lon;
+      const lat = obra.climaLat, lon = obra.climaLon;
 
-      // 2. Calcular rang de 7 dies des de la data triada
+      // Calcular rang de 7 dies des de la data triada
       const inici = new Date(climaSetmana + 'T00:00:00');
       const fi = new Date(inici); fi.setDate(fi.getDate() + 6);
       const fmt = d => d.toISOString().slice(0,10);
       const esPassat = fi < new Date(new Date().toDateString());
 
-      // 3. Triar API: archive (passat) o forecast (present/futur)
+      // Triar API: archive (passat) o forecast (present/futur)
       const base = esPassat
         ? 'https://archive-api.open-meteo.com/v1/archive'
         : 'https://api.open-meteo.com/v1/forecast';
@@ -4529,7 +4614,18 @@ function ModuloActaVO({ obra, onSave }) {
           <span style={{ ...NUM, fontSize: 10, color: '#BFBEB9', marginLeft: 'auto' }}>{(vo.clima||[]).length}/7</span>
         </div>
 
-        {/* Càrrega automàtica: geocodifica l'obra + servei meteorològic real */}
+        {/* Ubicació al mapa + càrrega automàtica del clima real */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => setShowMapaClima(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 8, border: '1px solid #E0DFD9', background: obra.climaLat !== undefined ? '#F0EFEA' : '#fff', cursor: 'pointer', fontSize: 12, color: '#52524E', fontWeight: 500 }}>
+            📍 {obra.climaLat !== undefined ? 'Ubicació marcada' : 'Marcar ubicació al mapa'}
+          </button>
+          {obra.climaLat !== undefined && (
+            <span style={{ ...NUM, fontSize: 10.5, color: '#9B9B97' }}>
+              {Number(obra.climaLat).toFixed(4)}, {Number(obra.climaLon).toFixed(4)}
+            </span>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', background: '#FAFAF8', borderRadius: 9, padding: 8 }}>
           <span style={{ fontSize: 11.5, color: '#6B6B66', flexShrink: 0 }}>Setmana des de</span>
           <input type="date" value={climaSetmana} onChange={e => setClimaSetmana(e.target.value)}
@@ -4539,6 +4635,15 @@ function ModuloActaVO({ obra, onSave }) {
           </Btn>
         </div>
         {climaError && <div style={{ fontSize: 11.5, color: '#8A1F1F', marginBottom: 8 }}>{climaError}</div>}
+
+        {showMapaClima && (
+          <MapaClimaModal
+            latInicial={obra.climaLat}
+            lonInicial={obra.climaLon}
+            onConfirmar={(lat, lon) => { guardarUbicacioClima(lat, lon); setShowMapaClima(false); setClimaError(''); }}
+            onCancelar={() => setShowMapaClima(false)}
+          />
+        )}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {(vo.clima||[]).map(d => (
@@ -5993,6 +6098,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.text('6', ML + 2, y + c6H/2, { baseline:'middle' });
     doc.text(T.hitosContractuales, ML + 2 + 3 + doc.getTextWidth('6'), y + c6H/2, { baseline:'middle' });
     doc.setFontSize(6.5);
+    doc.text(T.planning, ML+c6Cod+c6Desc-2, y + c6H/2, { align:'right', baseline:'middle' });
     [[ML+c6Cod+c6Desc, cFP, T.fechaPrevista],[ML+c6Cod+c6Desc+cFP, cFR, T.fechaReal],
      [ML+c6Cod+c6Desc+cFP+cFR, cRD, T.retrasoDias]]
       .forEach(([x,w,t]) => doc.text(t, x+w/2, y + c6H/2, { align:'center', baseline:'middle' }));
@@ -6076,7 +6182,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   if (climaData.length > 0) {
     const dies = climaData.slice(0, 7);
     const c8H = 5.5;
-    const cDia = CW / dies.length;
+    const c8Label = 14; // columna d'etiquetes DIA / TEMP. / PREC. (igual patró que cNum)
+    const cDia = (CW - c8Label) / dies.length;
     const alt8 = c8H + 6 + 22 + 5.5*2 + 6;
     if (y + alt8 > PH - MB - 12) { doc.addPage(); pagActual++; dibuixarCapçalera(false); dibuixarPeu(); }
 
@@ -6087,14 +6194,14 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.text(T.clima, ML + 2 + 3 + doc.getTextWidth('8'), y + c8H/2, { baseline:'middle' });
     y += c8H + 3;
 
-    // Dia de la setmana abreujat (calculat automàticament de la data)
-    const DIA_ABREV = esCA
-      ? ['DG.','DL.','DT.','DC.','DJ.','DV.','DS.']
-      : ['DOM.','LUN.','MAR.','MIÉ.','JUE.','VIE.','SÁB.'];
-    function diaAbrev(fechaIso) {
+    // Dia de la setmana COMPLET (calculat automàticament de la data, sense abreujar)
+    const DIA_COMPLET = esCA
+      ? ['Diumenge','Dilluns','Dimarts','Dimecres','Dijous','Divendres','Dissabte']
+      : ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+    function diaComplet(fechaIso) {
       if (!fechaIso) return '';
       const d = new Date(fechaIso + 'T12:00:00');
-      return DIA_ABREV[d.getDay()];
+      return DIA_COMPLET[d.getDay()];
     }
 
     // Nivell de pluja segons mm (llindars meteorològics estàndard)
@@ -6106,20 +6213,24 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       return esCA ? 'pluja forta' : 'lluvia fuerte';
     }
 
-    // Fila DIA + data
-    doc.setFont('helvetica','bold'); doc.setFontSize(7);
+    // Fila DIA — etiqueta a l'esquerra + nom complet del dia damunt la data
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+    doc.text(T.dia, ML+2, y+3.5, { baseline:'middle' });
     dies.forEach((d, i) => {
-      const x = ML + i*cDia + cDia/2;
-      const diaTxt = d.fecha ? `${diaAbrev(d.fecha)} ${fmtFechaCorta(d.fecha)}` : '';
-      doc.text(diaTxt, x, y+3.5, { align:'center', baseline:'middle' });
+      const x = ML + c8Label + i*cDia + cDia/2;
+      const nomDia = d.fecha ? diaComplet(d.fecha) : '';
+      const dataTxt = d.fecha ? fmtFechaCorta(d.fecha) : '';
+      doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
+      doc.text(nomDia, x, y+2.3, { align:'center', baseline:'middle' });
+      doc.setFont('helvetica','normal');
+      doc.text(dataTxt, x, y+5, { align:'center', baseline:'middle' });
     });
-    y += 7;
+    y += 8;
 
     // Icones vectorials — sol / núvol (forma real) / pluja
     function dibuixaIconaClima(cx, cy, tipus) {
       const R = 3;
       if (tipus === 'lluvia') {
-        // Núvol (3 cercles superposats) + gotes
         doc.setFillColor(175,185,196);
         doc.circle(cx-2.2, cy-0.3, R*0.75, 'F');
         doc.circle(cx+2.2, cy-0.3, R*0.75, 'F');
@@ -6129,14 +6240,12 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         for (let k=-1;k<=1;k++) doc.line(cx+k*2.3, cy+2.2, cx+k*2.3-0.7, cy+4.8);
         doc.setDrawColor(0,0,0);
       } else if (tipus === 'nublado') {
-        // Núvol (3 cercles superposats), sense pluja
         doc.setFillColor(195,200,206);
         doc.circle(cx-2.2, cy+0.3, R*0.75, 'F');
         doc.circle(cx+2.2, cy+0.3, R*0.75, 'F');
         doc.circle(cx, cy-0.8, R*0.95, 'F');
         doc.rect(cx-3.3, cy-0.1, 6.6, 2.2, 'F');
       } else {
-        // Sol — cercle groc + 8 raigs
         doc.setFillColor(255,205,70); doc.circle(cx, cy, R*0.72, 'F');
         setLW(0.45); doc.setDrawColor(255,175,45);
         for (let a=0; a<8; a++) {
@@ -6149,33 +6258,36 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       }
     }
     dies.forEach((d, i) => {
-      const x = ML + i*cDia + cDia/2;
+      const x = ML + c8Label + i*cDia + cDia/2;
       dibuixaIconaClima(x, y+5, d.condicion || 'soleado');
     });
     y += 12;
 
-    // Fila TEMP
+    // Fila TEMP — etiqueta a l'esquerra, valors centrats vertical i horitzontalment
     setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
+    const tempRH = 5.5;
     doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
-    doc.text(T.temp, ML+2, y+3.75, { baseline:'middle' });
+    doc.text(T.temp, ML+2, y+tempRH/2, { baseline:'middle' });
     doc.setFont('helvetica','normal');
     dies.forEach((d, i) => {
-      const x = ML + i*cDia + cDia/2;
-      doc.text(d.temp !== undefined && d.temp !== '' ? `${d.temp} °C` : '', x, y+3.75, { align:'center', baseline:'middle' });
+      const x = ML + c8Label + i*cDia + cDia/2;
+      doc.text(d.temp !== undefined && d.temp !== '' ? `${d.temp} °C` : '', x, y+tempRH/2, { align:'center', baseline:'middle' });
     });
-    y += 5.5;
+    y += tempRH;
     setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
 
-    // Fila PREC — "X mm (nivell)"
-    doc.setFont('helvetica','bold'); doc.text(T.prec, ML+2, y+3.75, { baseline:'middle' });
+    // Fila PREC — etiqueta a l'esquerra, "X mm (nivell)" centrat
+    const precRH = 5.5;
+    doc.setFont('helvetica','bold'); doc.setFontSize(7);
+    doc.text(T.prec, ML+2, y+precRH/2, { baseline:'middle' });
     doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
     dies.forEach((d, i) => {
-      const x = ML + i*cDia + cDia/2;
+      const x = ML + c8Label + i*cDia + cDia/2;
       const mm = d.precip !== undefined && d.precip !== '' ? d.precip : null;
       const txt = mm !== null ? `${mm} mm (${nivellPluja(mm)})` : '';
-      doc.text(txt, x, y+3.75, { align:'center', baseline:'middle' });
+      doc.text(txt, x, y+precRH/2, { align:'center', baseline:'middle' });
     });
-    y += 5.5;
+    y += precRH;
     setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
     y += 4;
   }
