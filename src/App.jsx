@@ -1601,16 +1601,11 @@ const ROLES_VO = [
   { k: 'contratista',  label: 'Contratista (EC)' },
 ];
 const SECCIONES_VO = [
-  { codigo: '1',   titulo: 'TEMAS TRATADOS' },
-  { codigo: '2',   titulo: 'CONTROL DE CALIDAD' },
-  { codigo: '3.1', titulo: 'INSTALACIONES' },
-  { codigo: '3.2', titulo: 'ACOMETIDAS' },
-  { codigo: '4',   titulo: 'SEGURIDAD Y SALUD' },
-  { codigo: '5',   titulo: 'SEGUIMIENTO PLANIFICACIÓN' },
-  { codigo: '6',   titulo: 'SEGUIMIENTO HITOS CONTRACTUALES' },
-  { codigo: '7',   titulo: 'SEGUIMIENTO CONTRATACIÓN' },
-  { codigo: '8',   titulo: 'SEGUIMIENTO PERSONAL' },
-  { codigo: '9',   titulo: 'SEGUIMIENTO LEED / WELL / WIREDSCORE' },
+  { codigo: '1', titulo: 'TEMAS GENERALES, ARQUITECTURA Y ESTRUCTURA' },
+  { codigo: '2', titulo: 'INSTALACIONES' },
+  { codigo: '3', titulo: 'CONTROL DE CALIDAD' },
+  { codigo: '4', titulo: 'LEED & BREAM' },
+  { codigo: '5', titulo: 'PLANIFICACIÓN' },
 ];
 const ESTADOS_VO = {
   P: { label: 'Pendiente',   bg: '#FEF3DB', color: '#7C4A00' },
@@ -3880,16 +3875,11 @@ function getDefaultEquipo() {
 
 function getDefaultSecciones() {
   return [
-    { id: uid(), codigo: '1',   titulo: 'TEMAS TRATADOS',                  temas: [] },
-    { id: uid(), codigo: '2',   titulo: 'CONTROL DE CALIDAD',               temas: [] },
-    { id: uid(), codigo: '3.1', titulo: 'INSTALACIONES',                    temas: [] },
-    { id: uid(), codigo: '3.2', titulo: 'ACOMETIDAS',                       temas: [] },
-    { id: uid(), codigo: '4',   titulo: 'SEGURIDAD Y SALUD',                temas: [] },
-    { id: uid(), codigo: '5',   titulo: 'SEGUIMIENTO PLANIFICACIÓN',        temas: [] },
-    { id: uid(), codigo: '6',   titulo: 'SEGUIMIENTO HITOS CONTRACTUALES',  temas: [] },
-    { id: uid(), codigo: '7',   titulo: 'SEGUIMIENTO CONTRATACIÓN',         temas: [] },
-    { id: uid(), codigo: '8',   titulo: 'SEGUIMIENTO PERSONAL',             temas: [] },
-    { id: uid(), codigo: '9',   titulo: 'SEGUIMIENTO LEED / WELL / WIREDSCORE', temas: [] },
+    { id: uid(), codigo: '1', titulo: 'TEMAS GENERALES, ARQUITECTURA Y ESTRUCTURA', temas: [] },
+    { id: uid(), codigo: '2', titulo: 'INSTALACIONES',    temas: [] },
+    { id: uid(), codigo: '3', titulo: 'CONTROL DE CALIDAD', temas: [] },
+    { id: uid(), codigo: '4', titulo: 'LEED & BREAM',     temas: [] },
+    { id: uid(), codigo: '5', titulo: 'PLANIFICACIÓN',    temas: [] },
   ];
 }
 
@@ -3897,6 +3887,21 @@ function migrateVO(raw) {
   let vo = raw ? { ...raw } : {};
   if (!vo.num) vo.num = 1;
   if (!vo.estadoObra) vo.estadoObra = { descripcion: '', ubicacions: [] };
+
+  // B — Trabajos en curso
+  if (!Array.isArray(vo.trabajosEnCurso)) vo.trabajosEnCurso = [];
+
+  // 6 — Seguiment hitos contractuals (Plazos esenciales / intermedios)
+  if (!vo.hitos || typeof vo.hitos !== 'object') vo.hitos = { esenciales: [], intermedios: [] };
+  if (!Array.isArray(vo.hitos.esenciales))  vo.hitos.esenciales  = [];
+  if (!Array.isArray(vo.hitos.intermedios)) vo.hitos.intermedios = [];
+
+  // 7 — Seguiment contractacions
+  if (!Array.isArray(vo.contrataciones)) vo.contrataciones = [];
+
+  // 8 — Clima (fins a 7 dies)
+  if (!Array.isArray(vo.clima)) vo.clima = [];
+
   // Migrar fotos antigues (format pla) a estructura d'ubicacions
   if (!vo.estadoObra.ubicacions) {
     const fotesVelles = vo.estadoObra.fotos || [];
@@ -3952,12 +3957,7 @@ function ModuloActaVO({ obra, onSave }) {
   const isMobile = useIsMobile();
   const [voLocal, setVoLocal] = useState(null);
   const [cargandoVO, setCargandoVO] = useState(false);
-
-  // DEBUG TEMPORAL — esborrar després
-  useEffect(() => {
-    console.log('[ActaVO] obra.id:', obra.id, 'obra.actaVO:', obra.actaVO ? `OK (num:${obra.actaVO.num}, seccions:${obra.actaVO.secciones?.length}, temes:${obra.actaVO.secciones?.reduce((a,s)=>a+(s.temas?.length||0),0)})` : 'NULL');
-    console.log('[ActaVO] voLocal:', voLocal ? `OK (num:${voLocal.num}, seccions:${voLocal.secciones?.length}, temes:${voLocal.secciones?.reduce((a,s)=>a+(s.temas?.length||0),0)})` : 'NULL');
-  }, [obra.actaVO, voLocal]);
+  const NUM = { fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em' };
 
   // Si obra.actaVO és null (Fase 1 o mòdul no carregat), el carrega directament de Supabase
   useEffect(() => {
@@ -4160,6 +4160,52 @@ function ModuloActaVO({ obra, onSave }) {
       ubicacions: (vo.estadoObra.ubicacions||[]).map(u => u.id===ubId ? {...u, fotos:(u.fotos||[]).filter(f=>f.id!==fotoId)} : u) } });
   }
 
+  // B — Trabajos en curso
+  function addTrabajo() {
+    guardarVO({ ...vo, trabajosEnCurso: [...(vo.trabajosEnCurso||[]), { id: uid(), descripcion: '', porcentaje: '' }] });
+  }
+  function updTrabajo(id, campo, val) {
+    guardarVO({ ...vo, trabajosEnCurso: (vo.trabajosEnCurso||[]).map(t => t.id===id ? {...t, [campo]: val} : t) });
+  }
+  function delTrabajo(id) {
+    guardarVO({ ...vo, trabajosEnCurso: (vo.trabajosEnCurso||[]).filter(t => t.id!==id) });
+  }
+
+  // 6 — Hitos contractuales
+  function addHito(grupo) {
+    const item = { id: uid(), descripcion: '', fechaPrevista: '', fechaReal: '' };
+    guardarVO({ ...vo, hitos: { ...(vo.hitos||{esenciales:[],intermedios:[]}), [grupo]: [...((vo.hitos||{})[grupo]||[]), item] } });
+  }
+  function updHito(grupo, id, campo, val) {
+    guardarVO({ ...vo, hitos: { ...vo.hitos, [grupo]: (vo.hitos[grupo]||[]).map(h => h.id===id ? {...h, [campo]: val} : h) } });
+  }
+  function delHito(grupo, id) {
+    guardarVO({ ...vo, hitos: { ...vo.hitos, [grupo]: (vo.hitos[grupo]||[]).filter(h => h.id!==id) } });
+  }
+
+  // 7 — Contrataciones
+  function addContratacion() {
+    guardarVO({ ...vo, contrataciones: [...(vo.contrataciones||[]), { id: uid(), empresa:'', nif:'', actividad:'', contacto:'', telefono:'', correo:'' }] });
+  }
+  function updContratacion(id, campo, val) {
+    guardarVO({ ...vo, contrataciones: (vo.contrataciones||[]).map(c => c.id===id ? {...c, [campo]: val} : c) });
+  }
+  function delContratacion(id) {
+    guardarVO({ ...vo, contrataciones: (vo.contrataciones||[]).filter(c => c.id!==id) });
+  }
+
+  // 8 — Clima
+  function addDiaClima() {
+    if ((vo.clima||[]).length >= 7) return;
+    guardarVO({ ...vo, clima: [...(vo.clima||[]), { id: uid(), fecha: today(), condicion: 'soleado', temp: '', precip: '' }] });
+  }
+  function updDiaClima(id, campo, val) {
+    guardarVO({ ...vo, clima: (vo.clima||[]).map(d => d.id===id ? {...d, [campo]: val} : d) });
+  }
+  function delDiaClima(id) {
+    guardarVO({ ...vo, clima: (vo.clima||[]).filter(d => d.id!==id) });
+  }
+
   const [showIdioma, setShowIdioma] = useState(false);
 
   async function exportar(idioma) {
@@ -4341,6 +4387,123 @@ function ModuloActaVO({ obra, onSave }) {
           </div>
         ))}
         <button onClick={addUbicacio} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#6B6B66', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 4 }}>+ Afegir ubicació</button>
+      </div>
+
+      {/* ── B. TREBALLS EN CURS ──────────────────────────────────────────── */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#8A8A85' }}>B</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#141412' }}>Treballs en curs</span>
+        </div>
+        {(vo.trabajosEnCurso||[]).map((tr, i) => (
+          <div key={tr.id} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ ...NUM, fontSize: 10.5, fontWeight: 700, color: '#BFBEB9', flexShrink: 0, minWidth: 26 }}>B.{i+1}</span>
+            <input value={tr.descripcion||''} onChange={e => updTrabajo(tr.id, 'descripcion', e.target.value)}
+              placeholder="Descripció del treball..." style={{ flex: 1, fontSize: 12.5 }} />
+            <input value={tr.porcentaje||''} onChange={e => updTrabajo(tr.id, 'porcentaje', e.target.value.replace(/[^0-9]/g,''))}
+              placeholder="%" style={{ width: 52, fontSize: 12.5, textAlign: 'center', flexShrink: 0 }} />
+            <button onClick={() => delTrabajo(tr.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#D4D3CE', fontSize:15, lineHeight:1, flexShrink:0 }}>×</button>
+          </div>
+        ))}
+        <button onClick={addTrabajo}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#8A8A85' }}>
+          <span style={{ fontSize: 14, lineHeight: 1, color: '#C5C4BE' }}>+</span> Afegir treball en curs
+        </button>
+      </div>
+
+      {/* ── 6. SEGUIMENT HITES CONTRACTUALS ─────────────────────────────── */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#8A8A85' }}>6</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#141412' }}>Seguiment hites contractuals</span>
+        </div>
+        {[['esenciales','Terminis essencials'],['intermedios','Terminis intermedis']].map(([grupo, label]) => (
+          <div key={grupo} style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: '#9B9B97', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 5 }}>{label}</div>
+            {((vo.hitos||{})[grupo]||[]).map((h, i) => (
+              <div key={h.id} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 5, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+                <input value={h.descripcion||''} onChange={e => updHito(grupo, h.id, 'descripcion', e.target.value)}
+                  placeholder="Descripció del hito..." style={{ flex: 1, minWidth: isMobile?'100%':120, fontSize: 12.5 }} />
+                <input type="date" value={h.fechaPrevista||''} onChange={e => updHito(grupo, h.id, 'fechaPrevista', e.target.value)}
+                  title="Data prevista" style={{ width: isMobile?'48%':130, fontSize: 11.5, flexShrink: 0 }} />
+                <input type="date" value={h.fechaReal||''} onChange={e => updHito(grupo, h.id, 'fechaReal', e.target.value)}
+                  title="Data real" style={{ width: isMobile?'48%':130, fontSize: 11.5, flexShrink: 0 }} />
+                <button onClick={() => delHito(grupo, h.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#D4D3CE', fontSize:15, lineHeight:1, flexShrink:0 }}>×</button>
+              </div>
+            ))}
+            <button onClick={() => addHito(grupo)}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 7, border: '1.5px dashed #E5E4DF', background: 'transparent', cursor: 'pointer', fontSize: 11.5, color: '#9B9B97' }}>
+              <span style={{ fontSize: 13, lineHeight: 1, color: '#C5C4BE' }}>+</span> Afegir hito
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* ── 7. SEGUIMENT CONTRACTACIONS ──────────────────────────────────── */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#8A8A85' }}>7</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#141412' }}>Seguiment contractacions</span>
+        </div>
+        {(vo.contrataciones||[]).map((c, i) => (
+          <div key={c.id} style={{ background: '#FAFAF8', borderRadius: 9, padding: 9, marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <span style={{ ...NUM, fontSize: 10.5, fontWeight: 700, color: '#BFBEB9', flexShrink: 0 }}>7.{String(i+1).padStart(2,'0')}</span>
+              <input value={c.empresa||''} onChange={e => updContratacion(c.id, 'empresa', e.target.value)}
+                placeholder="Empresa" style={{ flex: 1, fontSize: 12.5, fontWeight: 600 }} />
+              <button onClick={() => delContratacion(c.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#D4D3CE', fontSize:15, lineHeight:1, flexShrink:0 }}>×</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5, 1fr)', gap: 6 }}>
+              <input value={c.nif||''} onChange={e => updContratacion(c.id, 'nif', e.target.value)} placeholder="NIF" style={{ fontSize: 11.5 }} />
+              <input value={c.actividad||''} onChange={e => updContratacion(c.id, 'actividad', e.target.value)} placeholder="Activitat" style={{ fontSize: 11.5 }} />
+              <input value={c.contacto||''} onChange={e => updContratacion(c.id, 'contacto', e.target.value)} placeholder="Contacte" style={{ fontSize: 11.5 }} />
+              <input value={c.telefono||''} onChange={e => updContratacion(c.id, 'telefono', e.target.value)} placeholder="Telèfon" style={{ fontSize: 11.5 }} />
+              <input value={c.correo||''} onChange={e => updContratacion(c.id, 'correo', e.target.value)} placeholder="Correu" style={{ fontSize: 11.5 }} />
+            </div>
+          </div>
+        ))}
+        <button onClick={addContratacion}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#8A8A85' }}>
+          <span style={{ fontSize: 14, lineHeight: 1, color: '#C5C4BE' }}>+</span> Afegir contractació
+        </button>
+      </div>
+
+      {/* ── 8. CLIMA ──────────────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#8A8A85' }}>8</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#141412' }}>Clima</span>
+          <span style={{ ...NUM, fontSize: 10, color: '#BFBEB9', marginLeft: 'auto' }}>{(vo.clima||[]).length}/7</span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {(vo.clima||[]).map(d => (
+            <div key={d.id} style={{ background: '#FAFAF8', borderRadius: 9, padding: 8, width: isMobile ? '100%' : 150 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+                <input type="date" value={d.fecha||''} onChange={e => updDiaClima(d.id, 'fecha', e.target.value)}
+                  style={{ flex: 1, fontSize: 11 }} />
+                <button onClick={() => delDiaClima(d.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#D4D3CE', fontSize:14, lineHeight:1, flexShrink:0 }}>×</button>
+              </div>
+              <select value={d.condicion||'soleado'} onChange={e => updDiaClima(d.id, 'condicion', e.target.value)}
+                style={{ fontSize: 11.5, marginBottom: 5 }}>
+                <option value="soleado">☀ Assolellat</option>
+                <option value="nublado">☁ Ennuvolat</option>
+                <option value="lluvia">🌧 Pluja</option>
+              </select>
+              <div style={{ display: 'flex', gap: 5 }}>
+                <input value={d.temp||''} onChange={e => updDiaClima(d.id, 'temp', e.target.value.replace(/[^0-9-]/g,''))}
+                  placeholder="°C" style={{ width: '50%', fontSize: 11.5, textAlign: 'center' }} />
+                <input value={d.precip||''} onChange={e => updDiaClima(d.id, 'precip', e.target.value)}
+                  placeholder="Precip." style={{ width: '50%', fontSize: 11.5 }} />
+              </div>
+            </div>
+          ))}
+          {(vo.clima||[]).length < 7 && (
+            <button onClick={addDiaClima}
+              style={{ width: isMobile ? '100%' : 150, borderRadius: 9, border: '1.5px dashed #E5E4DF', background: 'transparent', cursor: 'pointer', fontSize: 11.5, color: '#9B9B97', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: 60 }}>
+              <span style={{ fontSize: 15, lineHeight: 1, color: '#C5C4BE' }}>+</span> Afegir dia
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Secciones editables */}
@@ -5022,6 +5185,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     css:         esCA ? 'COORDINACIÓ DE SEGURETAT (CSS)' : 'COORDINACIÓN DE SEGURIDAD (CSS)',
     ec:          esCA ? 'CONTRACTISTA (EC)' : 'CONTRATISTA (EC)',
     estat0:      esCA ? 'ESTAT DE L\'OBRA (FOTOGRAFIES)' : 'ESTADO DE LA OBRA (FOTOGRAFÍAS)',
+    trabajosCurso: esCA ? 'TREBALLS EN CURS' : 'TRABAJOS EN CURSO',
+    pctEjecutado:  esCA ? '% EXECUTAT' : '% EJECUTADO',
     desc:        esCA ? 'DESCRIPCIÓ' : 'DESCRIPCIÓN',
     es:          'ES',
     inici:       esCA ? 'INICI' : 'INICIO',
@@ -5041,6 +5206,24 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     ec_f:        esCA ? 'CONTRACTISTA' : 'CONTRATISTA',
     peu:         'Plaat Arquitectura Tècnica  |  Barcelona - Madrid  |  plaat.es',
     peuAlt:      esCA ? 'Acta de visita d\'obra' : 'Acta de visita de obra',
+    hitosContractuales: esCA ? 'SEGUIMENT HITES CONTRACTUALS' : 'SEGUIMIENTO HITOS CONTRACTUALES',
+    plazosEsenciales:   esCA ? 'TERMINIS ESSENCIALS' : 'PLAZOS ESENCIALES',
+    plazosIntermedios:  esCA ? 'TERMINIS INTERMEDIS' : 'PLAZOS INTERMEDIOS',
+    planning:    'PLANNING',
+    fechaPrevista: esCA ? 'DATA PREVISTA' : 'FECHA PREVISTA',
+    fechaReal:   esCA ? 'DATA REAL' : 'FECHA REAL',
+    retrasoDias: esCA ? 'RETARD (DIES)' : 'RETRASO (DÍAS)',
+    contrataciones: esCA ? 'SEGUIMENT CONTRACTACIONS' : 'SEGUIMIENTO CONTRATACIONES',
+    empresa:     'EMPRESA',
+    nif:         'NIF',
+    actividad:   esCA ? 'ACTIVITAT' : 'ACTIVIDAD',
+    contacto:    esCA ? 'CONTACTE' : 'CONTACTO',
+    telefono:    esCA ? 'TELÈFON' : 'TELÉFONO',
+    correo:      esCA ? 'CORREU' : 'CORREO',
+    clima:       'CLIMA',
+    dia:         esCA ? 'DIA' : 'DÍA',
+    temp:        'TEMP.',
+    prec:        esCA ? 'PREC.' : 'PREC.',
   };
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -5375,9 +5558,10 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         doc.line(asX - 0.1, midY + 1.0, asX + 1.2, midY - 0.8);
         doc.setLineWidth(LW); doc.setDrawColor(0,0,0);
       } else {
-        // Guió en negre subtil
-        doc.setLineWidth(0.3); doc.setDrawColor(0, 0, 0);
-        doc.line(asX - 1.0, midY, asX + 1.0, midY);
+        // Creu (x) — igual que el format definitiu del Word
+        doc.setLineWidth(0.5); doc.setDrawColor(0, 0, 0);
+        doc.line(asX - 0.9, midY - 0.9, asX + 0.9, midY + 0.9);
+        doc.line(asX - 0.9, midY + 0.9, asX + 0.9, midY - 0.9);
         doc.setLineWidth(LW); doc.setDrawColor(0,0,0);
       }
 
@@ -5488,8 +5672,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.setFillColor(...GRIS15);
     doc.rect(ML, y, CW, eoH, 'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-    doc.text('0', ML + 2, y + eoH/2, { baseline:'middle' });
-    doc.text(T.estat0, ML + 2 + 3 + doc.getTextWidth('0'), y + eoH/2, { baseline:'middle' });
+    doc.text('A', ML + 2, y + eoH/2, { baseline:'middle' });
+    doc.text(T.estat0, ML + 2 + 3 + doc.getTextWidth('A'), y + eoH/2, { baseline:'middle' });
     y += eoH;
 
     // Text de descripció
@@ -5541,6 +5725,36 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     y += 2;
   }
 
+  // ── SECCIÓ B: TREBALLS EN CURS ────────────────────────────────────────────
+  const trabajos = vo.trabajosEnCurso || [];
+  if (trabajos.length > 0) {
+    const bH = 5.5;
+    const altTotalB = bH + trabajos.length * 5.5 + 4;
+    if (y + altTotalB > PH - MB - 12) { doc.addPage(); pagActual++; dibuixarCapçalera(false); dibuixarPeu(); }
+
+    doc.setFillColor(...GRIS15);
+    doc.rect(ML, y, CW, bH, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text('B', ML + 2, y + bH/2, { baseline:'middle' });
+    doc.text(T.trabajosCurso, ML + 2 + 3 + doc.getTextWidth('B'), y + bH/2, { baseline:'middle' });
+    doc.text(T.pctEjecutado, ML + CW - 2, y + bH/2, { align:'right', baseline:'middle' });
+    y += bH + 2;
+
+    trabajos.forEach((tr, i) => {
+      const rh = 5.5;
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+      const codi = `B.${i+1}`;
+      doc.setFont('helvetica','bold');
+      doc.text(codi, ML + 2, y + rh/2, { baseline:'middle' });
+      doc.setFont('helvetica','normal');
+      doc.text(tr.descripcion || '', ML + 2 + 14, y + rh/2, { baseline:'middle' });
+      doc.text(tr.porcentaje ? `${tr.porcentaje}%` : '', ML + CW - 2, y + rh/2, { align:'right', baseline:'middle' });
+      setLW(LW); doc.line(ML, y + rh, ML + CW, y + rh);
+      y += rh;
+    });
+    y += 4;
+  }
+
   // Seccions de temes tractats
   const cNum=14, cEs=14, cIni=20, cFi=20, cRes=14, cDesc=CW-cNum-cEs-cIni-cFi-cRes;
   const LW_THIN = 0.25; // línies horitzontals a la meitat de 0.5pt
@@ -5588,126 +5802,282 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
     actius.forEach((t, tIdx) => {
       const fW3=(cDesc-5)/2;
-      const ed = (t.entradas||[]).map((en, pi) => {
+      const entradesOrdenades = t.entradas || [];
+      const esNuevoTema = entradesOrdenades.length === 1 && entradesOrdenades[0]?.actaNum === vo.num;
+      const ultima = entradesOrdenades[entradesOrdenades.length - 1] || {};
+      // Estat mostrat: 'N' NOMÉS si el tema és totalment nou (una única entrada, d'aquesta acta)
+      // En qualsevol altre cas, l'estat real de l'última entrada (P/R/I) — igual que al Word
+      const estatMostrat = esNuevoTema ? 'N' : (ultima.estado || 'P');
+      const fillTema = estatMostrat==='R' ? C_R : estatMostrat==='I'||estatMostrat==='INF' ? C_I : estatMostrat==='A' ? C_A : estatMostrat==='N' ? null : C_P;
+
+      const ed = entradesOrdenades.map((en, pi) => {
         const esNova = en.actaNum === vo.num;
-        const estat = esNova ? 'N' : (en.estado||'P');
-        // Colors brandbook actualitzats: P=groc, R=verd, I=blau, N=sense fons, A=vermell
-        const fill = esNova ? null : (estat==='R'?C_R : estat==='I'||estat==='INF'?C_I : estat==='A'?C_A : C_P);
+        // Prefix de data: totes les entrades EXCEPTE la primera (la data inicial ja surt a INICI)
+        const prefix = pi > 0 && en.fecha ? `${fmtFechaCorta(en.fecha)}  ` : '';
         doc.setFontSize(8.5);
-        const lines = doc.splitTextToSize(en.texto||'', cDesc-3);
+        const lines = doc.splitTextToSize(prefix + (en.texto||''), cDesc-3);
         const lh85 = 8.5*0.3528+0.6;
-        // Si és la primera entrada i hi ha títol, afegir l'alçada del títol
         const titolOffset = (pi === 0 && t.titulo) ? lh85 + 2 : 0;
         const GAP = 2;
-        // Responsables: calcular espai si n'hi ha més d'un
-        const respsNum = Array.isArray(en.resp) ? en.resp.length : (en.resp ? 1 : 0);
-        const respExtraH = respsNum > 1 ? (respsNum - 1) * (7.5*0.3528+0.4) : 0;
-        const textH = Math.max(lines.length*lh85 + 3 + titolOffset + GAP, respExtraH + 8);
+        const textH = lines.length*lh85 + 3 + titolOffset + GAP;
         const fotos=en.fotos||[]; const fotoRows=[]; let fotosH=0;
         for(let i=0;i<fotos.length;i+=2){
           const pair=[fotos[i],fotos[i+1]].filter(Boolean);
-          // Mida màxima de foto: 38mm alçada per caber en columna cDesc
           const dims=pair.map(f=>{try{const pr=doc.getImageProperties(f.url||f.data);const r=pr.height/pr.width;const h=Math.min(fW3*r,38);return{w:h/r,h};}catch(e){return{w:fW3,h:28};}});
           const rh=Math.max(...dims.map(d=>d.h));
           fotoRows.push({pair,dims,rh}); fotosH+=rh+GAP;
         }
-        // Alçada exacta del contingut (text + fotos) sense max mínim que talla fotos
         const h = textH + fotosH + (fotos.length > 0 ? GAP : 0);
-        return{en,esNova,estat,fill,lines,textH,fotoRows,h,lh:lh85};
+        return{en,esNova,lines,textH,fotoRows,h,lh:lh85};
       });
 
-      const temaH=ed.reduce((a,e)=>a+e.h,0);
+      const temaH = ed.reduce((a,e)=>a+e.h,0) || 10;
       checkPage(temaH);
 
-      // Fons de color per estat (brandbook) — inclou la columna del número
-      // El color del fons del número és el de la primera entrada (o el predominant)
-      // Color num: cada entrada té el seu color al costat del número
-      // La cel·la del número mostra el color de l'entrada en la seva mateixa alçada
-      // Fons de color per estat — cada entrada té el seu propi color
-      let ey=y;
-      ed.forEach(e=>{
-        // Fons columna número: IGUAL color que l'entrada
-        if(e.fill){doc.setFillColor(...e.fill);doc.rect(ML,ey,cNum,e.h,'F');}
-        // Fons columna contingut
-        if(e.fill){doc.setFillColor(...e.fill);doc.rect(ML+cNum,ey,CW-cNum,e.h,'F');}
-        ey+=e.h;
-      });
+      // Fons de color ÚNIC per a tot el bloc del tema (número + contingut)
+      if (fillTema) {
+        doc.setFillColor(...fillTema);
+        doc.rect(ML, y, CW, temaH, 'F');
+      }
 
       // Número i títol del tema — alineats a dalt de la fila
       const titolTema = t.titulo || '';
       const tituloLH = 8.5*0.3528+0.6;
-      // Número alineat amb el títol (a dalt, no centrat)
       doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
       doc.text(t.num||'', ML+cNum/2, y + 3 + tituloLH*0.8, { align:'center', baseline:'middle' });
-      // Títol en bold a la part superior de la cel·la de descripció
       if (titolTema) {
         doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
         doc.text(titolTema, ML+cNum+2, y + 3 + tituloLH*0.8, { baseline:'middle' });
       }
 
-      ey=y;
-      ed.forEach(e=>{
-        // Text descripció — si hi ha títol a la primera entrada, desplaçar per sota
+      let ey=y;
+      ed.forEach((e, pi)=>{
+        // Text narratiu — negreta si l'entrada pertany a l'acta actual, normal si és històric
         doc.setFont('helvetica', e.esNova?'bold':'normal');
         doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-        const titolH = (titolTema && ey === y) ? (8.5*0.3528+0.6) + 2 : 0;
+        const titolH = (titolTema && pi === 0) ? tituloLH + 2 : 0;
         let ty = ey + 3 + e.lh*0.8 + titolH;
-        // Assegurar que el text no sorti de la fila
         e.lines.forEach(l => {
-          if (ty < ey + e.h - 1) { // no sortir per sota
-            doc.text(l, ML+cNum+2, ty, {baseline:'middle'});
-          }
+          if (ty < ey + e.h - 1) doc.text(l, ML+cNum+2, ty, {baseline:'middle'});
           ty += e.lh;
         });
-        // Fotos
-        const GAP_FY = 2; // mateix espai que títol→text
+        // Fotos — inline, just sota el paràgraf al qual pertanyen
+        const GAP_FY = 2;
         let fy = ey + e.textH + GAP_FY;
         e.fotoRows.forEach(row=>{
-          row.pair.forEach((f,pi)=>{
+          row.pair.forEach((f,fi)=>{
             const src=f.url||f.data;
             if(!src) return;
             try {
-              // Centrar cada foto dins del seu slot (fW3)
-              const imgW = row.dims[pi].w;
-              const imgH = row.dims[pi].h;
-              const xSlot = ML+cNum+2 + pi*(fW3+2);
+              const imgW = row.dims[fi].w, imgH = row.dims[fi].h;
+              const xSlot = ML+cNum+2 + fi*(fW3+2);
               const xCentered = xSlot + (fW3-imgW)/2;
               doc.addImage(src,'JPEG',xCentered,fy,imgW,imgH);
             } catch(er) {}
           });
           fy+=row.rh+2;
         });
-        // Valors columnes alineats al PRINCIPI del text (top de l'entrada + offset titol)
-        const colY = ey + 3 + (titolH > 0 ? titolH : 0) + e.lh*0.8;
-        const colorEstat = e.estat==='R' ? [44,94,16] : e.estat==='I'||e.estat==='INF' ? [12,68,124] : e.estat==='N' ? [0,0,0] : [124,74,0];
-        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
-        doc.setTextColor(...colorEstat);
-        doc.text(e.estat, ML+cNum+cDesc+cEs/2, colY, { align:'center', baseline:'middle' });
-        doc.setTextColor(0,0,0);
-        doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
-        const isR=e.en.estado==='R'&&!e.esNova;
-        doc.text(isR?'':fmtFechaCorta(e.en.fecha), ML+cNum+cDesc+cEs+cIni/2, colY, { align:'center', baseline:'middle' });
-        doc.text(isR?fmtFechaCorta(e.en.fin||e.en.fecha):'', ML+cNum+cDesc+cEs+cIni+cFi/2, colY, { align:'center', baseline:'middle' });
-        // Responsables: un per línia a la columna RES
-        const respsArr = Array.isArray(e.en.resp) ? e.en.resp : (e.en.resp ? [e.en.resp] : []);
-        doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
-        const respLH = 7.5*0.3528+0.4;
-        let respY = colY;
-        respsArr.forEach((r, ri) => {
-          doc.text(r, ML+cNum+cDesc+cEs+cIni+cFi+cRes/2, respY, { align:'center', baseline:'middle' });
-          respY += respLH;
-        });
         ey+=e.h;
       });
 
+      // Columnes ES / INICI / FI / RES — UN sol valor per a tot el tema, centrat verticalment
+      const midTema = y + temaH/2;
+      const colorEstat = estatMostrat==='R' ? [44,94,16] : estatMostrat==='I'||estatMostrat==='INF' ? [12,68,124] : estatMostrat==='N' ? [0,0,0] : [124,74,0];
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(...colorEstat);
+      doc.text(estatMostrat, ML+cNum+cDesc+cEs/2, midTema, { align:'center', baseline:'middle' });
+      doc.setTextColor(0,0,0);
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+      const fechaInicio = entradesOrdenades[0]?.fecha;
+      const fechaFin     = ultima.fecha;
+      doc.text(fechaInicio ? fmtFechaCorta(fechaInicio) : '', ML+cNum+cDesc+cEs+cIni/2, midTema, { align:'center', baseline:'middle' });
+      doc.text((fechaFin && entradesOrdenades.length>1) ? fmtFechaCorta(fechaFin) : '', ML+cNum+cDesc+cEs+cIni+cFi/2, midTema, { align:'center', baseline:'middle' });
+      const respsArr = Array.isArray(ultima.resp) ? ultima.resp : (ultima.resp ? [ultima.resp] : []);
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+      const respLH = 7.5*0.3528+0.4;
+      let respY = midTema - (respsArr.length-1)*respLH/2;
+      respsArr.forEach(r => { doc.text(r, ML+cNum+cDesc+cEs+cIni+cFi+cRes/2, respY, { align:'center', baseline:'middle' }); respY += respLH; });
+
       // SENSE línies verticals — sols línies horitzontals fines entre temes
-      // Eliminar línia superior del primer tema de cada secció
       if (tIdx > 0) { setLW(LW_THIN); doc.line(ML, y, ML+CW, y); }
       setLW(LW_THIN); doc.line(ML, y+temaH, ML+CW, y+temaH);
       y+=temaH;
     });
     y+=4;
   });
+
+  // ── SECCIÓ 6: SEGUIMENT HITES CONTRACTUALS ────────────────────────────────
+  const hitos = vo.hitos || { esenciales: [], intermedios: [] };
+  if ((hitos.esenciales||[]).length > 0 || (hitos.intermedios||[]).length > 0) {
+    const c6H = 5.5;
+    const c6Cod=14, c6Desc=64, cFP=32, cFR=32, cRD=CW-c6Cod-c6Desc-cFP-cFR;
+    const alt6 = c6H + 6 + 10 + ((hitos.esenciales||[]).length + (hitos.intermedios||[]).length) * 5.5 + 6;
+    if (y + alt6 > PH - MB - 12) { doc.addPage(); pagActual++; dibuixarCapçalera(false); dibuixarPeu(); }
+
+    // Fila 1: títol de secció (fons gris, sola)
+    doc.setFillColor(...GRIS15);
+    doc.rect(ML, y, CW, c6H, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text('6', ML + 2, y + c6H/2, { baseline:'middle' });
+    doc.text(T.hitosContractuales, ML + 2 + 3 + doc.getTextWidth('6'), y + c6H/2, { baseline:'middle' });
+    y += c6H;
+
+    // Fila 2: etiquetes de columna (línia fina superior i inferior)
+    doc.setFontSize(6.5); doc.setFont('helvetica','bold');
+    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
+    [[ML+c6Cod, c6Desc, T.planning],[ML+c6Cod+c6Desc, cFP, T.fechaPrevista],
+     [ML+c6Cod+c6Desc+cFP, cFR, T.fechaReal],[ML+c6Cod+c6Desc+cFP+cFR, cRD, T.retrasoDias]]
+      .forEach(([x,w,t]) => doc.text(t, x+w/2, y+3, { align:'center', baseline:'middle' }));
+    y += 5.5;
+    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
+    y += 3;
+
+    function dibuixaGrupHitos(nomGrup, items) {
+      if (!items.length) return;
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+      doc.text(nomGrup, ML + 2, y + 3.5, { baseline:'middle' });
+      setLW(LW_THIN); doc.line(ML, y+5.5, ML+CW, y+5.5);
+      y += 5.5;
+      items.forEach((it, i) => {
+        const rh = 5.5;
+        checkPage(rh);
+        doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+        doc.text(`${(nomGrup===T.plazosEsenciales?'6.E':'6.I')}${i+1}`, ML+2, y+rh/2, { baseline:'middle' });
+        doc.setFont('helvetica','normal');
+        doc.text(doc.splitTextToSize(it.descripcion||'', c6Desc-3)[0]||'', ML+c6Cod+2, y+rh/2, { baseline:'middle' });
+        doc.text(it.fechaPrevista ? fmtFechaCorta(it.fechaPrevista) : '', ML+c6Cod+c6Desc+cFP/2, y+rh/2, { align:'center', baseline:'middle' });
+        doc.text(it.fechaReal ? fmtFechaCorta(it.fechaReal) : '', ML+c6Cod+c6Desc+cFP+cFR/2, y+rh/2, { align:'center', baseline:'middle' });
+        let retard = '';
+        if (it.fechaPrevista && it.fechaReal) {
+          const d = Math.round((new Date(it.fechaReal) - new Date(it.fechaPrevista)) / 86400000);
+          retard = d > 0 ? `+${d}` : `${d}`;
+        }
+        doc.setTextColor(...(retard.startsWith('+') ? [138,31,31] : [0,0,0]));
+        doc.text(retard, ML+c6Cod+c6Desc+cFP+cFR+cRD/2, y+rh/2, { align:'center', baseline:'middle' });
+        doc.setTextColor(0,0,0);
+        setLW(LW_THIN); doc.line(ML, y+rh, ML+CW, y+rh);
+        y += rh;
+      });
+    }
+    dibuixaGrupHitos(T.plazosEsenciales, hitos.esenciales||[]);
+    dibuixaGrupHitos(T.plazosIntermedios, hitos.intermedios||[]);
+    y += 4;
+  }
+
+  // ── SECCIÓ 7: SEGUIMENT CONTRACTACIONS ────────────────────────────────────
+  const contrataciones = vo.contrataciones || [];
+  if (contrataciones.length > 0) {
+    const c7H = 5.5;
+    const cEmp=32, cNif=22, cAct=32, cCont=28, cTel=24, cCor=CW-cNum-cEmp-cNif-cAct-cCont-cTel;
+    const alt7 = c7H*2 + contrataciones.length*5.5 + 4;
+    if (y + alt7 > PH - MB - 12) { doc.addPage(); pagActual++; dibuixarCapçalera(false); dibuixarPeu(); }
+
+    doc.setFillColor(...GRIS15);
+    doc.rect(ML, y, CW, c7H, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text('7', ML + 2, y + c7H/2, { baseline:'middle' });
+    doc.text(T.contrataciones, ML + 2 + 3 + doc.getTextWidth('7'), y + c7H/2, { baseline:'middle' });
+    y += c7H;
+
+    doc.setFontSize(6.5); doc.setFont('helvetica','bold');
+    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
+    [[ML+cNum,cEmp,T.empresa],[ML+cNum+cEmp,cNif,T.nif],[ML+cNum+cEmp+cNif,cAct,T.actividad],
+     [ML+cNum+cEmp+cNif+cAct,cCont,T.contacto],[ML+cNum+cEmp+cNif+cAct+cCont,cTel,T.telefono],
+     [ML+cNum+cEmp+cNif+cAct+cCont+cTel,cCor,T.correo]]
+      .forEach(([x,w,t]) => doc.text(t, x+w/2, y+3, { align:'center', baseline:'middle' }));
+    y += 5.5;
+    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
+
+    contrataciones.forEach((c, i) => {
+      const rh = 5.5;
+      checkPage(rh);
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
+      doc.text(`7.${String(i+1).padStart(2,'0')}`, ML+2, y+rh/2, { baseline:'middle' });
+      doc.setFont('helvetica','normal'); doc.setFontSize(7);
+      const fila = [[c.empresa,cEmp],[c.nif,cNif],[c.actividad,cAct],[c.contacto,cCont],[c.telefono,cTel],[c.correo,cCor]];
+      let cx = ML+cNum;
+      fila.forEach(([val,w]) => { doc.text((val||'').slice(0, Math.floor(w/1.7)), cx+1, y+rh/2, { baseline:'middle' }); cx += w; });
+      setLW(LW_THIN); doc.line(ML, y+rh, ML+CW, y+rh);
+      y += rh;
+    });
+    y += 4;
+  }
+
+  // ── SECCIÓ 8: CLIMA ────────────────────────────────────────────────────────
+  const climaData = vo.clima || [];
+  if (climaData.length > 0) {
+    const dies = climaData.slice(0, 7);
+    const c8H = 5.5;
+    const cDia = CW / dies.length;
+    const alt8 = c8H + 6 + 22 + 5.5*2 + 6;
+    if (y + alt8 > PH - MB - 12) { doc.addPage(); pagActual++; dibuixarCapçalera(false); dibuixarPeu(); }
+
+    doc.setFillColor(...GRIS15);
+    doc.rect(ML, y, CW, c8H, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text('8', ML + 2, y + c8H/2, { baseline:'middle' });
+    doc.text(T.clima, ML + 2 + 3 + doc.getTextWidth('8'), y + c8H/2, { baseline:'middle' });
+    y += c8H + 3;
+
+    // Fila dia + data
+    doc.setFont('helvetica','bold'); doc.setFontSize(7);
+    dies.forEach((d, i) => {
+      const x = ML + i*cDia + cDia/2;
+      const diaTxt = d.fecha ? fmtFechaCorta(d.fecha) : '';
+      doc.text(diaTxt, x, y+3.5, { align:'center', baseline:'middle' });
+    });
+    y += 7;
+
+    // Icona simple (dibuixada, no requereix imatges)
+    function dibuixaIconaClima(cx, cy, tipus) {
+      const R = 3.2;
+      if (tipus === 'lluvia') {
+        doc.setFillColor(180,190,200); doc.circle(cx, cy-1, R, 'F');
+        setLW(0.35); doc.setDrawColor(70,120,200);
+        for (let k=-1;k<=1;k++) doc.line(cx+k*2.2, cy+2, cx+k*2.2-0.8, cy+5);
+        doc.setDrawColor(0,0,0);
+      } else if (tipus === 'nublado') {
+        doc.setFillColor(200,200,200); doc.circle(cx, cy, R, 'F');
+      } else { // soleado / parcial
+        doc.setFillColor(255,210,80); doc.circle(cx, cy, R*0.75, 'F');
+        setLW(0.4); doc.setDrawColor(255,180,50);
+        for (let a=0; a<8; a++) {
+          const ang = a * Math.PI/4;
+          const x1=cx+Math.cos(ang)*(R*0.9), y1=cy+Math.sin(ang)*(R*0.9);
+          const x2=cx+Math.cos(ang)*(R*1.5), y2=cy+Math.sin(ang)*(R*1.5);
+          doc.line(x1,y1,x2,y2);
+        }
+        doc.setDrawColor(0,0,0);
+      }
+    }
+    dies.forEach((d, i) => {
+      const x = ML + i*cDia + cDia/2;
+      dibuixaIconaClima(x, y+5, d.condicion || 'soleado');
+    });
+    y += 12;
+
+    // Fila TEMP
+    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0,0,0);
+    doc.text(T.temp, ML+2, y+3.75, { baseline:'middle' });
+    doc.setFont('helvetica','normal');
+    dies.forEach((d, i) => {
+      const x = ML + i*cDia + cDia/2;
+      doc.text(d.temp ? `${d.temp} °C` : '', x, y+3.75, { align:'center', baseline:'middle' });
+    });
+    y += 5.5;
+    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
+
+    // Fila PREC
+    doc.setFont('helvetica','bold'); doc.text(T.prec, ML+2, y+3.75, { baseline:'middle' });
+    doc.setFont('helvetica','normal');
+    dies.forEach((d, i) => {
+      const x = ML + i*cDia + cDia/2;
+      doc.text(d.precip || '', x, y+3.75, { align:'center', baseline:'middle' });
+    });
+    y += 5.5;
+    setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
+    y += 4;
+  }
 
   // ── NOTA + TAULA FIRMES — tot a la mateixa pàgina si és possible ────────────
   const notaFirmes=doc.splitTextToSize(T.nota,CW);
