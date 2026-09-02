@@ -4368,6 +4368,7 @@ function ModuloActaVO({ obra, onSave }) {
   }
 
   const [showIdioma, setShowIdioma] = useState(false);
+  const [vistaVO, setVistaVO] = useState('temes');
 
   async function exportar(idioma) {
     setShowIdioma(false);
@@ -4397,29 +4398,58 @@ function ModuloActaVO({ obra, onSave }) {
 
   return (
     <div>
-      {/* Cabecera */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Acta de Visita de Obra</div>
-          <div style={{ fontSize: 12, color: '#9B9B97', display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-            Nº de acta:
-            <input type="number" min="1" value={vo.num} onChange={e => guardarVO({ ...vo, num: Math.max(1, parseInt(e.target.value || '1', 10)) })}
-              style={{ width: 60, padding: '3px 7px', fontSize: 12, fontWeight: 600, textAlign: 'center' }} />
+      {/* Capçalera + navegació — sticky: sempre a l'abast, encara que baixis molt avall */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 20,
+        margin: isMobile ? '-12px -14px 0' : '-18px -22px 0',
+        padding: isMobile ? '12px 14px 0' : '18px 22px 0',
+        background: '#F2F1ED',
+      }}>
+        {/* Cabecera */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#141412' }}>Acta de Visita de Obra</div>
+            <div style={{ fontSize: 12, color: '#9B9B97', display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+              Nº de acta:
+              <input type="number" min="1" value={vo.num} onChange={e => guardarVO({ ...vo, num: Math.max(1, parseInt(e.target.value || '1', 10)) })}
+                style={{ width: 60, padding: '3px 7px', fontSize: 12, fontWeight: 600, textAlign: 'center' }} />
+            </div>
           </div>
+          <Btn onClick={() => setShowHistorico(true)}>Resueltos ({todosResueltos.length})</Btn>
+          <Btn primary disabled={generando} onClick={() => setShowIdioma(true)}>{generando ? 'Generando...' : `↓ Exportar Acta Nº ${String(vo.num).padStart(2,'0')}`}</Btn>
         </div>
-        <Btn onClick={() => setShowHistorico(true)}>Resueltos ({todosResueltos.length})</Btn>
-        <Btn primary disabled={generando} onClick={() => setShowIdioma(true)}>{generando ? 'Generando...' : `↓ Exportar Acta Nº ${String(vo.num).padStart(2,'0')}`}</Btn>
-      </div>
 
-      {showIdioma && (
-        <Modal title="Idioma de l'acta" onClose={() => setShowIdioma(false)} footer={<Btn onClick={() => setShowIdioma(false)}>Cancel·lar</Btn>}>
-          <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16 }}>Tria l'idioma per exportar l'Acta Nº {String(vo.num).padStart(2,'0')}.</p>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Btn full onClick={() => exportar('ca')}>Català</Btn>
-            <Btn primary full onClick={() => exportar('es')}>Castellano</Btn>
-          </div>
-        </Modal>
-      )}
+        {showIdioma && (
+          <Modal title="Idioma de l'acta" onClose={() => setShowIdioma(false)} footer={<Btn onClick={() => setShowIdioma(false)}>Cancel·lar</Btn>}>
+            <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 16 }}>Tria l'idioma per exportar l'Acta Nº {String(vo.num).padStart(2,'0')}.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Btn full onClick={() => exportar('ca')}>Català</Btn>
+              <Btn primary full onClick={() => exportar('es')}>Castellano</Btn>
+            </div>
+          </Modal>
+        )}
+
+        {/* Navegació interna — separa el que es toca constantment (Temes) de la configuració ocasional */}
+        <div style={{ display: 'flex', gap: 3, marginBottom: 10, background: '#F0EFEA', borderRadius: 10, padding: 3 }}>
+          {[
+            { id: 'temes', label: 'Temes' },
+            { id: 'equip', label: 'Equip' },
+            { id: 'dades', label: 'Dades' },
+          ].map(v => (
+            <button key={v.id} onClick={() => setVistaVO(v.id)}
+              style={{
+                flex: 1, padding: '7px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                fontSize: 12.5, fontWeight: vistaVO === v.id ? 600 : 500,
+                background: vistaVO === v.id ? '#fff' : 'transparent',
+                color: vistaVO === v.id ? '#141412' : '#8A8A85',
+                boxShadow: vistaVO === v.id ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                transition: 'all .15s',
+              }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Fase + lugar */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
@@ -4427,6 +4457,8 @@ function ModuloActaVO({ obra, onSave }) {
         <Field label="Lugar"><input value={vo.lugar||''} onChange={e => guardarVO({...vo, lugar: e.target.value})} placeholder="Obra / oficina" /></Field>
       </div>
 
+      {vistaVO === 'equip' && (
+      <>
       {/* Equipo técnico */}
       <div style={{ border: '1px solid #E8E7E1', borderRadius: 10, marginBottom: 14, overflow: 'hidden' }}>
         <button onClick={() => setShowEquipo(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: '#FAFAF8', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#141412' }}>
@@ -4517,6 +4549,26 @@ function ModuloActaVO({ obra, onSave }) {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {vistaVO === 'temes' && (
+      <>
+      {/* Resum ràpid — quants temes pendents hi ha, d'un cop d'ull */}
+      {(() => {
+        const totalPend = (vo.secciones||[]).reduce((acc, sec) =>
+          acc + (sec.temas||[]).filter(t => {
+            const ult = t.entradas?.[t.entradas.length-1];
+            return ult && ult.estado === 'P';
+          }).length, 0);
+        if (totalPend === 0) return null;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12, padding: '8px 12px', background: '#FEF3DB', borderRadius: 9, fontSize: 12.5, color: '#7C4A00' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#D48A0C', flexShrink: 0 }} />
+            <strong>{totalPend}</strong> tema{totalPend !== 1 ? 's' : ''} pendent{totalPend !== 1 ? 's' : ''} de resoldre
+          </div>
+        );
+      })()}
 
       {/* Sección 0 — Estado de la obra */}
       <div style={{ border: '1px solid #E8E7E1', borderRadius: 10, marginBottom: 14, padding: '12px 14px' }}>
@@ -4549,7 +4601,11 @@ function ModuloActaVO({ obra, onSave }) {
         ))}
         <button onClick={addUbicacio} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#6B6B66', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 4 }}>+ Afegir ubicació</button>
       </div>
+      </>
+      )}
 
+      {vistaVO === 'dades' && (
+      <>
       {/* ── B. TREBALLS EN CURS ──────────────────────────────────────────── */}
       <div style={{ marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -4699,7 +4755,11 @@ function ModuloActaVO({ obra, onSave }) {
           </div>
         )}
       </div>
+      </>
+      )}
 
+      {vistaVO === 'temes' && (
+      <>
       {/* Secciones editables */}
       {(vo.secciones||[]).map(sec => {
         const activos = activosPorSec(sec.id);
@@ -4740,6 +4800,8 @@ function ModuloActaVO({ obra, onSave }) {
         );
       })}
       <button onClick={addSeccion} style={{ width: '100%', padding: '8px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginBottom: 14 }}>+ Añadir sección</button>
+      </>
+      )}
 
       {/* Modal histórico */}
       {showHistorico && (
