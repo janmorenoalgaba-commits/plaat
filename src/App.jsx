@@ -354,7 +354,17 @@ function MapaClimaModal({ latInicial, lonInicial, onConfirmar, onCancelar }) {
         attribution: '© OpenStreetMap',
         maxZoom: 19,
       }).addTo(map);
-      const marker = L.marker([seleccio.lat, seleccio.lon], { draggable: true }).addTo(map);
+      // Icona pròpia (SVG) — evita el problema clàssic de rutes d'imatge trencades del marcador per defecte de Leaflet via CDN
+      const iconaPin = L.divIcon({
+        className: 'plaat-map-pin',
+        html: `<svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">
+          <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 27 15 27s15-16.5 15-27C30 6.7 23.3 0 15 0z" fill="#18180F"/>
+          <circle cx="15" cy="15" r="6" fill="#fff"/>
+        </svg>`,
+        iconSize: [30, 42],
+        iconAnchor: [15, 42],
+      });
+      const marker = L.marker([seleccio.lat, seleccio.lon], { draggable: true, icon: iconaPin }).addTo(map);
       marker.on('dragend', () => {
         const p = marker.getLatLng();
         setSeleccio({ lat: p.lat, lon: p.lng });
@@ -4042,7 +4052,24 @@ function ModuloActaVO({ obra, onSave }) {
   const [climaCarregant, setClimaCarregant] = useState(false);
   const [climaError, setClimaError] = useState('');
   const [showMapaClima, setShowMapaClima] = useState(false);
+  const [aemetKey, setAemetKey] = useState('');
+  const [aemetKeyInput, setAemetKeyInput] = useState('');
   const NUM = { fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em' };
+
+  // Carregar la clau AEMET desada (és global, no depèn de l'obra)
+  useEffect(() => {
+    if (!window.storage) return;
+    window.storage.get('aemet_api_key').then(r => {
+      if (r?.value) { setAemetKey(r.value); setAemetKeyInput(r.value); }
+    }).catch(() => {});
+  }, []);
+
+  async function desarClauAemet() {
+    const k = aemetKeyInput.trim();
+    if (!k) return;
+    try { await window.storage.set('aemet_api_key', k); setAemetKey(k); setClimaError(''); }
+    catch (e) { setClimaError('No s\'ha pogut desar la clau AEMET.'); }
+  }
 
   // Si obra.actaVO és null (Fase 1 o mòdul no carregat), el carrega directament de Supabase
   useEffect(() => {
@@ -4291,11 +4318,56 @@ function ModuloActaVO({ obra, onSave }) {
     guardarVO({ ...vo, clima: (vo.clima||[]).filter(d => d.id!==id) });
   }
 
-  // Codi WMO (Open-Meteo) → condició del nostre model
-  function wmoACondicio(codi) {
-    if (codi === 0 || codi === 1) return 'soleado';
-    if (codi === 2 || codi === 3 || (codi >= 45 && codi <= 48)) return 'nublado';
-    return 'lluvia'; // pluja, ruixats, tempesta, neu...
+  // ── AEMET (Agencia Estatal de Meteorología) — font oficial de dades ────────
+  // Parseja coordenades en format DMS d'AEMET (ex: "394924N", "0022725W")
+  function parseDMSAemet(str) {
+    if (!str) return null;
+    const m = String(str).match(/^(\d+)(\d{2})(\d{2})([NSEW])$/);
+    if (!m) return null;
+    const [, deg, min, sec, hem] = m;
+    let dec = parseInt(deg,10) + parseInt(min,10)/60 + parseInt(sec,10)/3600;
+    if (hem === 'S' || hem === 'W') dec = -dec;
+    return dec;
+  }
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2-lat1) * Math.PI/180, dLon = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+  function parseNumAemet(s) {
+    if (s === undefined || s === null) return null;
+    if (s === 'Ip') return 0.1; // traça de pluja inapreciable
+    const n = parseFloat(String(s).replace(',', '.'));
+    return isNaN(n) ? null : n;
+  }
+  function precACondicio(mm) {
+    if (mm === null || mm <= 0) return 'soleado';
+    if (mm <= 1) return 'nublado';
+    return 'lluvia';
+  }
+  // AEMET respon en dos passos: primer et dona una URL, després cal anar-hi a buscar les dades reals
+  async function fetchAemet(url) {
+    const r1 = await fetch(url);
+    const j1 = await r1.json();
+    if (j1.estado !== 200 || !j1.datos) throw new Error(j1.descripcion || 'AEMET no ha retornat dades per aquesta consulta.');
+    const r2 = await fetch(j1.datos);
+    return r2.json();
+  }
+  async function obtenirEstacioAemetProxima(lat, lon) {
+    if (!window._aemetEstacions) {
+      window._aemetEstacions = await fetchAemet(
+        `https://opendata.aemet.es/opendata/api/valores/climatologicos/inventarioestaciones/todasestaciones/?api_key=${encodeURIComponent(aemetKey)}`
+      );
+    }
+    let millor = null, millorDist = Infinity;
+    for (const e of window._aemetEstacions) {
+      const eLat = parseDMSAemet(e.latitud), eLon = parseDMSAemet(e.longitud);
+      if (eLat === null || eLon === null) continue;
+      const d = haversineKm(lat, lon, eLat, eLon);
+      if (d < millorDist) { millorDist = d; millor = e; }
+    }
+    return millor;
   }
 
   // Desa la ubicació triada al mapa — a nivell d'obra (es reutilitza en totes les actes)
@@ -4303,9 +4375,10 @@ function ModuloActaVO({ obra, onSave }) {
     onSave({ ...obra, climaLat: lat, climaLon: lon });
   }
 
-  // Carrega automàtica de 7 dies de clima real — a partir de la ubicació marcada al mapa
+  // Carrega automàtica de 7 dies de clima real des d'AEMET, a partir de la ubicació marcada al mapa
   async function carregarSetmanaClima() {
     setClimaError('');
+    if (!aemetKey) { setClimaError('Primer introdueix la teva clau API d\'AEMET (gratuïta).'); return; }
     if (obra.climaLat === undefined || obra.climaLon === undefined) {
       setClimaError('Primer marca la ubicació de l\'obra al mapa.');
       return;
@@ -4313,33 +4386,34 @@ function ModuloActaVO({ obra, onSave }) {
     if (!climaSetmana) { setClimaError('Tria una data d\'inici de setmana.'); return; }
     setClimaCarregant(true);
     try {
-      const lat = obra.climaLat, lon = obra.climaLon;
-
-      // Calcular rang de 7 dies des de la data triada
       const inici = new Date(climaSetmana + 'T00:00:00');
       const fi = new Date(inici); fi.setDate(fi.getDate() + 6);
+      const avui = new Date(new Date().toDateString());
+      if (fi > avui) {
+        throw new Error('AEMET només proporciona dades observades (passades). Tria una setmana que ja hagi finalitzat.');
+      }
       const fmt = d => d.toISOString().slice(0,10);
-      const esPassat = fi < new Date(new Date().toDateString());
 
-      // Triar API: archive (passat) o forecast (present/futur)
-      const base = esPassat
-        ? 'https://archive-api.open-meteo.com/v1/archive'
-        : 'https://api.open-meteo.com/v1/forecast';
-      const url = `${base}?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,precipitation_sum,weathercode&timezone=auto&start_date=${fmt(inici)}&end_date=${fmt(fi)}`;
-      const wRes = await fetch(url);
-      const wData = await wRes.json();
-      if (!wData.daily) throw new Error('El servei meteorològic no ha retornat dades per aquest període.');
+      const estacio = await obtenirEstacioAemetProxima(obra.climaLat, obra.climaLon);
+      if (!estacio) throw new Error('No s\'ha trobat cap estació AEMET propera.');
 
-      const nousD = wData.daily.time.map((fecha, i) => ({
-        id: uid(),
-        fecha,
-        condicion: wmoACondicio(wData.daily.weathercode[i]),
-        temp: Math.round(wData.daily.temperature_2m_max[i]),
-        precip: Math.round((wData.daily.precipitation_sum[i] || 0) * 10) / 10,
-      }));
+      const url = `https://opendata.aemet.es/opendata/api/valores/climatologicos/diarios/datos/fechaini/${fmt(inici)}T00:00:00UTC/fechafin/${fmt(fi)}T23:59:59UTC/estacion/${estacio.indicativo}/?api_key=${encodeURIComponent(aemetKey)}`;
+      const diesData = await fetchAemet(url);
+      if (!Array.isArray(diesData) || !diesData.length) throw new Error('AEMET no té dades per a aquesta setmana i estació.');
+
+      const nousD = diesData.map(d => {
+        const prec = parseNumAemet(d.prec);
+        return {
+          id: uid(),
+          fecha: d.fecha,
+          condicion: precACondicio(prec),
+          temp: Math.round(parseNumAemet(d.tmax) ?? 0),
+          precip: prec ?? 0,
+        };
+      });
       guardarVO({ ...vo, clima: nousD });
     } catch (e) {
-      setClimaError(e.message || 'Error carregant el clima.');
+      setClimaError(e.message || 'Error carregant el clima des d\'AEMET.');
     }
     setClimaCarregant(false);
   }
@@ -4614,6 +4688,25 @@ function ModuloActaVO({ obra, onSave }) {
           <span style={{ ...NUM, fontSize: 10, color: '#BFBEB9', marginLeft: 'auto' }}>{(vo.clima||[]).length}/7</span>
         </div>
 
+        {/* Clau API d'AEMET — es demana una sola vegada, queda desada */}
+        {!aemetKey ? (
+          <div style={{ background: '#FAFAF8', borderRadius: 9, padding: 9, marginBottom: 10 }}>
+            <div style={{ fontSize: 11.5, color: '#6B6B66', marginBottom: 6 }}>
+              Les dades de clima venen d'AEMET (font oficial). Cal una clau API gratuïta —{' '}
+              <a href="https://opendata.aemet.es/centrodedescargas/altaUsuario" target="_blank" rel="noreferrer" style={{ color: '#18180F', fontWeight: 600 }}>sol·licita-la aquí</a>, es rep a l'instant per correu.
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={aemetKeyInput} onChange={e => setAemetKeyInput(e.target.value)}
+                placeholder="Enganxa aquí la teva clau API AEMET" style={{ flex: 1, fontSize: 11.5 }} />
+              <Btn sm primary onClick={desarClauAemet}>Desar</Btn>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: '#9B9B97', marginBottom: 8 }}>
+            Clau AEMET configurada. <button onClick={() => { setAemetKey(''); setAemetKeyInput(''); window.storage?.delete?.('aemet_api_key'); }} style={{ background:'none', border:'none', color:'#9B9B97', textDecoration:'underline', cursor:'pointer', fontSize:11, padding:0 }}>Canviar-la</button>
+          </div>
+        )}
+
         {/* Ubicació al mapa + càrrega automàtica del clima real */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
           <button onClick={() => setShowMapaClima(true)}
@@ -4631,7 +4724,7 @@ function ModuloActaVO({ obra, onSave }) {
           <input type="date" value={climaSetmana} onChange={e => setClimaSetmana(e.target.value)}
             style={{ width: 140, fontSize: 11.5, flexShrink: 0 }} />
           <Btn sm primary onClick={carregarSetmanaClima} disabled={climaCarregant}>
-            {climaCarregant ? 'Carregant…' : 'Carregar automàticament'}
+            {climaCarregant ? 'Carregant…' : 'Carregar des d\'AEMET'}
           </Btn>
         </div>
         {climaError && <div style={{ fontSize: 11.5, color: '#8A1F1F', marginBottom: 8 }}>{climaError}</div>}
@@ -7282,6 +7375,7 @@ export default function App() {
         fechaCFO: o.fechaCFO || '',
         fases: o.fases, disciplinas: o.disciplinas, lotes: o.lotes,
         creadaEn: o.creadaEn,
+        climaLat: o.climaLat, climaLon: o.climaLon,
       },
       updated_at: now(),
     };
@@ -7300,6 +7394,7 @@ export default function App() {
       fechaCFO: d.fechaCFO || '',
       fases: d.fases || [], disciplinas: d.disciplinas || [],
       lotes: d.lotes || [], creadaEn: d.creadaEn,
+      climaLat: d.climaLat, climaLon: d.climaLon,
       incidencias: (modulos?.incidencias || []).map(r => r.data),
       actaVO: modulos?.actas_vo?.[0]?.data || null,
       actasInsp: (modulos?.actas_insp || []).map(r => r.data),
