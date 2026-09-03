@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useMemo, memo } from "react";
-import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -4312,10 +4311,13 @@ function ModuloActaVO({ obra, onSave }) {
   }
 
   // Codi WMO (Open-Meteo) → condició del nostre model
-  function wmoACondicio(codi) {
-    if (codi === 0 || codi === 1) return 'soleado';
-    if (codi === 2 || codi === 3 || (codi >= 45 && codi <= 48)) return 'nublado';
-    return 'lluvia'; // pluja, ruixats, tempesta, neu...
+  // Determina la condició a partir de dades horàries reals de l'horari laboral (8-18h)
+  // — mai pot sortir "pluja" si la precipitació sumada és 0, i el núvol/sol es calcula
+  // NOMÉS amb les hores de feina (no la nit sencera), que és el que realment es viu a obra.
+  function condicioDesDeHores(precipTotal, weathercodesHoraris) {
+    if (precipTotal > 0.2) return 'lluvia';
+    const nuvolats = weathercodesHoraris.filter(c => c === 2 || c === 3).length;
+    return nuvolats > weathercodesHoraris.length / 2 ? 'nublado' : 'soleado';
   }
 
   // Desa la ubicació triada al mapa — a nivell d'obra (es reutilitza en totes les actes)
@@ -4351,18 +4353,37 @@ function ModuloActaVO({ obra, onSave }) {
       const base = usarArxiu
         ? 'https://archive-api.open-meteo.com/v1/archive'
         : 'https://api.open-meteo.com/v1/forecast';
-      const url = `${base}?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,precipitation_sum,weathercode&timezone=auto&models=best_match&start_date=${fmt(inici)}&end_date=${fmt(fi)}`;
+      // Dades HORÀRIES (no diàries agregades) — permet quedar-nos només amb l'horari
+      // laboral (8-18h) i evitar que condicions nocturnes distorsionin el resultat.
+      const url = `${base}?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation,weathercode&timezone=auto&models=best_match&start_date=${fmt(inici)}&end_date=${fmt(fi)}`;
       const wRes = await fetch(url);
       const wData = await wRes.json();
-      if (!wData.daily || !wData.daily.time?.length) throw new Error('El servei meteorològic no ha retornat dades per aquest període.');
+      if (!wData.hourly || !wData.hourly.time?.length) throw new Error('El servei meteorològic no ha retornat dades per aquest període.');
 
-      const nousD = wData.daily.time.map((fecha, i) => ({
-        id: uid(),
-        fecha,
-        condicion: wmoACondicio(wData.daily.weathercode[i]),
-        temp: Math.round(wData.daily.temperature_2m_max[i]),
-        precip: Math.round((wData.daily.precipitation_sum[i] || 0) * 10) / 10,
-      }));
+      // Agrupar les 24 hores de cada dia i quedar-nos només amb la franja 8h-18h
+      const perDia = {};
+      wData.hourly.time.forEach((isoDatetime, i) => {
+        const [dataStr, horaStr] = isoDatetime.split('T');
+        const hora = parseInt(horaStr.slice(0,2), 10);
+        if (hora < 8 || hora > 18) return; // fora d'horari laboral
+        if (!perDia[dataStr]) perDia[dataStr] = { temps: [], precips: [], codis: [] };
+        perDia[dataStr].temps.push(wData.hourly.temperature_2m[i]);
+        perDia[dataStr].precips.push(wData.hourly.precipitation[i] || 0);
+        perDia[dataStr].codis.push(wData.hourly.weathercode[i]);
+      });
+
+      const nousD = Object.keys(perDia).sort().map(fecha => {
+        const { temps, precips, codis } = perDia[fecha];
+        const precipTotal = Math.round(precips.reduce((a,b) => a+b, 0) * 10) / 10;
+        return {
+          id: uid(),
+          fecha,
+          condicion: condicioDesDeHores(precipTotal, codis),
+          temp: Math.round(Math.max(...temps)),
+          precip: precipTotal,
+        };
+      });
+      if (!nousD.length) throw new Error('No hi ha dades per a l\'horari laboral d\'aquests dies.');
       guardarVO({ ...vo, clima: nousD });
     } catch (e) {
       setClimaError(e.message || 'Error carregant el clima.');
@@ -4814,16 +4835,11 @@ function ModuloActaVO({ obra, onSave }) {
       })}
       <button onClick={addSeccion} style={{ width: '100%', padding: '8px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginBottom: 14 }}>+ Añadir sección</button>
 
-      {/* Captura ràpida — única manera de crear temes nous, sempre a l'abast.
-          Renderitzat via portal a document.body: així el "fixed" és relatiu al viewport
-          real i no es queda enrere en fer scroll dins del contenidor de la pestanya. */}
-      {createPortal(
-        <button onClick={() => setShowQuickAdd(true)} title="Nou tema"
-          style={{ position: 'fixed', right: isMobile ? 16 : 28, bottom: isMobile ? 74 : 24, zIndex: 9990, width: 52, height: 52, borderRadius: '50%', background: '#18180F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 26, lineHeight: 1, boxShadow: '0 6px 20px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          +
-        </button>,
-        document.body
-      )}
+      {/* Captura ràpida — única manera de crear temes nous, sempre a l'abast */}
+      <button onClick={() => setShowQuickAdd(true)} title="Nou tema"
+        style={{ position: 'fixed', right: isMobile ? 16 : 28, bottom: isMobile ? 74 : 24, zIndex: 9990, width: 52, height: 52, borderRadius: '50%', background: '#18180F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 26, lineHeight: 1, boxShadow: '0 6px 20px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        +
+      </button>
       {showQuickAdd && (
         <QuickAddTema
           secciones={vo.secciones||[]}
