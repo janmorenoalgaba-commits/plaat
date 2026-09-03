@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, memo } from "react";
+import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -51,6 +52,10 @@ input:focus, select:focus, textarea:focus {
   border-color: #16160F; box-shadow: 0 0 0 3.5px rgba(20,20,15,.06);
 }
 textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
+/* iOS Safari fa zoom automàtic en qualsevol input amb font-size < 16px — ho evitem a tota la app */
+@media (max-width: 768px) {
+  input, select, textarea { font-size: 16px !important; }
+}
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #D8D6CF; border-radius: 3px; }
@@ -305,7 +310,7 @@ function Btn({ children, onClick, primary, sm, danger, ghost, disabled, full }) 
 }
 
 function ConfirmMini({ titulo, texto, onSi, onNo }) {
-  return (
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, backdropFilter: 'blur(3px)' }}
       onClick={e => { if (e.target === e.currentTarget) onNo(); }}>
       <div className="modal-in fade" style={{ background: '#fff', borderRadius: 14, width: 340, maxWidth: '92vw', padding: 20, border: '1px solid #E0DFD9', boxShadow: '0 16px 48px rgba(0,0,0,.15)' }}>
@@ -316,7 +321,8 @@ function ConfirmMini({ titulo, texto, onSi, onNo }) {
           <Btn full danger onClick={onSi}>Eliminar</Btn>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -562,9 +568,9 @@ function Modal({ title, onClose, children, footer, wide }) {
   const [confirmando, setConfirmando] = useState(false);
   const isMobile = useIsMobile();
   const panelStyle = isMobile
-    ? { background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: '100%', maxHeight: '94vh', borderTop: '1px solid #E0DFD9', boxShadow: '0 -8px 40px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column' }
+    ? { background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: '100%', maxHeight: '92dvh', borderTop: '1px solid #E0DFD9', boxShadow: '0 -8px 40px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column' }
     : { background: '#fff', borderRadius: 14, width: wide ? 540 : 460, maxWidth: '95vw', maxHeight: '90vh', border: '1px solid #E0DFD9', boxShadow: '0 24px 64px rgba(0,0,0,.14)', display: 'flex', flexDirection: 'column' };
-  return (
+  return createPortal(
     <div className="modal-overlay"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }}
       onClick={e => { if (e.target === e.currentTarget) setConfirmando(true); }}
@@ -574,7 +580,7 @@ function Modal({ title, onClose, children, footer, wide }) {
           <div style={{ fontSize: 15, fontWeight: 600, flex: 1 }}>{title}</div>
           <button onClick={() => setConfirmando(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: '#A5A5A0', lineHeight: 1, padding: '0 4px' }}>×</button>
         </div>
-        <div style={{ padding: '16px 18px', overflowY: 'auto', flex: 1 }}>{children}</div>
+        <div style={{ padding: '16px 18px', overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch' }}>{children}</div>
         {footer && (
           <div style={{ padding: '12px 18px', borderTop: '1px solid #ECEAE4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, gap: 10, paddingBottom: isMobile ? 'calc(12px + env(safe-area-inset-bottom))' : 12 }}>
             {footer}
@@ -583,7 +589,7 @@ function Modal({ title, onClose, children, footer, wide }) {
       </div>
       {confirmando && (
         <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
-          <div className="fade" style={{ background: '#fff', borderRadius: 12, width: 340, padding: '20px 22px', border: '1px solid #E0DFD9', boxShadow: '0 12px 40px rgba(0,0,0,.16)' }}>
+          <div className="fade" style={{ background: '#fff', borderRadius: 12, width: 340, maxWidth: '92vw', padding: '20px 22px', border: '1px solid #E0DFD9', boxShadow: '0 12px 40px rgba(0,0,0,.16)' }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>¿Cerrar el formulario?</div>
             <p style={{ fontSize: 13, color: '#6B6B66', lineHeight: 1.5, marginBottom: 18 }}>Perderás los datos introducidos. Esta acción no se puede deshacer.</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -593,7 +599,8 @@ function Modal({ title, onClose, children, footer, wide }) {
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -4430,11 +4437,16 @@ function ModuloActaVO({ obra, onSave }) {
 
   return (
     <div>
-      {/* Capçalera + navegació — sticky: sempre a l'abast, encara que baixis molt avall */}
+      {/* Capçalera + navegació — sticky: sempre a l'abast, encara que baixis molt avall.
+          NOMÉS marge negatiu horitzontal (segur); el vertical es treu perquè amb sticky
+          desquadrava la reserva d'espai en el flux i solapava el que ve després. */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
-        margin: isMobile ? '-12px -14px 0' : '-18px -22px 0',
-        padding: isMobile ? '12px 14px 0' : '18px 22px 0',
+        marginLeft: isMobile ? -14 : -22,
+        marginRight: isMobile ? -14 : -22,
+        paddingLeft: isMobile ? 14 : 22,
+        paddingRight: isMobile ? 14 : 22,
+        paddingBottom: 12,
         background: '#F2F1ED',
       }}>
         {/* Cabecera */}
@@ -4835,11 +4847,16 @@ function ModuloActaVO({ obra, onSave }) {
       })}
       <button onClick={addSeccion} style={{ width: '100%', padding: '8px', borderRadius: 9, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginBottom: 14 }}>+ Añadir sección</button>
 
-      {/* Captura ràpida — única manera de crear temes nous, sempre a l'abast */}
-      <button onClick={() => setShowQuickAdd(true)} title="Nou tema"
-        style={{ position: 'fixed', right: isMobile ? 16 : 28, bottom: isMobile ? 74 : 24, zIndex: 9990, width: 52, height: 52, borderRadius: '50%', background: '#18180F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 26, lineHeight: 1, boxShadow: '0 6px 20px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        +
-      </button>
+      {/* Captura ràpida — única manera de crear temes nous, sempre a l'abast.
+          Portal a document.body: garanteix que el "fixed" és relatiu al viewport
+          real i no es queda enrere en fer scroll (bug conegut d'iOS dins de contenidors amb scroll niat). */}
+      {createPortal(
+        <button onClick={() => setShowQuickAdd(true)} title="Nou tema"
+          style={{ position: 'fixed', right: isMobile ? 16 : 28, bottom: isMobile ? 'calc(74px + env(safe-area-inset-bottom))' : 24, zIndex: 9990, width: 52, height: 52, borderRadius: '50%', background: '#18180F', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 26, lineHeight: 1, boxShadow: '0 6px 20px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          +
+        </button>,
+        document.body
+      )}
       {showQuickAdd && (
         <QuickAddTema
           secciones={vo.secciones||[]}
@@ -5110,7 +5127,7 @@ function QuickAddTema({ secciones, obraId, onAdd, onCancel }) {
       </Field>
 
       <Field label="Títol del tema">
-        <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)}
+        <input autoFocus={!isMobile} value={titulo} onChange={e => setTitulo(e.target.value)}
           placeholder="P. ex. Replanteig escales" style={{ fontWeight: 600, fontSize: 14 }} />
       </Field>
 
@@ -5125,7 +5142,7 @@ function QuickAddTema({ secciones, obraId, onAdd, onCancel }) {
           <div style={{ display: 'flex', gap: 5 }}>
             {Object.entries(ESTADOS_VO).map(([k, v]) => (
               <button key={k} onClick={() => setEstado(k)}
-                style={{ flex: 1, padding: '6px 4px', borderRadius: 7, fontSize: 11.5, fontWeight: estado===k?700:500, cursor: 'pointer',
+                style={{ flex: 1, padding: '9px 4px', borderRadius: 7, fontSize: 11.5, fontWeight: estado===k?700:500, cursor: 'pointer',
                   border: `1px solid ${estado===k ? v.color : '#E5E4DF'}`, background: estado===k ? v.bg : '#fff', color: estado===k ? v.color : '#8A8A85' }}>
                 {v.label}
               </button>
