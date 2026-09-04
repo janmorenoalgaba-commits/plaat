@@ -3988,6 +3988,7 @@ function getDefaultSecciones() {
 function migrateVO(raw) {
   let vo = raw ? { ...raw } : {};
   if (!vo.num) vo.num = 1;
+  if (!vo.fechaActa) vo.fechaActa = today();
   if (!vo.estadoObra) vo.estadoObra = { descripcion: '', ubicacions: [] };
 
   // B — Trabajos en curso
@@ -4499,10 +4500,11 @@ function ModuloActaVO({ obra, onSave }) {
         </div>
       </div>
 
-      {/* Fase + lugar */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+      {/* Data + Fase + lugar */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+        <Field label="Data de l'acta"><input type="date" value={vo.fechaActa||today()} onChange={e => guardarVO({...vo, fechaActa: e.target.value})} /></Field>
         <Field label="Fase"><input value={vo.fase||''} onChange={e => guardarVO({...vo, fase: e.target.value})} placeholder="Estructura, acabados..." /></Field>
-        <Field label="Lugar"><input value={vo.lugar||''} onChange={e => guardarVO({...vo, lugar: e.target.value})} placeholder="Obra / oficina" /></Field>
+        <Field label="Lugar"><input value={vo.lloc||''} onChange={e => guardarVO({...vo, lloc: e.target.value})} placeholder="Obra / oficina" /></Field>
       </div>
 
       {vistaVO === 'equip' && (
@@ -5623,7 +5625,9 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
 
   const num = String(vo.num).padStart(2,'0');
   const dataAvui = (() => {
-    const d = new Date();
+    // Usa la data triada per l'usuari (vo.fechaActa, format YYYY-MM-DD); si no n'hi ha, avui
+    const iso = vo.fechaActa;
+    const d = iso ? new Date(iso + 'T12:00:00') : new Date();
     const dd = String(d.getDate()).padStart(2,'0');
     const mm = String(d.getMonth()+1).padStart(2,'0');
     const yyyy = d.getFullYear();
