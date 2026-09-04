@@ -1710,6 +1710,10 @@ const ESTADOS_VO = {
   R: { label: 'Resuelto',    bg: '#E8F5E0', color: '#2D5E10' },
   I: { label: 'Informativo', bg: '#EEEDE7', color: '#52524E' },
 };
+// Colors específics per als punts d'activitat (dots) — més saturats que els de text,
+// perquè a 5-7px de diàmetre els colors de text (pensats per llegir sobre fons clar)
+// es veuen massa semblants entre ells.
+const DOT_COLOR_VO = { P: '#F0A02B', R: '#2FA84F', I: '#3B82C4' };
 const RESP_VO = ['EC', 'DO', 'DEO', 'PR', 'DOE', 'DOI', 'CSS', 'INT'];
 const DIAS_DEFAULT = [1, 3]; // Lunes y Miércoles
 
@@ -4672,11 +4676,11 @@ function ModuloActaVO({ obra, onSave }) {
         </button>
       </div>
 
-      {/* ── 6. SEGUIMENT HITES CONTRACTUALS ─────────────────────────────── */}
+      {/* ── 6. SEGUIMENT FITES CONTRACTUALS ─────────────────────────────── */}
       <div style={{ marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#8A8A85' }}>6</span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#141412' }}>Seguiment hites contractuals</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#141412' }}>Seguiment fites contractuals</span>
         </div>
         {[['esenciales','Terminis essencials'],['intermedios','Terminis intermedis']].map(([grupo, label]) => (
           <div key={grupo} style={{ marginBottom: 10 }}>
@@ -4804,12 +4808,9 @@ function ModuloActaVO({ obra, onSave }) {
 
       {vistaVO === 'temes' && (
       <>
-      {/* Secciones editables — cada una plegable; temes ordenats perquè el pendent es llegeixi primer */}
+      {/* Secciones editables — cada una plegable; temes en ordre d'inserció (els nous sempre al final real) */}
       {(vo.secciones||[]).map(sec => {
         const activos = activosPorSec(sec.id);
-        // Ordre de lectura directa: Pendent → Informatiu → Resolt (sense cap filtre, només ordenació)
-        const ORDRE_LECTURA = { P: 0, I: 1, R: 2 };
-        const activosOrdenats = [...activos].sort((a, b) => ORDRE_LECTURA[estatAgregatTema(a)] - ORDRE_LECTURA[estatAgregatTema(b)]);
         const pendents = activos.filter(t => estatAgregatTema(t) === 'P').length;
         const colapsada = !!seccColapsades[sec.id];
         return (
@@ -4828,8 +4829,8 @@ function ModuloActaVO({ obra, onSave }) {
               <span style={{ fontSize: 11, color: '#A5A5A0' }}>{activos.length}</span>
               <button onClick={() => setBorrar({ tipo: 'seccion', id: sec.id, label: sec.titulo })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4D3CE', fontSize: 15, lineHeight: 1 }}>×</button>
             </div>
-            {/* Temas activos — ordenats, sense botó d'afegir (la captura ràpida flotant ho substitueix) */}
-            {!colapsada && activosOrdenats.map(t => (
+            {/* Temas activos — ordre d'inserció, sense botó d'afegir (la captura ràpida flotant ho substitueix) */}
+            {!colapsada && activos.map(t => (
               <TemaVO key={t.id} t={t} est={ESTADOS_VO[estatAgregatTema(t)]} secId={sec.id} voNum={vo.num}
                 secciones={vo.secciones}
                 onUpdEntrada={(tId,eId,campo,val) => updEntrada(sec.id, tId, eId, campo, val)}
@@ -4930,7 +4931,7 @@ function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAd
               <span style={{ ...NUM, fontSize: 10, fontWeight: 600, color: '#BFBEB9' }}>{t.entradas.length}</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 2.5 }}>
                 {t.entradas.slice(isMobile ? -3 : -5).map((en, i, arr) => {
-                  const c = (ESTADOS_VO[en.estado] || est).color;
+                  const c = DOT_COLOR_VO[en.estado] || DOT_COLOR_VO.P;
                   const ultim = i === arr.length - 1;
                   return <span key={en.id} style={{
                     width: ultim ? 7 : 5.5, height: ultim ? 7 : 5.5, borderRadius: '50%',
@@ -5136,8 +5137,8 @@ function QuickAddTema({ secciones, obraId, onAdd, onCancel }) {
           placeholder="Què s'ha observat..." style={{ minHeight: isMobile ? 100 : 80, fontSize: 13, lineHeight: 1.6, resize: 'vertical' }} />
       </Field>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 13, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 140 }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 14 : 10, marginBottom: 13 }}>
+        <div style={{ flex: 1, minWidth: isMobile ? '100%' : 140 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#52524E', marginBottom: 5 }}>Estat</label>
           <div style={{ display: 'flex', gap: 5 }}>
             {Object.entries(ESTADOS_VO).map(([k, v]) => (
@@ -5149,14 +5150,14 @@ function QuickAddTema({ secciones, obraId, onAdd, onCancel }) {
             ))}
           </div>
         </div>
-        <div style={{ flex: 1, minWidth: 140 }}>
+        <div style={{ flex: 1, minWidth: isMobile ? '100%' : 140 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#52524E', marginBottom: 5 }}>Responsable</label>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {RESP_VO.map(r => {
               const actiu = resp.includes(r);
               return (
                 <button key={r} onClick={() => setResp(actiu ? resp.filter(x=>x!==r) : [...resp, r])}
-                  style={{ padding: '4px 9px', borderRadius: 6, fontSize: 11, fontWeight: actiu?700:500, cursor: 'pointer',
+                  style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: actiu?700:500, cursor: 'pointer',
                     border: `1px solid ${actiu?'#18180F':'#E5E4DF'}`, background: actiu?'#18180F':'#fff', color: actiu?'#fff':'#8A8A85' }}>
                   {r}
                 </button>
@@ -5591,7 +5592,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     ec_f:        esCA ? 'CONTRACTISTA' : 'CONTRATISTA',
     peu:         'Plaat Arquitectura Tècnica  |  Barcelona - Madrid  |  plaat.es',
     peuAlt:      esCA ? 'Acta de visita d\'obra' : 'Acta de visita de obra',
-    hitosContractuales: esCA ? 'SEGUIMENT HITES CONTRACTUALS' : 'SEGUIMIENTO HITOS CONTRACTUALES',
+    hitosContractuales: esCA ? 'SEGUIMENT FITES CONTRACTUALS' : 'SEGUIMIENTO HITOS CONTRACTUALES',
     plazosEsenciales:   esCA ? 'TERMINIS ESSENCIALS' : 'PLAZOS ESENCIALES',
     plazosIntermedios:  esCA ? 'TERMINIS INTERMEDIS' : 'PLAZOS INTERMEDIOS',
     planning:    'PLANNING',
@@ -6297,7 +6298,13 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     y+=4;
   });
 
-  // ── SECCIÓ 6: SEGUIMENT HITES CONTRACTUALS ────────────────────────────────
+  // Numeració dinàmica: aquests 3 apartats sempre van al final, consecutius a l'última secció de temes
+  const numBaseFinal = (vo.secciones||[]).length; // ex. 5 seccions de temes → aquests comencen a 6
+  const numHitos = String(numBaseFinal + 1);
+  const numContrataciones = String(numBaseFinal + 2);
+  const numClima = String(numBaseFinal + 3);
+
+  // ── SECCIÓ FITES CONTRACTUALS ────────────────────────────────
   const hitos = vo.hitos || { esenciales: [], intermedios: [] };
   if ((hitos.esenciales||[]).length > 0 || (hitos.intermedios||[]).length > 0) {
     const c6H = 5.5;
@@ -6310,8 +6317,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.setFillColor(...GRIS15);
     doc.rect(ML, y, CW, c6H, 'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-    doc.text('6', ML + 2, y + c6H/2, { baseline:'middle' });
-    doc.text(T.hitosContractuales, ML + 2 + 3 + doc.getTextWidth('6'), y + c6H/2, { baseline:'middle' });
+    doc.text(numHitos, ML + 2, y + c6H/2, { baseline:'middle' });
+    doc.text(T.hitosContractuales, ML + 2 + 3 + doc.getTextWidth(numHitos), y + c6H/2, { baseline:'middle' });
     doc.setFontSize(6.5);
     doc.text(T.planning, ML+c6Cod+c6Desc-2, y + c6H/2, { align:'right', baseline:'middle' });
     [[ML+c6Cod+c6Desc, cFP, T.fechaPrevista],[ML+c6Cod+c6Desc+cFP, cFR, T.fechaReal],
@@ -6330,7 +6337,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         const rh = 5.5;
         checkPage(rh);
         doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-        doc.text(`6.${String(contadorHito).padStart(2,'0')}`, ML+2, y+rh/2, { baseline:'middle' });
+        doc.text(`${numHitos}.${String(contadorHito).padStart(2,'0')}`, ML+2, y+rh/2, { baseline:'middle' });
         contadorHito++;
         doc.setFont('helvetica','normal');
         doc.text(doc.splitTextToSize(it.descripcion||'', c6Desc-3)[0]||'', ML+c6Cod+2, y+rh/2, { baseline:'middle' });
@@ -6353,19 +6360,30 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     y += 4;
   }
 
-  // ── SECCIÓ 7: SEGUIMENT CONTRACTACIONS ────────────────────────────────────
+  // ── SECCIÓ CONTRACTACIONS ────────────────────────────────────────────
   const contrataciones = vo.contrataciones || [];
   if (contrataciones.length > 0) {
     const c7H = 5.5;
     const cEmp=32, cNif=22, cAct=32, cCont=28, cTel=24, cCor=CW-cNum-cEmp-cNif-cAct-cCont-cTel;
-    const alt7 = c7H*2 + contrataciones.length*5.5 + 4;
+    const cols7 = [['empresa',cEmp],['nif',cNif],['actividad',cAct],['contacto',cCont],['telefono',cTel],['correo',cCor]];
+    const lh7 = 7*0.3528 + 0.5; // alçada de línia a 7pt
+
+    // Pre-calcular l'alçada real de cada fila (segons quantes línies necessita la columna més llarga)
+    const filesCalc = contrataciones.map(c => {
+      doc.setFontSize(7);
+      const linesPerCol = cols7.map(([camp,w]) => doc.splitTextToSize(c[camp]||'', w-2));
+      const maxLines = Math.max(1, ...linesPerCol.map(l => l.length));
+      const rh = Math.max(5.5, maxLines*lh7 + 2);
+      return { c, linesPerCol, rh };
+    });
+    const alt7 = c7H*2 + filesCalc.reduce((a,f) => a+f.rh, 0) + 4;
     if (y + alt7 > PH - MB - 12) { doc.addPage(); pagActual++; dibuixarCapçalera(false); dibuixarPeu(); }
 
     doc.setFillColor(...GRIS15);
     doc.rect(ML, y, CW, c7H, 'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-    doc.text('7', ML + 2, y + c7H/2, { baseline:'middle' });
-    doc.text(T.contrataciones, ML + 2 + 3 + doc.getTextWidth('7'), y + c7H/2, { baseline:'middle' });
+    doc.text(numContrataciones, ML + 2, y + c7H/2, { baseline:'middle' });
+    doc.text(T.contrataciones, ML + 2 + 3 + doc.getTextWidth(numContrataciones), y + c7H/2, { baseline:'middle' });
     y += c7H;
 
     doc.setFontSize(6.5); doc.setFont('helvetica','bold');
@@ -6377,36 +6395,40 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     y += 5.5;
     setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
 
-    contrataciones.forEach((c, i) => {
-      const rh = 5.5;
+    filesCalc.forEach(({ c, linesPerCol, rh }, i) => {
       checkPage(rh);
       doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,0,0);
-      doc.text(`7.${String(i+1).padStart(2,'0')}`, ML+2, y+rh/2, { baseline:'middle' });
+      doc.text(`${numContrataciones}.${String(i+1).padStart(2,'0')}`, ML+2, y+rh/2, { baseline:'middle' });
       doc.setFont('helvetica','normal'); doc.setFontSize(7);
-      const fila = [[c.empresa,cEmp],[c.nif,cNif],[c.actividad,cAct],[c.contacto,cCont],[c.telefono,cTel],[c.correo,cCor]];
       let cx = ML+cNum;
-      fila.forEach(([val,w]) => { doc.text((val||'').slice(0, Math.floor(w/1.7)), cx+1, y+rh/2, { baseline:'middle' }); cx += w; });
+      cols7.forEach(([campo,w], ci) => {
+        const lines = linesPerCol[ci];
+        const totalH = lines.length * lh7;
+        let ty = y + rh/2 - totalH/2 + lh7*0.8;
+        lines.forEach(l => { doc.text(l, cx+1, ty, { baseline:'middle' }); ty += lh7; });
+        cx += w;
+      });
       setLW(LW_THIN); doc.line(ML, y+rh, ML+CW, y+rh);
       y += rh;
     });
     y += 4;
   }
 
-  // ── SECCIÓ 8: CLIMA ────────────────────────────────────────────────────────
+  // ── SECCIÓ CLIMA ────────────────────────────────────────────────────────
   const climaData = vo.clima || [];
   if (climaData.length > 0) {
     const dies = climaData.slice(0, 7);
     const c8H = 5.5;
     const c8Label = 14; // columna d'etiquetes DIA / TEMP. / PREC. (igual patró que cNum)
     const cDia = (CW - c8Label) / dies.length;
-    const alt8 = c8H + 6 + 22 + 5.5*2 + 6;
+    const alt8 = c8H + 6 + 22 + 5.5 + 8.5 + 6;
     if (y + alt8 > PH - MB - 12) { doc.addPage(); pagActual++; dibuixarCapçalera(false); dibuixarPeu(); }
 
     doc.setFillColor(...GRIS15);
     doc.rect(ML, y, CW, c8H, 'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,0,0);
-    doc.text('8', ML + 2, y + c8H/2, { baseline:'middle' });
-    doc.text(T.clima, ML + 2 + 3 + doc.getTextWidth('8'), y + c8H/2, { baseline:'middle' });
+    doc.text(numClima, ML + 2, y + c8H/2, { baseline:'middle' });
+    doc.text(T.clima, ML + 2 + 3 + doc.getTextWidth(numClima), y + c8H/2, { baseline:'middle' });
     y += c8H + 3;
 
     // Dia de la setmana COMPLET (calculat automàticament de la data, sense abreujar)
@@ -6491,16 +6513,20 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     y += tempRH;
     setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
 
-    // Fila PREC — etiqueta a l'esquerra, "X mm (nivell)" centrat
-    const precRH = 5.5;
+    // Fila PREC — mm a la línia de dalt, nivell a sota (evita solapaments amb columnes estretes)
+    const precRH = 8.5;
     doc.setFont('helvetica','bold'); doc.setFontSize(7);
     doc.text(T.prec, ML+2, y+precRH/2, { baseline:'middle' });
-    doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
     dies.forEach((d, i) => {
       const x = ML + c8Label + i*cDia + cDia/2;
       const mm = d.precip !== undefined && d.precip !== '' ? d.precip : null;
-      const txt = mm !== null ? `${mm} mm (${nivellPluja(mm)})` : '';
-      doc.text(txt, x, y+precRH/2, { align:'center', baseline:'middle' });
+      if (mm === null) return;
+      doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+      doc.text(`${mm} mm`, x, y+3, { align:'center', baseline:'middle' });
+      doc.setFont('helvetica','normal'); doc.setFontSize(5.8); doc.setTextColor(90,90,86);
+      const nivellLines = doc.splitTextToSize(nivellPluja(mm), cDia - 2);
+      doc.text(nivellLines[0] || '', x, y+6.3, { align:'center', baseline:'middle' });
+      doc.setTextColor(0,0,0);
     });
     y += precRH;
     setLW(LW_THIN); doc.line(ML, y, ML+CW, y);
@@ -6982,7 +7008,7 @@ function FormSeguimiento({ punto, obras, nextNum, onGuardar, onCerrar, isMobile 
   );
 }
 
-function DetalleObra({ obra, onBack, onSave, isMobile, user }) {
+function DetalleObra({ obra, onBack, onSave, onFlush, isMobile, user }) {
   const [tab, setTab]               = useState('inspecciones');
   const [editEstado, setEditEstado] = useState(false);
   const [showCompartir, setShowCompartir] = useState(false);
@@ -7050,7 +7076,7 @@ function DetalleObra({ obra, onBack, onSave, isMobile, user }) {
         {!isMobile && (
           <div className="no-scrollbar" style={{ position: 'relative', zIndex: 2, display: 'flex', padding: '0 22px', overflowX: 'auto' }}>
             {tabs.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{
+              <button key={t.id} onClick={() => { onFlush?.(); setTab(t.id); }} style={{
                 padding: '11px 16px', background: 'none', border: 'none',
                 borderBottom: `2px solid ${tab === t.id ? accentColor : 'transparent'}`,
                 cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0,
@@ -7082,7 +7108,7 @@ function DetalleObra({ obra, onBack, onSave, isMobile, user }) {
           {tabs.map(t => {
             const activo = tab === t.id;
             return (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, background: 'none', border: 'none', borderTop: `2px solid ${activo ? accentColor : 'transparent'}`, cursor: 'pointer', padding: '11px 2px 12px', color: activo ? '#F2F1ED' : 'rgba(255,255,255,0.4)', fontSize: 11.5, fontWeight: activo ? 600 : 400, letterSpacing: '0.01em' }}>
+              <button key={t.id} onClick={() => { onFlush?.(); setTab(t.id); }} style={{ flex: 1, background: 'none', border: 'none', borderTop: `2px solid ${activo ? accentColor : 'transparent'}`, cursor: 'pointer', padding: '11px 2px 12px', color: activo ? '#F2F1ED' : 'rgba(255,255,255,0.4)', fontSize: 11.5, fontWeight: activo ? 600 : 400, letterSpacing: '0.01em' }}>
                 {t.short}
               </button>
             );
@@ -7961,7 +7987,7 @@ export default function App() {
           {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} onBackup={() => { setShowBackup(true); setBackupMsg(""); }} />}
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <UpdateBanner /><XarxaBanner />
-      <DetalleObra obra={fresh} onBack={() => { desarPendentsAra(); setObraActiva(null); }} onSave={actualizarObra} isMobile={isMobile} user={user} />
+      <DetalleObra obra={fresh} onBack={() => { desarPendentsAra(); setObraActiva(null); }} onSave={actualizarObra} onFlush={desarPendentsAra} isMobile={isMobile} user={user} />
           </div>
         </div>
       </>
