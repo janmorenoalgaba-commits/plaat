@@ -4050,7 +4050,13 @@ function migrateVO(raw) {
   vo.secciones = vo.secciones.map(s => ({ ...s, temas: (s.temas||[]).map(t => ({
     ...t,
     titulo: t.titulo || (t.entradas?.[0]?.texto?.slice(0,60) || ''),
-    entradas: (t.entradas||[]).map(e => ({ fin: '', ...e, resp: Array.isArray(e.resp) ? e.resp : (e.resp ? [e.resp] : []) })),
+    entradas: (t.entradas||[]).map(e => ({
+      fin: '', ...e,
+      resp: Array.isArray(e.resp) ? e.resp : (e.resp ? [e.resp] : []),
+      // Migració retrocompatible: si encara no té el camp manual "nueva", es calcula
+      // UNA VEGADA a partir de l'antic actaNum, i a partir d'ara passa a ser un botó manual (N)
+      nueva: e.nueva !== undefined ? e.nueva : (e.actaNum === vo.num),
+    })),
   })) }));
   return vo;
 }
@@ -4172,13 +4178,13 @@ function ModuloActaVO({ obra, onSave }) {
   function addTema(secId, titulo, texto, extra = {}) {
     if (!titulo.trim()) return;
     const entrades = (texto || extra.fotos?.length)
-      ? [{ id: uid(), texto: (texto||'').trim(), estado: extra.estado || 'P', fecha: today(), fin: '', resp: extra.resp || [], fotos: extra.fotos || [], actaNum: vo.num }]
+      ? [{ id: uid(), texto: (texto||'').trim(), estado: extra.estado || 'P', fecha: today(), fin: '', resp: extra.resp || [], fotos: extra.fotos || [], nueva: true }]
       : [];
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: [...(s.temas||[]), { id: uid(), num: nextNum(s), titulo: titulo.trim(), resuelto: false, resueltoEnActa: null, entradas: entrades }] }) });
   }
   function addEntrada(secId, temaId, texto) {
     if (!texto.trim()) return;
-    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: [...t.entradas, { id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '', actaNum: vo.num }] }) }) });
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: [...t.entradas, { id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '', nueva: true }] }) }) });
   }
   function updEntrada(secId, temaId, entId, campo, val) {
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => {
@@ -4186,8 +4192,9 @@ function ModuloActaVO({ obra, onSave }) {
       const entradas = t.entradas.map(e => e.id !== entId ? e : { ...e, [campo]: val });
       // El tema solo está resuelto cuando TODOS sus comentarios están en R
       const resuelto = entradas.length > 0 && entradas.every(e => e.estado === 'R');
-      // Si alguna entrada es nueva de este acta, se ve "N" ahora y "R" el siguiente → desaparece un acta después
-      const hayNueva = entradas.some(e => e.actaNum === vo.num);
+      // Si alguna entrada está marcada manualmente como "N" (nueva), se ve así en esta acta
+      // y "R" a partir de la siguiente → el botó "N" ho decideix, ja no depèn del número d'acta
+      const hayNueva = entradas.some(e => e.nueva === true);
       const resueltoEnActa = resuelto ? (t.resueltoEnActa || (hayNueva ? vo.num + 1 : vo.num)) : null;
       return { ...t, entradas, resuelto, resueltoEnActa };
     }) }) });
@@ -4910,8 +4917,8 @@ function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAd
   const [openResp, setOpenResp] = useState(null);   // id entrada amb el selector de resp obert
   const [showAdmin, setShowAdmin] = useState(false); // controls poc freqüents
 
-  const ult = t.entradas[t.entradas.length - 1] || { texto: '', actaNum: null, estado: 'P' };
-  const ultEsNueva = ult.actaNum === voNum;
+  const ult = t.entradas[t.entradas.length - 1] || { texto: '', nueva: false, estado: 'P' };
+  const ultEsNueva = !!ult.nueva;
   const tituloDisplay = t.titulo || ult.texto || 'Sense títol';
   const NUM = { fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em' };
 
@@ -4972,7 +4979,7 @@ function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAd
           {/* ── Seguiments ────────────────────────────────────────── */}
           <div style={{ padding: isMobile ? '0 12px' : '0 13px' }}>
             {t.entradas.map(en => {
-              const esNueva = en.actaNum === voNum;
+              const esNueva = !!en.nueva;
               const resps = Array.isArray(en.resp) ? en.resp : (en.resp ? [en.resp] : []);
               const e = ESTADOS_VO[en.estado] || est;
               const editant = editEnt === en.id;
@@ -4985,8 +4992,17 @@ function TemaVO({ t, est, secId, voNum, secciones, onUpdEntrada, onUpdTema, onAd
                   <div style={{ flex: 1, minWidth: 0 }}>
                     {/* Franja de metadades */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 5 }}>
-                      <span style={{ ...NUM, fontSize: 11, color: '#9B9B97', fontWeight: 500 }}>{fmtShort(en.fecha)}</span>
-                      {esNueva && <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 4, background: '#F2F1ED', color: '#6B6B66', fontWeight: 700, letterSpacing: '.04em' }}>NOVA</span>}
+                      <input type="date" value={en.fecha||''} onChange={ev => onUpdEntrada(t.id, en.id, 'fecha', ev.target.value)}
+                        title="Data d'aquest seguiment"
+                        style={{ ...NUM, width: 'auto', fontSize: 11, color: '#52524E', fontWeight: 500, padding: '2px 5px', borderRadius: 5, border: '1px solid #E5E4DF' }} />
+                      <button onClick={() => onUpdEntrada(t.id, en.id, 'nueva', !esNueva)}
+                        title={esNueva ? 'Marcat com a Nova — clica per desmarcar' : 'Marcar com a Nova (sortirà en blanc i negreta al PDF)'}
+                        style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, cursor: 'pointer',
+                          border: `1px solid ${esNueva ? '#6B6B66' : '#E5E4DF'}`,
+                          background: esNueva ? '#F2F1ED' : '#fff',
+                          color: esNueva ? '#6B6B66' : '#C4C3BE', fontWeight: 700, letterSpacing: '.04em' }}>
+                        N
+                      </button>
                       <select value={en.estado} onChange={ev => onUpdEntrada(t.id, en.id, 'estado', ev.target.value)}
                         style={{ width: 'auto', fontSize: 11, padding: '2px 5px', borderRadius: 5, border: `1px solid ${e.color}35`, background: e.bg, color: e.color, fontWeight: 600 }}>
                         {Object.entries(ESTADOS_VO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -5544,6 +5560,29 @@ function fmtFechaCorta(iso) {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(2)}`;
 }
 
+// Dibuixa un array de línies (ja embolicades amb splitTextToSize) amb el text justificat:
+// totes les línies excepte l'última s'estiren perquè ocupin exactament `totalWidth`.
+function dibuixarLiniesJustificades(doc, lines, x, yStart, lineHeight, totalWidth) {
+  lines.forEach((line, i) => {
+    const isLast = i === lines.length - 1;
+    const ty = yStart + i * lineHeight;
+    const trimmed = line.trim();
+    const words = trimmed.split(/\s+/).filter(Boolean);
+    if (isLast || words.length <= 1 || !trimmed) {
+      doc.text(line, x, ty);
+    } else {
+      const lineW = doc.getTextWidth(words.join(' '));
+      const spaceW = doc.getTextWidth(' ');
+      const extraSpace = Math.max(0, (totalWidth - lineW) / (words.length - 1));
+      let cx = x;
+      words.forEach(w => {
+        doc.text(w, cx, ty);
+        cx += doc.getTextWidth(w) + spaceW + extraSpace;
+      });
+    }
+  });
+}
+
 // ── ACTA VO v2 — FORMAT PLAAT BRANDBOOK 2026 ─────────────────────────────────
 async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   if (!window.jspdf) {
@@ -6066,18 +6105,20 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     doc.text(T.estat0, ML + 2 + 3 + doc.getTextWidth('A'), y + eoH/2, { baseline:'middle' });
     y += eoH;
 
-    // Text de descripció — amb prefix "A.1" al davant, igual que al Word
+    // Text de descripció — amb prefix "A.1" al davant, igual que al Word, i JUSTIFICAT
     if (eo.descripcion) {
       doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
       const prefixA1 = 'A.1';
       const prefixW = doc.getTextWidth(prefixA1) + 2;
-      const dl = doc.splitTextToSize(eo.descripcion, CW - 4 - prefixW);
-      const dh = Math.max(10, dl.length * 4.2 + 5);
+      const ampleDisponible = CW - 4 - prefixW;
+      const dl = doc.splitTextToSize(eo.descripcion, ampleDisponible);
+      const lh85_A1 = 4.2;
+      const dh = Math.max(10, dl.length * lh85_A1 + 5);
       // Prefix "A.1" a l'esquerra
       doc.setFont('helvetica','bold');
       doc.text(prefixA1, ML + 2, y + 4, { baseline:'alphabetic' });
       doc.setFont('helvetica','normal');
-      doc.text(dl, ML + 2 + prefixW, y + 4);
+      dibuixarLiniesJustificades(doc, dl, ML + 2 + prefixW, y + 4, lh85_A1, ampleDisponible);
       y += dh - 3;
     }
 
@@ -6200,7 +6241,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     actius.forEach((t, tIdx) => {
       const fW3=(cDesc-5)/2;
       const entradesOrdenades = t.entradas || [];
-      const esNuevoTema = entradesOrdenades.length === 1 && entradesOrdenades[0]?.actaNum === vo.num;
+      const esNuevoTema = entradesOrdenades.length === 1 && !!entradesOrdenades[0]?.nueva;
       const ultima = entradesOrdenades[entradesOrdenades.length - 1] || {};
       // Estat mostrat: 'N' NOMÉS si el tema és totalment nou (una única entrada, d'aquesta acta)
       // En qualsevol altre cas, l'estat real de l'última entrada (P/R/I) — igual que al Word
@@ -6208,7 +6249,7 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
       const fillTema = estatMostrat==='R' ? C_R : estatMostrat==='I'||estatMostrat==='INF' ? C_I : estatMostrat==='A' ? C_A : estatMostrat==='N' ? null : C_P;
 
       const ed = entradesOrdenades.map((en, pi) => {
-        const esNova = en.actaNum === vo.num;
+        const esNova = !!en.nueva;
         // Prefix de data: totes les entrades EXCEPTE la primera (la data inicial ja surt a INICI)
         const prefix = pi > 0 && en.fecha ? `${fmtFechaCorta(en.fecha)}  ` : '';
         doc.setFontSize(8.5);
@@ -6255,7 +6296,22 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         const titolH = (titolTema && pi === 0) ? tituloLH + 2 : 0;
         let ty = ey + 3 + e.lh*0.8 + titolH;
         e.lines.forEach(l => {
-          if (ty < ey + e.h - 1) doc.text(l, ML+cNum+2, ty, {baseline:'middle'});
+          if (ty < ey + e.h - 1) {
+            const isLastLine = l === e.lines[e.lines.length - 1];
+            const words = l.trim().split(/\s+/).filter(Boolean);
+            if (isLastLine || words.length <= 1) {
+              doc.text(l, ML+cNum+2, ty, {baseline:'middle'});
+            } else {
+              const lineW = doc.getTextWidth(words.join(' '));
+              const spaceW = doc.getTextWidth(' ');
+              const extraSpace = Math.max(0, (cDesc-3 - lineW) / (words.length - 1));
+              let cx = ML+cNum+2;
+              words.forEach(w => {
+                doc.text(w, cx, ty, {baseline:'middle'});
+                cx += doc.getTextWidth(w) + spaceW + extraSpace;
+              });
+            }
+          }
           ty += e.lh;
         });
         // Fotos — inline, just sota el paràgraf al qual pertanyen
@@ -6579,8 +6635,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     { rol: esCA ? "DIRECCIÓ D'EXECUCIÓ" : 'DIRECCIÓN EJECUCIÓN OBRA',
       empresa: getEmpresa('EXECUCIÓ') || getEmpresa('EJECUCIÓN') || '' },
     { rol: esCA ? 'COORDINADOR DE SEGURETAT' : 'COORDINADOR DE SEGURIDAD',
-      empresa: getEmpresa('SEGURE') || '' },
-    { rol: T.ec_f,       empresa: getEmpresa('CONTRAT') || '' },
+      empresa: getEmpresa('SEGUR') || '' },
+    { rol: T.ec_f,       empresa: getEmpresa('CONTRA') || '' },
   ];
 
   // Dibuixar firma individual centrada
