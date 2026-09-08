@@ -1715,6 +1715,15 @@ const ESTADOS_VO = {
 // es veuen massa semblants entre ells.
 const DOT_COLOR_VO = { P: '#F0A02B', R: '#2FA84F', I: '#3B82C4' };
 const RESP_VO = ['EC', 'DO', 'DEO', 'PR', 'DOE', 'DOI', 'CSS', 'INT'];
+// Rols possibles al quadre de firmes — l'usuari tria quins hi apareixen (no totes les obres tenen els mateixos signants)
+const ROLES_FIRMA = [
+  { id: 'promotor', label_es: 'PROMOTOR',                  label_ca: 'PROMOTOR',                 clau: 'promotor' },
+  { id: 'pm',       label_es: 'PROJECT MANAGER',           label_ca: 'PROJECT MANAGER',           clau: 'PROJECT' },
+  { id: 'do',       label_es: 'DIRECCIÓN DE OBRA',         label_ca: "DIRECCIÓ D'OBRA",           clau: 'OBRA (DO)' },
+  { id: 'deo',      label_es: 'DIRECCIÓN EJECUCIÓN OBRA',  label_ca: "DIRECCIÓ D'EXECUCIÓ",       clau: 'EXECUCIÓ' },
+  { id: 'css',      label_es: 'COORDINADOR DE SEGURIDAD',  label_ca: 'COORDINADOR DE SEGURETAT',  clau: 'SEGUR' },
+  { id: 'ec',       label_es: 'CONTRATISTA',               label_ca: 'CONTRACTISTA',              clau: 'CONTRA' },
+];
 const DIAS_DEFAULT = [1, 3]; // Lunes y Miércoles
 
 function esHoyVisita(obra) {
@@ -3989,6 +3998,8 @@ function migrateVO(raw) {
   let vo = raw ? { ...raw } : {};
   if (!vo.num) vo.num = 1;
   if (!vo.fechaActa) vo.fechaActa = today();
+  // Per defecte totes les firmes actives — retrocompatible amb actes existents
+  if (!Array.isArray(vo.firmasSeleccionadas)) vo.firmasSeleccionadas = ROLES_FIRMA.map(r => r.id);
   if (!vo.estadoObra) vo.estadoObra = { descripcion: '', ubicacions: [] };
 
   // B — Trabajos en curso
@@ -4605,6 +4616,29 @@ function ModuloActaVO({ obra, onSave }) {
             <button onClick={addRol} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px dashed #E0DFD9', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9B9B97', marginTop: 4 }}>+ Añadir rol</button>
           </div>
         )}
+      </div>
+
+      {/* Quins rols signen aquesta obra — no totes tenen els mateixos signants */}
+      <div style={{ border: '1px solid #E8E7E1', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#141412', marginBottom: 3 }}>Firmes de l'acta</div>
+        <div style={{ fontSize: 11.5, color: '#9B9B97', marginBottom: 10 }}>Tria quins rols han de signar aquesta obra concreta.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
+          {ROLES_FIRMA.map(r => {
+            const actiu = (vo.firmasSeleccionadas||[]).includes(r.id);
+            return (
+              <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', padding: '6px 8px', borderRadius: 7, background: actiu ? '#F5F4F0' : 'transparent' }}>
+                <input type="checkbox" checked={actiu}
+                  onChange={() => {
+                    const cur = vo.firmasSeleccionadas || [];
+                    const nou = actiu ? cur.filter(x => x !== r.id) : [...cur, r.id];
+                    guardarVO({ ...vo, firmasSeleccionadas: nou });
+                  }}
+                  style={{ width: 15, height: 15, flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: '#141412' }}>{r.label_es}</span>
+              </label>
+            );
+          })}
+        </div>
       </div>
       </>
       )}
@@ -6631,17 +6665,14 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     return '';
   };
 
-  // Firmants: [{rol, empresa}]
-  const firmants = [
-    { rol: T.promotor,   empresa: obra.propiedad || obra.cliente || '' },
-    { rol: T.pm_f,       empresa: getEmpresa('PROJECT') || '' },
-    { rol: T.do_f,       empresa: getEmpresa('OBRA (DO)') || getEmpresa('FACULTATIVA') || '' },
-    { rol: esCA ? "DIRECCIÓ D'EXECUCIÓ" : 'DIRECCIÓN EJECUCIÓN OBRA',
-      empresa: getEmpresa('EXECUCIÓ') || getEmpresa('EJECUCIÓN') || '' },
-    { rol: esCA ? 'COORDINADOR DE SEGURETAT' : 'COORDINADOR DE SEGURIDAD',
-      empresa: getEmpresa('SEGUR') || '' },
-    { rol: T.ec_f,       empresa: getEmpresa('CONTRA') || '' },
-  ];
+  // Firmants: [{rol, empresa}] — només els rols que l'usuari ha triat que signin aquesta obra
+  const seleccioFirmes = vo.firmasSeleccionadas || ROLES_FIRMA.map(r => r.id);
+  const firmants = ROLES_FIRMA
+    .filter(r => seleccioFirmes.includes(r.id))
+    .map(r => ({
+      rol: esCA ? r.label_ca : r.label_es,
+      empresa: r.id === 'promotor' ? (obra.propiedad || obra.cliente || '') : (getEmpresa(r.clau) || ''),
+    }));
 
   // Dibuixar firma individual centrada
   function dibuixaFirma(fx, fy, fw, firmant) {
@@ -6658,18 +6689,16 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     }
   }
 
-  // Fila 1: firmants 0,1,2 (màx 3)
-  const fila1 = firmants.slice(0,3);
-  const fw1 = CW / fila1.length;
-  fila1.forEach((f, i) => dibuixaFirma(ML + i*fw1, y, fw1, f));
-  y += fH2 + 8;
-
-  // Fila 2: firmants 3,4,5
-  checkPage(fH2 + 8);
-  const fila2 = firmants.slice(3);
-  const fw2 = CW / fila2.length;
-  fila2.forEach((f, i) => dibuixaFirma(ML + i*fw2, y, fw2, f));
-  y += fH2 + 6;
+  // Files de màxim 3 firmants, generades dinàmicament segons quants n'hi hagi seleccionats
+  if (firmants.length > 0) {
+    for (let i = 0; i < firmants.length; i += 3) {
+      const fila = firmants.slice(i, i+3);
+      checkPage(fH2 + 8);
+      const fw = CW / fila.length;
+      fila.forEach((f, j) => dibuixaFirma(ML + j*fw, y, fw, f));
+      y += fH2 + (i+3 >= firmants.length ? 6 : 8);
+    }
+  }
 
   // ── PEU FINAL TOTES LES PÀGINES ───────────────────────────────────────────
   const totalPags = doc.getNumberOfPages();
