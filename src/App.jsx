@@ -264,6 +264,11 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
 .hov-nav:hover { background: #ECEAE4 !important; }
 .hov-row:hover   { background: #F9F8F5 !important; }
 .hov-chip:hover  { background: #ECEAE4 !important; }
+/* Chips accionables del tauler — deixen clar que es pot clicar/editar */
+.chip-link { transition: transform .12s, box-shadow .12s, filter .12s; }
+.chip-link:hover { transform: translateY(-1px); filter: brightness(0.95); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.dia-toggle { transition: transform .12s, box-shadow .12s; }
+.dia-toggle:hover { transform: scale(1.15); box-shadow: 0 2px 5px rgba(0,0,0,0.18); }
 .no-scrollbar::-webkit-scrollbar { display: none; height: 0; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 `;
@@ -811,20 +816,20 @@ function ObraCard({ obra, onClick, onEditar, onEliminar, onOpenTab, onToggleDia 
 
       {/* Footer: chips de estado + días de visita — ara interactius */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderTop: '1px solid #F2F1ED', background: '#FBFAF8', flexWrap: 'wrap' }}>
-        <span onClick={ev => { ev.stopPropagation(); onOpenTab?.('incidencias'); }} title="Ver incidencias"
+        <span className="chip-link" onClick={ev => { ev.stopPropagation(); onOpenTab?.('incidencias'); }} title="Ver incidencias"
           style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 500, padding: '3px 9px', borderRadius: 4, background: incPend > 0 ? '#FDECEC' : '#F0EFEA', color: incPend > 0 ? '#8A1F1F' : '#9B9B97' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: incPend > 0 ? '#E24B4A' : '#C5C4BE' }} />
           {incPend > 0 ? `${incPend} incidencia${incPend > 1 ? 's' : ''}` : 'Sin incidencias'}
         </span>
-        <span onClick={ev => { ev.stopPropagation(); onOpenTab?.('anotaciones'); }} title="Ver tareas"
+        <span className="chip-link" onClick={ev => { ev.stopPropagation(); onOpenTab?.('anotaciones'); }} title="Ver tareas"
           style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 500, padding: '3px 9px', borderRadius: 4, background: tareasPend > 0 ? (tareasVenc ? '#FEF3DB' : '#F0EFEA') : 'transparent', color: tareasPend > 0 ? (tareasVenc ? '#7C4A00' : '#6B6B66') : '#C5C4BE', border: tareasPend > 0 ? 'none' : '1px dashed #E0DFD9' }}>
           {tareasPend > 0 ? `${tareasPend} tarea${tareasPend > 1 ? 's' : ''}${tareasVenc ? ' · vencida' : ''}` : 'Sin tareas'}
         </span>
         {/* Días de visita — clic directe per activar/desactivar cada dia, sense obrir l'obra */}
         <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3 }} onClick={ev => ev.stopPropagation()}>
           {[1, 2, 3, 4, 5, 6, 0].map(d => (
-            <span key={d} onClick={() => onToggleDia?.(d)} title={diasV.includes(d) ? 'Quitar día de visita' : 'Marcar como día de visita'}
-              style={{ width: 17, height: 17, borderRadius: 3, fontSize: 9.5, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: diasV.includes(d) ? '#1C1C1A' : '#F0EFEA', color: diasV.includes(d) ? '#fff' : '#C5C4BE', transition: 'all .12s' }}>{letras[d]}</span>
+            <span key={d} className="dia-toggle" onClick={() => onToggleDia?.(d)} title={diasV.includes(d) ? 'Quitar día de visita' : 'Marcar como día de visita'}
+              style={{ width: 17, height: 17, borderRadius: 3, fontSize: 9.5, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: diasV.includes(d) ? '#1C1C1A' : '#F0EFEA', color: diasV.includes(d) ? '#fff' : '#C5C4BE' }}>{letras[d]}</span>
           ))}
         </span>
       </div>
