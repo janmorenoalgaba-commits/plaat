@@ -8158,7 +8158,7 @@ export default function App() {
                         </div>
                       ))}
                     </div>
-                    <div className="list-in" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="list-in" style={{ display: isMobile ? 'flex' : 'grid', flexDirection: isMobile ? 'column' : undefined, gridTemplateColumns: isMobile ? undefined : 'repeat(2, 1fr)', gap: 10 }}>
                       {obras.map(o => <ObraCard key={o.id} obra={o} onClick={() => {
                         // Si _cargando, espera Fase 2 — busca la versió completa
                         const completa = obras.find(x => x.id === o.id && !x._cargando);
