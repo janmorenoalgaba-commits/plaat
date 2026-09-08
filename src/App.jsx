@@ -4186,16 +4186,27 @@ function ModuloActaVO({ obra, onSave }) {
     const n = (nums.length ? Math.max(...nums) : 0) + 1;
     return `${sec.codigo}.${String(n).padStart(2,'0')}`;
   }
+  // Data per defecte en crear un punt nou: no "avui" (quan s'omple l'acta), sinó el dia de
+  // visita més recent segons els dies configurats a l'obra (avui mateix o algun dels últims 7 dies)
+  function dataVisitaRecent() {
+    const dv = (obra.diasVisita && obra.diasVisita.length) ? obra.diasVisita : DIAS_DEFAULT;
+    const avui = new Date();
+    for (let back = 0; back <= 6; back++) {
+      const d = new Date(avui); d.setDate(d.getDate() - back);
+      if (dv.includes(d.getDay())) return d.toISOString().slice(0,10);
+    }
+    return today();
+  }
   function addTema(secId, titulo, texto, extra = {}) {
     if (!titulo.trim()) return;
     const entrades = (texto || extra.fotos?.length)
-      ? [{ id: uid(), texto: (texto||'').trim(), estado: extra.estado || 'P', fecha: today(), fin: '', resp: extra.resp || [], fotos: extra.fotos || [], nueva: true }]
+      ? [{ id: uid(), texto: (texto||'').trim(), estado: extra.estado || 'P', fecha: dataVisitaRecent(), fin: '', resp: extra.resp || [], fotos: extra.fotos || [], nueva: true }]
       : [];
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: [...(s.temas||[]), { id: uid(), num: nextNum(s), titulo: titulo.trim(), resuelto: false, resueltoEnActa: null, entradas: entrades }] }) });
   }
   function addEntrada(secId, temaId, texto) {
     if (!texto.trim()) return;
-    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: [...t.entradas, { id: uid(), texto: texto.trim(), estado: 'P', fecha: today(), fin: '', resp: '', nueva: true }] }) }) });
+    guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => t.id !== temaId ? t : { ...t, entradas: [...t.entradas, { id: uid(), texto: texto.trim(), estado: 'P', fecha: dataVisitaRecent(), fin: '', resp: '', nueva: true }] }) }) });
   }
   function updEntrada(secId, temaId, entId, campo, val) {
     guardarVO({ ...vo, secciones: vo.secciones.map(s => s.id !== secId ? s : { ...s, temas: s.temas.map(t => {
