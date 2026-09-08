@@ -747,7 +747,7 @@ const STATUS_ACCENT = {
   paralizada: '#E24B4A',
 };
 
-function ObraCard({ obra, onClick, onEditar, onEliminar }) {
+function ObraCard({ obra, onClick, onEditar, onEliminar, onOpenTab, onToggleDia }) {
   const [menu, setMenu] = useState(false);
   const accentColor = STATUS_ACCENT[obra.estado] || STATUS_ACCENT.en_curso;
   const e           = ESTADOS_OBRA[obra.estado]  || ESTADOS_OBRA.en_curso;
@@ -809,25 +809,24 @@ function ObraCard({ obra, onClick, onEditar, onEliminar }) {
         </div>
       </div>
 
-      {/* Footer: chips de estado + días de visita */}
+      {/* Footer: chips de estado + días de visita — ara interactius */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderTop: '1px solid #F2F1ED', background: '#FBFAF8', flexWrap: 'wrap' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 500, padding: '3px 9px', borderRadius: 4, background: incPend > 0 ? '#FDECEC' : '#F0EFEA', color: incPend > 0 ? '#8A1F1F' : '#9B9B97' }}>
+        <span onClick={ev => { ev.stopPropagation(); onOpenTab?.('incidencias'); }} title="Ver incidencias"
+          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 500, padding: '3px 9px', borderRadius: 4, background: incPend > 0 ? '#FDECEC' : '#F0EFEA', color: incPend > 0 ? '#8A1F1F' : '#9B9B97' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: incPend > 0 ? '#E24B4A' : '#C5C4BE' }} />
           {incPend > 0 ? `${incPend} incidencia${incPend > 1 ? 's' : ''}` : 'Sin incidencias'}
         </span>
-        {tareasPend > 0 && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 500, padding: '3px 9px', borderRadius: 4, background: tareasVenc ? '#FEF3DB' : '#F0EFEA', color: tareasVenc ? '#7C4A00' : '#6B6B66' }}>
-            {tareasPend} tarea{tareasPend > 1 ? 's' : ''}{tareasVenc ? ' · vencida' : ''}
-          </span>
-        )}
-        {/* Días de visita */}
-        {diasV.length > 0 && (
-          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3 }}>
-            {[1, 2, 3, 4, 5, 6, 0].map(d => (
-              <span key={d} style={{ width: 17, height: 17, borderRadius: 3, fontSize: 9.5, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', background: diasV.includes(d) ? '#1C1C1A' : '#F0EFEA', color: diasV.includes(d) ? '#fff' : '#C5C4BE' }}>{letras[d]}</span>
-            ))}
-          </span>
-        )}
+        <span onClick={ev => { ev.stopPropagation(); onOpenTab?.('anotaciones'); }} title="Ver tareas"
+          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 500, padding: '3px 9px', borderRadius: 4, background: tareasPend > 0 ? (tareasVenc ? '#FEF3DB' : '#F0EFEA') : 'transparent', color: tareasPend > 0 ? (tareasVenc ? '#7C4A00' : '#6B6B66') : '#C5C4BE', border: tareasPend > 0 ? 'none' : '1px dashed #E0DFD9' }}>
+          {tareasPend > 0 ? `${tareasPend} tarea${tareasPend > 1 ? 's' : ''}${tareasVenc ? ' · vencida' : ''}` : 'Sin tareas'}
+        </span>
+        {/* Días de visita — clic directe per activar/desactivar cada dia, sense obrir l'obra */}
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3 }} onClick={ev => ev.stopPropagation()}>
+          {[1, 2, 3, 4, 5, 6, 0].map(d => (
+            <span key={d} onClick={() => onToggleDia?.(d)} title={diasV.includes(d) ? 'Quitar día de visita' : 'Marcar como día de visita'}
+              style={{ width: 17, height: 17, borderRadius: 3, fontSize: 9.5, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: diasV.includes(d) ? '#1C1C1A' : '#F0EFEA', color: diasV.includes(d) ? '#fff' : '#C5C4BE', transition: 'all .12s' }}>{letras[d]}</span>
+          ))}
+        </span>
       </div>
       {/* Fecha CFO — sota el footer */}
       {obra.fechaCFO && (
@@ -7113,8 +7112,8 @@ function FormSeguimiento({ punto, obras, nextNum, onGuardar, onCerrar, isMobile 
   );
 }
 
-function DetalleObra({ obra, onBack, onSave, onFlush, isMobile, user }) {
-  const [tab, setTab]               = useState('inspecciones');
+function DetalleObra({ obra, onBack, onSave, onFlush, isMobile, user, tabInicial }) {
+  const [tab, setTab]               = useState(tabInicial || 'inspecciones');
   const [editEstado, setEditEstado] = useState(false);
   const [showCompartir, setShowCompartir] = useState(false);
   const esOwner = obra._rol === 'owner';
@@ -7400,6 +7399,7 @@ export default function App() {
   const [loading,    setLoading]    = useState(true);
   const [nav,        setNav]        = useState('alertas');
   const [obraActiva, setObraActiva] = useState(null);
+  const [tabInicialObra, setTabInicialObra] = useState(null);
   const [newVersion, setNewVersion] = useState(false);
   const [xarxa, setXarxa] = useState({ online: true, pendents: 0, sincronitzant: false });
   const desatTimers  = useRef({});
@@ -7922,7 +7922,9 @@ export default function App() {
   function actualizarObra(updated) {
     const lista = obras.map(o => o.id === updated.id ? updated : o);
     setObras(lista);
-    setObraActiva(updated);
+    // Només actualitza obraActiva si ja hi érem — evita navegar-hi sense voler quan
+    // s'edita una obra ràpidament des del tauler (p.ex. tocar un dia de visita a la targeta)
+    setObraActiva(prev => (prev && prev.id === updated.id) ? updated : prev);
 
     if (!desatPendent.current[updated.id]) {
       desatPendent.current[updated.id] = { anterior: obras.find(o => o.id === updated.id) };
@@ -8092,7 +8094,7 @@ export default function App() {
           {!isMobile && <Sidebar nav={nav} setNav={setNav} stats={stats} user={user} onBackup={() => { setShowBackup(true); setBackupMsg(""); }} />}
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <UpdateBanner /><XarxaBanner />
-      <DetalleObra obra={fresh} onBack={() => { desarPendentsAra(); setObraActiva(null); }} onSave={actualizarObra} onFlush={desarPendentsAra} isMobile={isMobile} user={user} />
+      <DetalleObra obra={fresh} onBack={() => { desarPendentsAra(); setObraActiva(null); setTabInicialObra(null); }} onSave={actualizarObra} onFlush={desarPendentsAra} isMobile={isMobile} user={user} tabInicial={tabInicialObra} />
           </div>
         </div>
       </>
@@ -8162,8 +8164,19 @@ export default function App() {
                       {obras.map(o => <ObraCard key={o.id} obra={o} onClick={() => {
                         // Si _cargando, espera Fase 2 — busca la versió completa
                         const completa = obras.find(x => x.id === o.id && !x._cargando);
+                        setTabInicialObra(null);
                         setObraActiva(completa || o);
-                      }} onEditar={setObraEditar} onEliminar={setObraEliminar} />)}
+                      }} onEditar={setObraEditar} onEliminar={setObraEliminar}
+                      onOpenTab={(tabId) => {
+                        const completa = obras.find(x => x.id === o.id && !x._cargando);
+                        setTabInicialObra(tabId);
+                        setObraActiva(completa || o);
+                      }}
+                      onToggleDia={(dia) => {
+                        const cur = o.diasVisita || [];
+                        const nuevo = cur.includes(dia) ? cur.filter(d => d !== dia) : [...cur, dia].sort();
+                        actualizarObra({ ...o, diasVisita: nuevo });
+                      }} />)}
                     </div>
                   </>
                 )}
