@@ -4322,13 +4322,14 @@ function ModuloActaVO({ obra, onSave }) {
   }
 
   // 8 — Clima: es generen sempre 7 dies consecutius a partir d'una única data d'inici
-  function generarDiesClima(dataIniciStr) {
-    if (!dataIniciStr) return;
-    const inici = new Date(dataIniciStr + 'T00:00:00');
+  function generarDiesClima(dataFiStr) {
+    if (!dataFiStr) return;
+    // Els 7 dies són sempre ELS ANTERIORS a la data triada, acabant en aquesta (inclosa)
+    const fi = new Date(dataFiStr + 'T00:00:00');
     const existents = vo.clima || [];
     const nous = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(inici); d.setDate(d.getDate() + i);
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(fi); d.setDate(d.getDate() - i);
       const fecha = d.toISOString().slice(0,10);
       // Si aquell dia ja tenia dades introduïdes (manual o d'una càrrega prèvia), les conservem
       const existent = existents.find(x => x.fecha === fecha);
@@ -4362,14 +4363,14 @@ function ModuloActaVO({ obra, onSave }) {
       setClimaError('Primer marca la ubicació de l\'obra al mapa.');
       return;
     }
-    if (!climaSetmana) { setClimaError('Tria una data d\'inici de setmana.'); return; }
+    if (!climaSetmana) { setClimaError('Tria una data.'); return; }
     setClimaCarregant(true);
     try {
       const lat = obra.climaLat, lon = obra.climaLon;
 
-      // Calcular rang de 7 dies des de la data triada
-      const inici = new Date(climaSetmana + 'T00:00:00');
-      const fi = new Date(inici); fi.setDate(fi.getDate() + 6);
+      // La data triada és sempre l'ÚLTIM dia del període — els 7 dies són ella + els 6 anteriors
+      const fi = new Date(climaSetmana + 'T00:00:00');
+      const inici = new Date(fi); inici.setDate(inici.getDate() - 6);
       const fmt = d => d.toISOString().slice(0,10);
       const avui = new Date(new Date().toDateString());
       const diesDesDeInici = Math.floor((avui - inici) / 86400000);
@@ -4797,7 +4798,7 @@ function ModuloActaVO({ obra, onSave }) {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', background: '#FAFAF8', borderRadius: 9, padding: 8 }}>
-          <span style={{ fontSize: 11.5, color: '#6B6B66', flexShrink: 0 }}>Setmana des de</span>
+          <span style={{ fontSize: 11.5, color: '#6B6B66', flexShrink: 0 }}>Fins al dia</span>
           <input type="date" value={climaSetmana} onChange={e => { setClimaSetmana(e.target.value); generarDiesClima(e.target.value); }}
             style={{ width: 140, fontSize: 11.5, flexShrink: 0 }} />
           <Btn sm primary onClick={carregarSetmanaClima} disabled={climaCarregant}>
