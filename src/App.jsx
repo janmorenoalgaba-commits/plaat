@@ -5562,18 +5562,21 @@ function fmtFechaCorta(iso) {
 
 // Dibuixa un array de línies (ja embolicades amb splitTextToSize) amb el text justificat:
 // totes les línies excepte l'última s'estiren perquè ocupin exactament `totalWidth`.
+// Si la línia té poques paraules i estirar-la crearia forats massa grans, es deixa sense
+// justificar (alineada a l'esquerra) — així es respecta l'espaiat estàndard entre paraules.
 function dibuixarLiniesJustificades(doc, lines, x, yStart, lineHeight, totalWidth) {
+  const spaceW = doc.getTextWidth(' ');
+  const MAX_EXTRA = spaceW * 0.8; // marge màxim addicional per forat: 80% d'un espai normal
   lines.forEach((line, i) => {
     const isLast = i === lines.length - 1;
     const ty = yStart + i * lineHeight;
     const trimmed = line.trim();
     const words = trimmed.split(/\s+/).filter(Boolean);
-    if (isLast || words.length <= 1 || !trimmed) {
+    const lineW = words.length ? doc.getTextWidth(words.join(' ')) : 0;
+    const extraSpace = words.length > 1 ? (totalWidth - lineW) / (words.length - 1) : Infinity;
+    if (isLast || words.length <= 1 || !trimmed || extraSpace > MAX_EXTRA) {
       doc.text(line, x, ty);
     } else {
-      const lineW = doc.getTextWidth(words.join(' '));
-      const spaceW = doc.getTextWidth(' ');
-      const extraSpace = Math.max(0, (totalWidth - lineW) / (words.length - 1));
       let cx = x;
       words.forEach(w => {
         doc.text(w, cx, ty);
@@ -6299,12 +6302,13 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
           if (ty < ey + e.h - 1) {
             const isLastLine = l === e.lines[e.lines.length - 1];
             const words = l.trim().split(/\s+/).filter(Boolean);
-            if (isLastLine || words.length <= 1) {
+            const spaceW = doc.getTextWidth(' ');
+            const maxExtra = spaceW * 0.8;
+            const lineW = words.length ? doc.getTextWidth(words.join(' ')) : 0;
+            const extraSpace = words.length > 1 ? (cDesc-3 - lineW) / (words.length - 1) : Infinity;
+            if (isLastLine || words.length <= 1 || extraSpace > maxExtra) {
               doc.text(l, ML+cNum+2, ty, {baseline:'middle'});
             } else {
-              const lineW = doc.getTextWidth(words.join(' '));
-              const spaceW = doc.getTextWidth(' ');
-              const extraSpace = Math.max(0, (cDesc-3 - lineW) / (words.length - 1));
               let cx = ML+cNum+2;
               words.forEach(w => {
                 doc.text(w, cx, ty, {baseline:'middle'});
