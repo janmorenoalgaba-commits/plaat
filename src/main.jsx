@@ -314,13 +314,17 @@ window.db = {
   },
 
   async invitarUsuario(obraId, emailInvitado, invitadoPorId) {
+    const emailNet = emailInvitado.trim().toLowerCase()
     const { data, error } = await supabase.rpc('get_user_id_by_email', {
-      email_input: emailInvitado.trim().toLowerCase()
+      email_input: emailNet
     })
     if (error || !data) throw new Error('No s\u2019ha trobat cap usuari amb aquest email')
     const { error: e2 } = await supabase.from('obra_usuarios')
       .upsert({ obra_id: obraId, user_id: data, rol: 'editor', invitado_por: invitadoPorId })
     if (e2) throw e2
+    // Assegura fila a "perfiles" ja en el moment d'invitar \u2014 si no, mentre l'usuari nou no hagi
+    // fet cap login encara, surt el seu ID truncat en lloc del nom/email a la llista "Con acceso".
+    try { await supabase.from('perfiles').upsert({ user_id: data, nombre: emailNet, updated_at: new Date().toISOString() }) } catch {}
     return data
   },
 

@@ -7645,6 +7645,12 @@ export default function App() {
     if (!user) return;
     const userId = user.id || user.sub || 'local';
     cargarObras(userId);
+    // Asegura que este usuario tiene fila en "perfiles" (si no, al compartir una obra con él
+    // sale su ID truncado en vez de su nombre/email en la lista de "Con acceso"). Se hace en
+    // cada login porque no hay ningún otro sitio donde se cree esta fila.
+    if (user.email && !user.local) {
+      window.db?.upsertPerfil?.(userId, user.email).catch(() => {});
+    }
   }, [user]);
 
 
