@@ -6308,6 +6308,11 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         const esNova = !!en.nueva;
         // Prefix de data: totes les entrades EXCEPTE la primera (la data inicial ja surt a INICI)
         const prefix = pi > 0 && en.fecha ? `${fmtFechaCorta(en.fecha)}  ` : '';
+        // Cal fixar el pes de la font (negreta/normal) ABANS de mesurar/embolicar el text: si es
+        // deixa l'estat previ (negreta, heretat de la capçalera de secció), les línies es tallen
+        // massa curtes per a les entrades normals (més estretes), forçant després un justificat
+        // amb forats més grans dels necessaris.
+        doc.setFont('helvetica', esNova ? 'bold' : 'normal');
         doc.setFontSize(8.5);
         const lines = doc.splitTextToSize(prefix + (en.texto||''), cDesc-3);
         const lh85 = 8.5*0.3528+0.6;
