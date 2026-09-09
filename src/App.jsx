@@ -1727,7 +1727,7 @@ const ROLES_FIRMA = [
   { id: 'promotor', label_es: 'PROMOTOR',                  label_ca: 'PROMOTOR',                 clau: 'promotor' },
   { id: 'pm',       label_es: 'PROJECT MANAGER',           label_ca: 'PROJECT MANAGER',           clau: 'PROJECT' },
   { id: 'do',       label_es: 'DIRECCIÓN DE OBRA',         label_ca: "DIRECCIÓ D'OBRA",           clau: 'OBRA (DO)' },
-  { id: 'deo',      label_es: 'DIRECCIÓN EJECUCIÓN OBRA',  label_ca: "DIRECCIÓ D'EXECUCIÓ",       clau: 'EXECUCIÓ' },
+  { id: 'deo',      label_es: 'DIRECCIÓN EJECUCIÓN OBRA',  label_ca: "DIRECCIÓ D'EXECUCIÓ",       clau: ['EJECUCIÓN', 'EXECUCIÓ'] },
   { id: 'css',      label_es: 'COORDINADOR DE SEGURIDAD',  label_ca: 'COORDINADOR DE SEGURETAT',  clau: 'SEGUR' },
   { id: 'ec',       label_es: 'CONTRATISTA',               label_ca: 'CONTRACTISTA',              clau: 'CONTRA' },
 ];
@@ -6318,7 +6318,10 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         const lh85 = 8.5*0.3528+0.6;
         const titolOffset = (pi === 0 && t.titulo) ? lh85 + 2 : 0;
         const GAP = 2;
-        const textH = lines.length*lh85 + 3 + titolOffset + GAP;
+        // El marge inferior (última línia de text -> vora del bloc) ha de ser igual al superior
+        // (vora del bloc -> títol/text): 3mm, el mateix valor que s'usa a l'inici de cada entrada.
+        const PAD_TEXT_END = 3;
+        const textH = lines.length*lh85 + 3 + titolOffset + PAD_TEXT_END;
         const fotos=en.fotos||[]; const fotoRows=[]; let fotosH=0;
         for(let i=0;i<fotos.length;i+=2){
           const pair=[fotos[i],fotos[i+1]].filter(Boolean);
@@ -6711,11 +6714,15 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
   const lh65 = 6.5*0.3528+0.4;
 
   // Obtenir empresa de cada rol de l'equip VO
+  // rolNom pot ser un string o un array de possibles prefixos (p.ex. castellà i català del mateix
+  // rol) — cal admetre'ls tots perquè el nom del rol a vo.equipo pot venir en qualsevol dels dos
+  // idiomes segons com es va crear o editar l'obra.
   const getEmpresa = (rolNom) => {
     const eq = vo.equipo || [];
+    const claus = Array.isArray(rolNom) ? rolNom : [rolNom];
     for (const rol of eq) {
       const n = rol.nombre?.toUpperCase() || '';
-      if (n.includes(rolNom.toUpperCase().slice(0,8))) {
+      if (claus.some(c => n.includes(c.toUpperCase().slice(0,8)))) {
         const p = rol.personas?.find(p => p.empresa);
         if (p) return p.empresa;
       }
