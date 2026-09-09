@@ -324,7 +324,12 @@ window.db = {
     if (e2) throw e2
     // Assegura fila a "perfiles" ja en el moment d'invitar \u2014 si no, mentre l'usuari nou no hagi
     // fet cap login encara, surt el seu ID truncat en lloc del nom/email a la llista "Con acceso".
-    try { await supabase.from('perfiles').upsert({ user_id: data, nombre: emailNet, updated_at: new Date().toISOString() }) } catch {}
+    // Cal fer-ho via RPC (funci\u00f3 SECURITY DEFINER a Supabase): un usuari normal no t\u00e9 permisos
+    // per escriure la fila de "perfiles" d'un altre usuari (el RLS ho bloqueja per disseny).
+    try {
+      const { error: e3 } = await supabase.rpc('upsert_perfil_admin', { p_user_id: data, p_nombre: emailNet })
+      if (e3) console.warn('upsert_perfil_admin:', e3.message)
+    } catch (e) { console.warn('upsert_perfil_admin:', e) }
     return data
   },
 
