@@ -6325,92 +6325,126 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
         return{en,esNova,lines,textH,fotoRows,h,lh:lh85};
       });
 
-      const temaH = ed.reduce((a,e)=>a+e.h,0) || 10;
-      checkPage(temaH);
-
-      // Fons de color ÚNIC per a tot el bloc del tema (número + contingut)
-      if (fillTema) {
-        doc.setFillColor(...fillTema);
-        doc.rect(ML, y, CW, temaH, 'F');
-      }
-
-      // Número i títol del tema — alineats a dalt de la fila
+      // Número i títol del tema, i dades compartides per tot el bloc (independents de si es parteix o no)
       const titolTema = t.titulo || '';
       const tituloLH = 8.5*0.3528+0.6;
-      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-      doc.text(t.num||'', ML+cNum/2, y + 3 + tituloLH*0.8, { align:'center', baseline:'middle' });
-      if (titolTema) {
-        doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-        doc.text(titolTema, ML+cNum+2, y + 3 + tituloLH*0.8, { baseline:'middle' });
-      }
-
-      let ey=y;
-      ed.forEach((e, pi)=>{
-        // Text narratiu — negreta si l'entrada pertany a l'acta actual, normal si és històric
-        doc.setFont('helvetica', e.esNova?'bold':'normal');
-        doc.setFontSize(8.5); doc.setTextColor(0,0,0);
-        const titolH = (titolTema && pi === 0) ? tituloLH + 2 : 0;
-        let ty = ey + 3 + e.lh*0.8 + titolH;
-        e.lines.forEach(l => {
-          if (ty < ey + e.h - 1) {
-            const isLastLine = l === e.lines[e.lines.length - 1];
-            const words = l.trim().split(/\s+/).filter(Boolean);
-            const spaceW = doc.getTextWidth(' ');
-            const maxExtra = spaceW * 0.8;
-            const lineW = words.length ? doc.getTextWidth(words.join(' ')) : 0;
-            const extraSpace = words.length > 1 ? (cDesc-3 - lineW) / (words.length - 1) : Infinity;
-            if (isLastLine || words.length <= 1 || extraSpace > maxExtra) {
-              doc.text(l, ML+cNum+2, ty, {baseline:'middle'});
-            } else {
-              let cx = ML+cNum+2;
-              words.forEach(w => {
-                doc.text(w, cx, ty, {baseline:'middle'});
-                cx += doc.getTextWidth(w) + spaceW + extraSpace;
-              });
-            }
-          }
-          ty += e.lh;
-        });
-        // Fotos — inline, just sota el paràgraf al qual pertanyen
-        const GAP_FY = 2;
-        let fy = ey + e.textH + GAP_FY;
-        e.fotoRows.forEach(row=>{
-          row.pair.forEach((f,fi)=>{
-            const src=f.url||f.data;
-            if(!src) return;
-            try {
-              const imgW = row.dims[fi].w, imgH = row.dims[fi].h;
-              const xSlot = ML+cNum+2 + fi*(fW3+2);
-              const xCentered = xSlot + (fW3-imgW)/2;
-              doc.addImage(src,'JPEG',xCentered,fy,imgW,imgH);
-            } catch(er) {}
-          });
-          fy+=row.rh+2;
-        });
-        ey+=e.h;
-      });
-
-      // Columnes ES / INICI / FI / RES — alineades al títol del tema (no centrades al bloc)
-      const topTema = y + 3 + tituloLH*0.8;
-      const colorEstat = estatMostrat==='R' ? [44,94,16] : estatMostrat==='I'||estatMostrat==='INF' ? [12,68,124] : estatMostrat==='N' ? [0,0,0] : [124,74,0];
-      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(...colorEstat);
-      doc.text(estatMostrat, ML+cNum+cDesc+cEs/2, topTema, { align:'center', baseline:'middle' });
-      doc.setTextColor(0,0,0);
-      doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
       const fechaInicio = entradesOrdenades[0]?.fecha;
       const fechaFin     = ultima.fecha;
-      doc.text(fechaInicio ? fmtFechaCorta(fechaInicio) : '', ML+cNum+cDesc+cEs+cIni/2, topTema, { align:'center', baseline:'middle' });
-      doc.text((fechaFin && entradesOrdenades.length>1) ? fmtFechaCorta(fechaFin) : '', ML+cNum+cDesc+cEs+cIni+cFi/2, topTema, { align:'center', baseline:'middle' });
       const respsArr = Array.isArray(ultima.resp) ? ultima.resp : (ultima.resp ? [ultima.resp] : []);
-      doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
       const respLH = 7.5*0.3528+0.4;
-      let respY = topTema;
-      respsArr.forEach(r => { doc.text(r, ML+cNum+cDesc+cEs+cIni+cFi+cRes/2, respY, { align:'center', baseline:'middle' }); respY += respLH; });
+      const colorEstat = estatMostrat==='R' ? [44,94,16] : estatMostrat==='I'||estatMostrat==='INF' ? [12,68,124] : estatMostrat==='N' ? [0,0,0] : [124,74,0];
+      const yTopPagina = MT + 12 + 9; // y just sota la capçalera d'una pàgina nova
 
-      // SENSE línies verticals — sols línies horitzontals fines entre temes
-      if (tIdx > 0) { setLW(LW_THIN); doc.line(ML, y, ML+CW, y); }
-      setLW(LW_THIN); doc.line(ML, y+temaH, ML+CW, y+temaH);
-      y+=temaH;
+      // Si un tema té molts punts de seguiment, es dibuixa per trossos: quan un punt de seguiment
+      // no cap a l'espai que queda a la pàgina actual, es fa salt de pàgina AQUÍ (no es parteix cap
+      // punt de seguiment a mitges) i el tema continua a la pàgina següent amb els punts restants.
+      let idxEntrada = 0;
+      let esPrimerTros = true;
+      while (idxEntrada < ed.length) {
+        if (ed[idxEntrada].h > (PH - MB - 12 - y) && y > yTopPagina + 0.01) {
+          doc.addPage(); pagActual++;
+          dibuixarCapçalera(false); dibuixarPeu();
+          continue;
+        }
+        const disponible = PH - MB - 12 - y;
+        let finTros = idxEntrada, trosH = 0;
+        while (finTros < ed.length && (finTros === idxEntrada || trosH + ed[finTros].h <= disponible)) {
+          trosH += ed[finTros].h;
+          finTros++;
+        }
+
+        const yTros = y;
+        // Fons de color ÚNIC per a tot el troç del tema (número + contingut) que hi ha en aquesta pàgina
+        if (fillTema) {
+          doc.setFillColor(...fillTema);
+          doc.rect(ML, yTros, CW, trosH, 'F');
+        }
+
+        // Número i títol — només al primer troç (a la resta el tema ja s'identifica per continuïtat)
+        if (esPrimerTros) {
+          doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+          doc.text(t.num||'', ML+cNum/2, yTros + 3 + tituloLH*0.8, { align:'center', baseline:'middle' });
+          if (titolTema) {
+            doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+            doc.text(titolTema, ML+cNum+2, yTros + 3 + tituloLH*0.8, { baseline:'middle' });
+          }
+        }
+
+        let ey=yTros;
+        for (let pi = idxEntrada; pi < finTros; pi++) {
+          const e = ed[pi];
+          // Text narratiu — negreta si l'entrada pertany a l'acta actual, normal si és històric
+          doc.setFont('helvetica', e.esNova?'bold':'normal');
+          doc.setFontSize(8.5); doc.setTextColor(0,0,0);
+          const titolH = (titolTema && pi === 0) ? tituloLH + 2 : 0;
+          let ty = ey + 3 + e.lh*0.8 + titolH;
+          e.lines.forEach(l => {
+            if (ty < ey + e.h - 1) {
+              const isLastLine = l === e.lines[e.lines.length - 1];
+              const words = l.trim().split(/\s+/).filter(Boolean);
+              const spaceW = doc.getTextWidth(' ');
+              const maxExtra = spaceW * 0.8;
+              const lineW = words.length ? doc.getTextWidth(words.join(' ')) : 0;
+              const extraSpace = words.length > 1 ? (cDesc-3 - lineW) / (words.length - 1) : Infinity;
+              if (isLastLine || words.length <= 1 || extraSpace > maxExtra) {
+                doc.text(l, ML+cNum+2, ty, {baseline:'middle'});
+              } else {
+                let cx = ML+cNum+2;
+                words.forEach(w => {
+                  doc.text(w, cx, ty, {baseline:'middle'});
+                  cx += doc.getTextWidth(w) + spaceW + extraSpace;
+                });
+              }
+            }
+            ty += e.lh;
+          });
+          // Fotos — inline, just sota el paràgraf al qual pertanyen
+          const GAP_FY = 2;
+          let fy = ey + e.textH + GAP_FY;
+          e.fotoRows.forEach(row=>{
+            row.pair.forEach((f,fi)=>{
+              const src=f.url||f.data;
+              if(!src) return;
+              try {
+                const imgW = row.dims[fi].w, imgH = row.dims[fi].h;
+                const xSlot = ML+cNum+2 + fi*(fW3+2);
+                const xCentered = xSlot + (fW3-imgW)/2;
+                doc.addImage(src,'JPEG',xCentered,fy,imgW,imgH);
+              } catch(er) {}
+            });
+            fy+=row.rh+2;
+          });
+          ey+=e.h;
+        }
+
+        // Columnes ES / INICI / FI / RES — alineades al títol del tema, només al primer troç
+        if (esPrimerTros) {
+          const topTema = yTros + 3 + tituloLH*0.8;
+          doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(...colorEstat);
+          doc.text(estatMostrat, ML+cNum+cDesc+cEs/2, topTema, { align:'center', baseline:'middle' });
+          doc.setTextColor(0,0,0);
+          doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+          doc.text(fechaInicio ? fmtFechaCorta(fechaInicio) : '', ML+cNum+cDesc+cEs+cIni/2, topTema, { align:'center', baseline:'middle' });
+          doc.text((fechaFin && entradesOrdenades.length>1) ? fmtFechaCorta(fechaFin) : '', ML+cNum+cDesc+cEs+cIni+cFi/2, topTema, { align:'center', baseline:'middle' });
+          doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+          let respY = topTema;
+          respsArr.forEach(r => { doc.text(r, ML+cNum+cDesc+cEs+cIni+cFi+cRes/2, respY, { align:'center', baseline:'middle' }); respY += respLH; });
+        }
+
+        // SENSE línies verticals — sols línies horitzontals fines. Al primer tema d'una secció, la
+        // línia de dalt ja la fa la fila grisa de capçalera; a la resta (o si el tema ve partit d'una
+        // pàgina anterior) sí que cal línia de dalt per delimitar el troç.
+        if (!(esPrimerTros && tIdx === 0)) { setLW(LW_THIN); doc.line(ML, yTros, ML+CW, yTros); }
+        setLW(LW_THIN); doc.line(ML, yTros+trosH, ML+CW, yTros+trosH);
+
+        y = yTros + trosH;
+        idxEntrada = finTros;
+        esPrimerTros = false;
+        if (idxEntrada < ed.length) {
+          doc.addPage(); pagActual++;
+          dibuixarCapçalera(false); dibuixarPeu();
+        }
+      }
     });
     y+=4;
   });
