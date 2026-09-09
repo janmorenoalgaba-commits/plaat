@@ -4221,10 +4221,11 @@ function ModuloActaVO({ obra, onSave }) {
       const entradas = t.entradas.map(e => e.id !== entId ? e : { ...e, [campo]: val });
       // El tema solo está resuelto cuando TODOS sus comentarios están en R
       const resuelto = entradas.length > 0 && entradas.every(e => e.estado === 'R');
-      // Si alguna entrada está marcada manualmente como "N" (nueva), se ve así en esta acta
-      // y "R" a partir de la siguiente → el botó "N" ho decideix, ja no depèn del número d'acta
-      const hayNueva = entradas.some(e => e.nueva === true);
-      const resueltoEnActa = resuelto ? (t.resueltoEnActa || (hayNueva ? vo.num + 1 : vo.num)) : null;
+      // Es marca resolt en aquesta mateixa acta: surt com a resolt aquí i s'arxiva (desapareix
+      // dels actius) a partir de la següent. NO sumar +1 encara que hi hagi una entrada "nueva"
+      // marcada manualment: com que "nueva" ja no es neteja sola en canviar d'acta, sumar-hi 1
+      // feia que el tema es quedés un acta de més abans d'arxivar-se.
+      const resueltoEnActa = resuelto ? (t.resueltoEnActa || vo.num) : null;
       return { ...t, entradas, resuelto, resueltoEnActa };
     }) }) });
   }
