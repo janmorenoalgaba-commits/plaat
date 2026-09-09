@@ -32,6 +32,10 @@ const ESTADOS_INSP = {
 
 const uid      = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const today    = () => new Date().toISOString().slice(0, 10);
+// Formata una Date (creada amb aritmètica LOCAL, p.ex. new Date(iso+'T00:00:00') + setDate) a
+// 'YYYY-MM-DD' sense passar per UTC — a diferència de toISOString(), que en fusos horaris UTC+
+// (com Espanya) desplaça la data un dia enrere perquè converteix la mitjanit local a UTC.
+const fmtDataLocal = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const fmtDate  = iso => iso ? new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 const fmtShort = iso => iso ? new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : '—';
 const now      = () => new Date().toISOString();
@@ -4349,7 +4353,7 @@ function ModuloActaVO({ obra, onSave }) {
     const nous = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(fi); d.setDate(d.getDate() - i);
-      const fecha = d.toISOString().slice(0,10);
+      const fecha = fmtDataLocal(d);
       // Si aquell dia ja tenia dades introduïdes (manual o d'una càrrega prèvia), les conservem
       const existent = existents.find(x => x.fecha === fecha);
       nous.push(existent || { id: uid(), fecha, condicion: 'soleado', temp: '', precip: '' });
@@ -4390,7 +4394,7 @@ function ModuloActaVO({ obra, onSave }) {
       // La data triada és sempre l'ÚLTIM dia del període — els 7 dies són ella + els 6 anteriors
       const fi = new Date(climaSetmana + 'T00:00:00');
       const inici = new Date(fi); inici.setDate(inici.getDate() - 6);
-      const fmt = d => d.toISOString().slice(0,10);
+      const fmt = fmtDataLocal;
       const avui = new Date(new Date().toDateString());
       const diesDesDeInici = Math.floor((avui - inici) / 86400000);
 
@@ -5792,8 +5796,8 @@ async function generarActaVO_v2(obra, vo, idioma = 'ca') {
     const localitzacio = (obra.emplazamiento || obra.direccion || '').toUpperCase();
     const promotor = (obra.propiedad || obra.cliente || '').toUpperCase();
 
-    // Nom obra Arial 16p minúscules — sense línies ni recuadres
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(16);
+    // Nom obra Arial 14p minúscules — sense línies ni recuadres
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(14);
     doc.setTextColor(0,0,0);
     doc.text(nomObra, ML, MT + 5);
 
